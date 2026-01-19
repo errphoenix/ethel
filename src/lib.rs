@@ -1,5 +1,5 @@
-pub mod shader;
 pub mod mesh;
+pub mod shader;
 
 pub(crate) mod gl {
     #![allow(clippy::all)]
@@ -10,53 +10,90 @@ pub trait GlPropertyEnum {
     fn as_gl_enum(&self) -> u32;
 }
 
-pub struct RenderBuffer<const BUF_COUNT: usize> {
+pub struct RenderBuffer<const BUFFERS: usize, const SSBOS: usize> {
     vao: u32,
-    vbo: [u32; BUF_COUNT],
+    buffers: [u32; BUFFERS],
+    ssbos: [(u32, u32); SSBOS],
 }
 
-impl<const BUF_COUNT: usize> RenderBuffer<BUF_COUNT> {
-    pub fn from_buffers(buffers: [u32; BUF_COUNT]) -> Self {
+impl<const BUFFERS: usize, const SSBOS: usize> RenderBuffer<BUFFERS, SSBOS> {
+    pub fn from_buffers(buffers: [u32; BUFFERS], ssbos: [(u32, u32); SSBOS]) -> Self {
         let mut vao = 0;
         unsafe {
             gl::CreateVertexArrays(1, &mut vao);
         }
-        Self { vao, vbo: buffers }
+        Self {
+            vao,
+            buffers,
+            ssbos,
+        }
     }
 
-    pub fn with_buffers(buffers: CreateBuffers) -> Self {
+    pub fn with_buffers(create_buffers: CreateBuffers) -> Self {
         let mut vao = 0;
         unsafe {
             gl::CreateVertexArrays(1, &mut vao);
         }
 
-        let vbo = {
-            let mut vbo = [0; BUF_COUNT];
-            for (i, buf) in buffers.create(vao).enumerate().take(BUF_COUNT) {
-                vbo[i] = buf;
-            }
-            vbo
-        };
+        let (mut buffers, mut buf_i) = ([0; BUFFERS], 0);
+        let (mut ssbos, mut ssbo_i) = ([(0, 0); SSBOS], 0);
 
-        Self { vao, vbo }
+        create_buffers.create(vao).for_each(|buf| match buf {
+            GlBuffer::Attribute { object } => {
+                buffers[buf_i] = object;
+                buf_i += 1;
+            }
+            GlBuffer::Storage { object, binding } => {
+                ssbos[ssbo_i] = (object, binding);
+                ssbo_i += 1;
+            }
+        });
+
+        Self {
+            vao,
+            buffers,
+            ssbos,
+        }
+    }
+
+    /// Prepares the relevant GPU resources for rendering.
+    ///
+    /// Currently this only binds the SSBOs to their binding, with
+    /// `glBindBufferBase`.
+    pub fn prepare(&self) {
+        for (ssbo, binding) in self.ssbos {
+            unsafe {
+                gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, binding, ssbo);
+            }
+        }
     }
 
     pub fn alloc_buffer<T>(&self, index: usize, usage: BufferUsage, len: isize, ptr: *const T) {
         unsafe {
-            gl::NamedBufferData(self.vbo[index], len, ptr as *const _, usage.as_gl_enum());
+            gl::NamedBufferData(
+                self.buffers[index],
+                len,
+                ptr as *const _,
+                usage.as_gl_enum(),
+            );
         }
     }
 
     pub fn alloc_buffer_uninit(&self, index: usize, usage: BufferUsage, len: isize) {
         unsafe {
-            gl::NamedBufferData(self.vbo[index], len, std::ptr::null(), usage.as_gl_enum());
+            gl::NamedBufferData(
+                self.buffers[index],
+                len,
+                std::ptr::null(),
+                usage.as_gl_enum(),
+            );
         }
     }
 
     pub fn alloc_buffer_slice<T>(&self, index: usize, usage: BufferUsage, bytes: &[T]) {
         unsafe {
             gl::NamedBufferData(
-                self.vbo[index],
+                self.buffers[index],
                 bytes.len() as isize,
                 bytes.as_ptr() as *const _,
                 usage.as_gl_enum(),
@@ -66,14 +103,14 @@ impl<const BUF_COUNT: usize> RenderBuffer<BUF_COUNT> {
 
     pub fn upload_buffer<T>(&self, index: usize, offset: isize, len: isize, ptr: *const T) {
         unsafe {
-            gl::NamedBufferSubData(self.vbo[index], offset, len, ptr as *const _);
+            gl::NamedBufferSubData(self.buffers[index], offset, len, ptr as *const _);
         }
     }
 
     pub fn upload_buffer_slice<T>(&self, index: usize, offset: isize, bytes: &[T]) {
         unsafe {
             gl::NamedBufferSubData(
-                self.vbo[index],
+                self.buffers[index],
                 offset,
                 bytes.len() as isize,
                 bytes.as_ptr() as *const _,
@@ -82,21 +119,25 @@ impl<const BUF_COUNT: usize> RenderBuffer<BUF_COUNT> {
     }
 }
 
-impl RenderBuffer<0> {
+impl RenderBuffer<0, 0> {
     pub fn new() -> Self {
         let mut vao = 0;
         unsafe {
             gl::CreateVertexArrays(1, &mut vao);
         }
-        Self { vao, vbo: [0; 0] }
+        Self {
+            vao,
+            buffers: [0; 0],
+            ssbos: [(0, 0); 0],
+        }
     }
 }
 
-impl<const BUF_COUNT: usize> Drop for RenderBuffer<BUF_COUNT> {
+impl<const BUFFERS: usize, const SSBOS: usize> Drop for RenderBuffer<BUFFERS, SSBOS> {
     fn drop(&mut self) {
-        for i in 0..BUF_COUNT {
+        for i in 0..BUFFERS {
             unsafe {
-                gl::DeleteBuffers(1, &self.vbo[i]);
+                gl::DeleteBuffers(1, &self.buffers[i]);
             }
         }
         unsafe {
@@ -109,18 +150,10 @@ impl<const BUF_COUNT: usize> Drop for RenderBuffer<BUF_COUNT> {
 pub enum BufferKind {
     #[default]
     Array,
-    AtomicCounter,
-    CopyRead,
-    CopyWrite,
-    Dispatch,
-    Draw,
     Element,
-    PixelPack,
-    PixelUnpack,
-    Query,
-    ShaderStorage,
-    Texture,
-    TransformFeedback,
+    ShaderStorage {
+        size: isize,
+    },
     Uniform,
 }
 
@@ -147,7 +180,7 @@ impl AttributeKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub enum StorageKind {
+pub enum StorageFlags {
     #[default]
     Static,
     Dynamic,
@@ -198,18 +231,8 @@ impl GlPropertyEnum for BufferKind {
     fn as_gl_enum(&self) -> u32 {
         match self {
             BufferKind::Array => gl::ARRAY_BUFFER,
-            BufferKind::AtomicCounter => gl::ATOMIC_COUNTER_BUFFER,
-            BufferKind::CopyRead => gl::COPY_READ_BUFFER,
-            BufferKind::CopyWrite => gl::COPY_WRITE_BUFFER,
-            BufferKind::Dispatch => gl::DISPATCH_INDIRECT_BUFFER,
-            BufferKind::Draw => gl::DRAW_INDIRECT_BUFFER,
             BufferKind::Element => gl::ELEMENT_ARRAY_BUFFER,
-            BufferKind::PixelPack => gl::PIXEL_PACK_BUFFER,
-            BufferKind::PixelUnpack => gl::PIXEL_UNPACK_BUFFER,
-            BufferKind::Query => gl::QUERY_BUFFER,
-            BufferKind::ShaderStorage => gl::SHADER_STORAGE_BUFFER,
-            BufferKind::Texture => gl::TEXTURE_BUFFER,
-            BufferKind::TransformFeedback => gl::TRANSFORM_FEEDBACK_BUFFER,
+            BufferKind::ShaderStorage { .. } => gl::SHADER_STORAGE_BUFFER,
             BufferKind::Uniform => gl::UNIFORM_BUFFER,
         }
     }
@@ -227,20 +250,20 @@ impl GlPropertyEnum for AttributeKind {
     }
 }
 
-impl GlPropertyEnum for StorageKind {
+impl GlPropertyEnum for StorageFlags {
     fn as_gl_enum(&self) -> u32 {
         match self {
-            StorageKind::Dynamic => gl::DYNAMIC_STORAGE_BIT,
-            StorageKind::Client => gl::CLIENT_STORAGE_BIT,
-            StorageKind::Persistent {
+            StorageFlags::Dynamic => gl::DYNAMIC_STORAGE_BIT,
+            StorageFlags::Client => gl::CLIENT_STORAGE_BIT,
+            StorageFlags::Persistent {
                 read: false,
                 write: false,
             } => panic!("Persistent storage kind is neither write or read"),
-            StorageKind::Coherent {
+            StorageFlags::Coherent {
                 read: false,
                 write: false,
             } => panic!("Persistent (with coherent) storage kind is neither write or read"),
-            StorageKind::Persistent { read, write } => {
+            StorageFlags::Persistent { read, write } => {
                 let mut bit = gl::MAP_PERSISTENT_BIT;
                 if *read {
                     bit |= gl::MAP_READ_BIT;
@@ -250,7 +273,7 @@ impl GlPropertyEnum for StorageKind {
                 }
                 bit
             }
-            StorageKind::Coherent { read, write } => {
+            StorageFlags::Coherent { read, write } => {
                 let mut bit = gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT;
                 if *read {
                     bit |= gl::MAP_READ_BIT;
@@ -260,7 +283,7 @@ impl GlPropertyEnum for StorageKind {
                 }
                 bit
             }
-            StorageKind::Static => 0,
+            StorageFlags::Static => 0,
         }
     }
 }
@@ -268,11 +291,12 @@ impl GlPropertyEnum for StorageKind {
 #[derive(Debug, Clone, Default)]
 pub struct CreateBuffer {
     kind: BufferKind,
+    storage_flags: StorageFlags,
     attributes: Vec<LayoutBuffer>,
 }
 
 impl CreateBuffer {
-    fn create(mut self, vaobj: u32, buf_index: u32) -> u32 {
+    fn create(mut self, vaobj: u32, buf_index: u32) -> GlBuffer {
         let vbo = {
             let mut vbo = 0;
             unsafe {
@@ -281,26 +305,39 @@ impl CreateBuffer {
             vbo
         };
 
-        let stride = self.attributes.iter().fold(0, |s, o| s + o.size_bytes()) as i32;
-        let mut offset = 0;
-        self.attributes
-            .drain(..)
-            .enumerate()
-            .for_each(|(i, layout)| unsafe {
-                let index = i as u32;
-                let size = layout.attribute_size as i32;
-                let r#type = layout.attribute_kind.as_gl_enum();
-                let normalized = layout.normalised as u8;
+        match self.kind {
+            BufferKind::Array => {
+                let stride = self.attributes.iter().fold(0, |s, o| s + o.size_bytes()) as i32;
+                let mut offset = 0;
+                self.attributes
+                    .drain(..)
+                    .enumerate()
+                    .for_each(|(i, layout)| unsafe {
+                        let index = i as u32;
+                        let size = layout.attribute_size as i32;
+                        let r#type = layout.attribute_kind.as_gl_enum();
+                        let normalized = layout.normalised as u8;
 
-                gl::VertexArrayAttribFormat(vaobj, index, size, r#type, normalized, offset);
-                gl::VertexArrayAttribBinding(vaobj, index, buf_index);
-                gl::VertexArrayVertexBuffer(vaobj, buf_index, vbo, 0, stride);
-                gl::EnableVertexArrayAttrib(vaobj, index);
+                        gl::VertexArrayAttribFormat(vaobj, index, size, r#type, normalized, offset);
+                        gl::VertexArrayAttribBinding(vaobj, index, buf_index);
+                        gl::VertexArrayVertexBuffer(vaobj, buf_index, vbo, 0, stride);
+                        gl::EnableVertexArrayAttrib(vaobj, index);
 
-                offset += layout.size_bytes();
-            });
+                        offset += layout.size_bytes();
+                    });
+            }
+            BufferKind::ShaderStorage { size } => unsafe {
+                gl::NamedBufferStorage(
+                    vbo,
+                    size,
+                    std::ptr::null(),
+                    self.storage_flags.as_gl_enum(),
+                );
+            },
+            _ => {}
+        }
 
-        vbo
+        GlBuffer::Attribute { object: vbo }
     }
 }
 
@@ -370,6 +407,14 @@ impl CreateBuffers {
         self
     }
 
+    pub fn storage_flags(mut self, storage_flags: StorageFlags) -> Self {
+        self.buffers
+            .last_mut()
+            .expect("no buffer bound during creation")
+            .storage_flags = storage_flags;
+        self
+    }
+
     pub fn layout(mut self, layout: CreateLayout) -> Self {
         self.buffers
             .last_mut()
@@ -378,10 +423,16 @@ impl CreateBuffers {
         self
     }
 
-    fn create(self, vaobj: u32) -> impl Iterator<Item = u32> {
+    fn create(self, vaobj: u32) -> impl Iterator<Item = GlBuffer> {
         self.buffers
             .into_iter()
             .enumerate()
             .map(move |(i, buf)| buf.create(vaobj, i as u32))
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GlBuffer {
+    Attribute { object: u32 },
+    Storage { object: u32, binding: u32 },
 }
