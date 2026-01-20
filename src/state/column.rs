@@ -1,10 +1,10 @@
 #[derive(Clone, Debug, Default)]
-pub struct Link<T> {
+pub struct Entry<T> {
     owner: usize,
     inner: T,
 }
 
-impl<T> Link<T> {
+impl<T> Entry<T> {
     pub fn new(owner: usize, value: T) -> Self {
         Self {
             owner,
@@ -27,16 +27,18 @@ pub struct Column<T> {
     /// around to maintain cache locality.
     ///
     /// Each index refers to an index into the `contiguous` data vector.
+    ///
+    /// Often referred to as "indirect indices".
     indices: Vec<usize>,
 
     /// The "real" collection. This is contiguous, optimised for cache
     /// locality.
     ///
-    /// Each element is a [`Link`] which, other than the value, also contains
+    /// Each element is a [`Entry`] which, other than the value, also contains
     /// the index of the slot that points to the element.
-    contiguous: Vec<Link<T>>,
+    contiguous: Vec<Entry<T>>,
 
-    /// Keeps track of free slots of `indices`.
+    /// Keeps track of free slots of the indirect `indices`.
     free: Vec<usize>,
 }
 
@@ -81,7 +83,7 @@ impl<T: Default> Column<T> {
         }
         self.indices[index] = 0;
 
-        if let Some(owner_last) = self.contiguous.last().map(Link::owner) {
+        if let Some(owner_last) = self.contiguous.last().map(Entry::owner) {
             self.indices[owner_last] = index;
         }
 
@@ -104,7 +106,7 @@ impl<T: Default> Column<T> {
         let index = self.next_slot_index();
         let slot = self.contiguous.len();
         self.indices[index] = slot;
-        self.contiguous.push(Link::new(index, value));
+        self.contiguous.push(Entry::new(index, value));
         index
     }
 
@@ -127,10 +129,10 @@ impl<T: Default> Column<T> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.contiguous.iter().map(Link::inner_value)
+        self.contiguous.iter().map(Entry::inner_value)
     }
 
-    pub fn direct(&self) -> &Vec<Link<T>> {
+    pub fn direct(&self) -> &Vec<Entry<T>> {
         &self.contiguous
     }
 }
