@@ -25,9 +25,10 @@ layout(std430, binding = 2) readonly buffer instance_data
     mat4 transforms[];
 };
 
-uniform mat4 projection;
-uniform mat4 view;
+uniform mat4 u_projection;
+uniform mat4 u_view;
 
+out vec3 fs_world;
 out vec3 fs_normal;
 
 void main() {
@@ -47,9 +48,11 @@ void main() {
         vertex.normal[2]
     );
 
-    mat4 transform = transforms[mesh_id];
+    mat4 transform = transforms[gl_InstanceID];
+    vec4 world = transform * vec4(position, 1.0);
 
+    fs_world = world.xyz;
     fs_normal = normal;
     
-    gl_Position = projection * view * transform * vec4(position, 1.0);
+ E   gl_Position = u_projection * u_view * world;
 }
