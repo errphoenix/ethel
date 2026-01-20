@@ -96,7 +96,12 @@ impl<T: Default> Column<T> {
             free
         } else {
             let i = self.indices.len();
-            // uninitialised index
+            // uninitialised index pushed solely to ensure that an available
+            // slot exists when requested, it is not tracked.
+            // the stability of this data structure depends entirely on
+            // replacing this dummy value with a real one before other
+            // operations and avoiding "forgetting" this UNTRACKED empty slot.
+            // this is done properly by Column::put.
             self.indices.push(0);
             i
         }
@@ -129,7 +134,7 @@ impl<T: Default> Column<T> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.contiguous.iter().map(Entry::inner_value)
+        self.contiguous.iter().skip(1).map(Entry::inner_value)
     }
 
     pub fn direct(&self) -> &Vec<Entry<T>> {
