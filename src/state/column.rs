@@ -22,7 +22,7 @@ impl<T> Entry<T> {
 }
 
 #[derive(Debug, Default)]
-pub struct Column<T> {
+pub struct Column<T: Default> {
     /// These indices are guaranteed to be consistent and are never moved
     /// around to maintain cache locality.
     ///
@@ -46,7 +46,7 @@ impl<T: Default> Column<T> {
     pub fn new() -> Self {
         Self {
             indices: vec![0],
-            contiguous: vec![Default::default()],
+            contiguous: vec![Entry::default()],
             ..Default::default()
         }
     }
@@ -56,7 +56,7 @@ impl<T: Default> Column<T> {
         let mut contiguous = Vec::with_capacity(capacity);
 
         stable_indices.push(0);
-        contiguous.push(Default::default());
+        contiguous.push(Entry::default());
 
         Self {
             indices: stable_indices,
