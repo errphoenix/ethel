@@ -1,8 +1,6 @@
 #version 460 core
 
-layout (location = 0) in uint mesh_id;
-
-const uint MAX_VERTEX_DEFINITIONS = 32;
+const uint MAX_VERTEX_DEFINITIONS = 64;
 
 struct Metadata {
     uint offset;
@@ -20,7 +18,21 @@ layout(std430, binding = 1) readonly buffer mesh_storage
     Vertex vertex_storage[];
 };
 
-layout(std430, binding = 2) readonly buffer instance_data
+struct Entity {
+    uint mesh;
+    uint transform;
+}
+
+layout(std430, binding = 2) readonly buffer EntityMap 
+{
+    Entity entities[];
+};
+
+layout(std430, binding = 3) readonly buffer MeshData 
+{
+    uint mesh_ids[];
+};
+layout(std430, binding = 4) readonly buffer Transforms
 {
     mat4 transforms[];
 };
@@ -32,6 +44,13 @@ out vec3 fs_world;
 out vec3 fs_normal;
 
 void main() {
+    Entity mapping = entities[gl_InstanceID];
+    uint mesh_id_index = mapping.mesh;
+    uint transform_index = mapping.transform;
+
+    uint mesh_id = mesh_ids[mesh_index];
+    mat4 transform = transforms[transform_index];
+
     Metadata metadata = metadata[mesh_id];
     uint offset = metadata.offset;
     uint index = offset + gl_VertexID;
@@ -48,11 +67,10 @@ void main() {
         vertex.normal[2]
     );
 
-    mat4 transform = transforms[gl_InstanceID];
     vec4 world = transform * vec4(position, 1.0);
 
     fs_world = world.xyz;
     fs_normal = normal;
     
- E   gl_Position = u_projection * u_view * world;
+    gl_Position = u_projection * u_view * world;
 }

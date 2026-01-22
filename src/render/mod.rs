@@ -22,6 +22,43 @@ pub struct Resolution {
     height: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct View {
+    transform: glam::Mat4,
+}
+
+impl View {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_position(pos: glam::Vec3) -> Self {
+        Self {
+            transform: glam::Mat4::from_translation(-pos),
+        }
+    }
+
+    pub fn replace_transform(&mut self, transform: glam::Mat4) -> glam::Mat4 {
+        std::mem::replace(&mut self.transform, transform)
+    }
+
+    pub fn to_scale_rotation_translation(&self) -> (glam::Vec3, glam::Quat, glam::Vec3) {
+        self.transform.to_scale_rotation_translation()
+    }
+
+    pub fn translation(&self) -> glam::Vec3 {
+        self.transform.w_axis.xyz()
+    }
+
+    pub fn transform(&self) -> &glam::Mat4 {
+        &self.transform
+    }
+
+    pub fn transform_mut(&mut self) -> &mut glam::Mat4 {
+        &mut self.transform
+    }
+}
+
 impl Resolution {
     pub fn width(&self) -> f32 {
         self.width
@@ -54,9 +91,11 @@ impl Resolution {
 }
 
 /// Render state for the Janus rendering Context
+#[derive(Debug, Default)]
 pub struct Context {
     resolution: Resolution,
     metadata: Meshadata,
+    view: View,
 }
 
 impl janus::context::Draw for Context {
