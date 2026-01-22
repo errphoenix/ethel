@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+glam = "0.30.10"
 janus = { path = "../janus", features = ["expose_gl", "render"] }
 log = "0.4.29"
 rapier3d = "0.32.0"
