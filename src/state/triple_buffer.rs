@@ -6,14 +6,24 @@ use std::{
     usize,
 };
 
-trait BufferStorage<T: Copy + Clone> {
-    fn write_at(&mut self, buf_idx: usize, data: &[T], offset: usize) -> usize;
+pub trait BufferStorage<T: Copy + Clone>: HasBufferExactSize {
+    fn write_at(&self, buf_idx: usize, data: &[T], offset: usize) -> usize;
 
-    fn read_at_for(&mut self, buf_idx: usize, offset: usize, length: usize) -> (usize, &[T]);
+    fn read_at_for(&self, buf_idx: usize, offset: usize, length: usize) -> (usize, &[T]);
 }
 
-impl<T: Clone + Copy> BufferStorage<T> for ContiguousStorage<T> {
-    fn write_at(&mut self, buf_idx: usize, data: &[T], offset: usize) -> usize {
+impl<T: Copy + Clone> HasBufferExactSize for Contiguous<T> {
+    fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    fn length(&self) -> usize {
+        self.length.load(Ordering::Relaxed)
+    }
+}
+
+impl<T: Clone + Copy> BufferStorage<T> for Contiguous<T> {
+    fn write_at(&self, buf_idx: usize, data: &[T], offset: usize) -> usize {
         let len = data.len();
         let capacity = self.capacity;
         assert!(len > capacity);
@@ -28,7 +38,7 @@ impl<T: Clone + Copy> BufferStorage<T> for ContiguousStorage<T> {
         self.intermediate_idx.swap(buf_idx, Ordering::Release)
     }
 
-    fn read_at_for(&mut self, buf_idx: usize, offset: usize, length: usize) -> (usize, &[T]) {
+    fn read_at_for(&self, buf_idx: usize, offset: usize, length: usize) -> (usize, &[T]) {
         let read_idx = self.intermediate_idx.swap(buf_idx, Ordering::Acquire);
         let slice = unsafe {
             let ptr = self.ptr[read_idx].add(offset) as *const T;
@@ -39,17 +49,33 @@ impl<T: Clone + Copy> BufferStorage<T> for ContiguousStorage<T> {
     }
 }
 
-impl<const PARTS: usize> BufferStorage<u8> for MappedStorage<PARTS> {
-    fn write_at(&mut self, buf_idx: usize, data: &[u8], offset: usize) -> usize {
+impl<const PARTS: usize, Inner> HasBufferExactSize for MappedStorage<PARTS, Inner>
+where
+    Inner: BufferStorage<u8>,
+{
+    fn capacity(&self) -> usize {
+        self.inner.capacity()
+    }
+
+    fn length(&self) -> usize {
+        self.inner.length()
+    }
+}
+
+impl<const PARTS: usize, Inner> BufferStorage<u8> for MappedStorage<PARTS, Inner>
+where
+    Inner: BufferStorage<u8>,
+{
+    fn write_at(&self, buf_idx: usize, data: &[u8], offset: usize) -> usize {
         self.inner.write_at(buf_idx, data, offset)
     }
 
-    fn read_at_for(&mut self, buf_idx: usize, offset: usize, length: usize) -> (usize, &[u8]) {
+    fn read_at_for(&self, buf_idx: usize, offset: usize, length: usize) -> (usize, &[u8]) {
         self.inner.read_at_for(buf_idx, offset, length)
     }
 }
 
-pub struct ContiguousStorage<T: Clone + Copy> {
+pub struct Contiguous<T: Clone + Copy> {
     intermediate_idx: AtomicUsize,
     length: AtomicUsize,
 
@@ -57,7 +83,109 @@ pub struct ContiguousStorage<T: Clone + Copy> {
     capacity: usize,
 }
 
-impl<T: Clone + Copy + Default> ContiguousStorage<T> {
+pub struct Separate<T: Clone + Copy> {
+    head: AtomicUsize,
+    length: AtomicUsize,
+
+    /// A pointer to a buffer containing all 3 internal sections contiguous to
+    /// one another
+    ptr: *mut T,
+
+    /// Capacity for each inner section
+    capacity: usize,
+}
+
+//todo: docs
+// explain how this differs from the buffer storage implementation of
+// Contiguous; in particular how the buffer index parameters are ignored
+// as buffer indices are handled internally in the shared state and
+// producer/consumer have no say on it
+impl<T: Clone + Copy + Default> BufferStorage<T> for Separate<T> {
+    fn write_at(&self, _buf_idx: usize, data: &[T], offset: usize) -> usize {
+        let current = self.head.load(Ordering::Acquire);
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                self.ptr.add(self.section_base(current) + offset),
+                data.len().min(self.capacity),
+            );
+        }
+
+        let next = (current + 1) % 3;
+        self.head.store(next, Ordering::Release);
+        next
+    }
+
+    fn read_at_for(&self, _buf_idx: usize, offset: usize, length: usize) -> (usize, &[T]) {
+        let prev = self.last_section();
+        let offset = self.section_base(prev) + offset;
+
+        let read = unsafe { std::slice::from_raw_parts(self.ptr.add(offset) as *const T, length) };
+        (prev, read)
+    }
+}
+
+impl<T: Clone + Copy + Default> Separate<T> {
+    pub fn next_section(&self) -> usize {
+        (self.head.load(Ordering::Relaxed) + 1) % 3
+    }
+
+    pub fn last_section(&self) -> usize {
+        (self.head.load(Ordering::Relaxed) + 2) % 3
+    }
+
+    /// Calculates the base section offset depending on the given section
+    /// `index`.
+    ///
+    /// # Panics
+    /// As this is meant for triple buffers, there cannot be more than 3
+    /// sections. This function will panic if `index >= 3`.
+    pub fn section_base(&self, index: usize) -> usize {
+        assert!(index < 3);
+        index * self.capacity
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        let ptr = Box::into_raw(vec![T::default(); capacity * 3].into_boxed_slice()) as *mut T;
+        Self {
+            head: AtomicUsize::new(1),
+            length: AtomicUsize::new(0),
+            ptr,
+            capacity,
+        }
+    }
+
+    /// The `slice` represents the first of the three internal sections.
+    fn from_slice(slice: &mut [T]) -> Self {
+        let len = slice.len();
+
+        Self {
+            head: AtomicUsize::new(1),
+            length: AtomicUsize::new(len),
+            ptr: todo!(),
+            capacity: len,
+        }
+    }
+}
+
+impl<T: Clone + Copy> Drop for Separate<T> {
+    fn drop(&mut self) {
+        let ptr = unsafe { Box::from_raw(self.ptr) };
+        drop(ptr)
+    }
+}
+
+impl<T: Clone + Copy> HasBufferExactSize for Separate<T> {
+    fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    fn length(&self) -> usize {
+        self.length.load(Ordering::Relaxed)
+    }
+}
+
+impl<T: Clone + Copy + Default> Contiguous<T> {
     fn with_capacity(capacity: usize) -> Self {
         let buffers = [
             Box::into_raw(vec![T::default(); capacity].into_boxed_slice()) as *mut T,
@@ -92,7 +220,7 @@ impl<T: Clone + Copy + Default> ContiguousStorage<T> {
     }
 }
 
-impl<T: Clone + Copy> Drop for ContiguousStorage<T> {
+impl<T: Clone + Copy> Drop for Contiguous<T> {
     fn drop(&mut self) {
         for ptr in self.ptr {
             let ptr = unsafe { Box::from_raw(ptr) };
@@ -115,10 +243,10 @@ pub struct Consumer<T: Clone + Copy, Storage: BufferStorage<T>> {
     _marker: std::marker::PhantomData<T>,
 }
 
-unsafe impl<T: Send + Copy + Clone> Send for ContiguousStorage<T> {}
-unsafe impl<T: Sync + Copy + Clone> Sync for ContiguousStorage<T> {}
+unsafe impl<T: Send + Copy + Clone> Send for Contiguous<T> {}
+unsafe impl<T: Sync + Copy + Clone> Sync for Contiguous<T> {}
 
-trait HasBufferExactSize {
+pub trait HasBufferExactSize {
     /// The maximum capacity of the shared buffer allocated at the start.
     ///
     /// This cannot be resized in any way.
@@ -126,47 +254,27 @@ trait HasBufferExactSize {
 
     /// The length of the data currently living in the buffer.
     ///
-    /// This required an atomic `load` operation from the shared buffer.
+    /// This may require an atomic `load` operation from the shared buffer.
     fn length(&self) -> usize;
 }
 
-impl<T: Copy + Clone> HasBufferExactSize for Producer<T, ContiguousStorage<T>> {
+impl<S: BufferStorage<T>, T: Copy + Clone> HasBufferExactSize for Producer<T, S> {
     fn capacity(&self) -> usize {
-        self.shared.capacity
+        self.shared.capacity()
     }
 
     fn length(&self) -> usize {
-        self.shared.length.load(Ordering::Relaxed)
+        self.shared.length()
     }
 }
 
-impl<T: Copy + Clone> HasBufferExactSize for Consumer<T, ContiguousStorage<T>> {
+impl<S: BufferStorage<T>, T: Copy + Clone> HasBufferExactSize for Consumer<T, S> {
     fn capacity(&self) -> usize {
-        self.shared.capacity
+        self.shared.capacity()
     }
 
     fn length(&self) -> usize {
-        self.shared.length.load(Ordering::Relaxed)
-    }
-}
-
-impl<const PARTS: usize> HasBufferExactSize for Producer<u8, MappedStorage<PARTS>> {
-    fn capacity(&self) -> usize {
-        self.shared.inner.capacity
-    }
-
-    fn length(&self) -> usize {
-        self.shared.inner.length.load(Ordering::Relaxed)
-    }
-}
-
-impl<const PARTS: usize> HasBufferExactSize for Consumer<u8, MappedStorage<PARTS>> {
-    fn capacity(&self) -> usize {
-        self.shared.inner.capacity
-    }
-
-    fn length(&self) -> usize {
-        self.shared.inner.length.load(Ordering::Relaxed)
+        self.shared.length()
     }
 }
 
@@ -203,10 +311,12 @@ where
     /// # Panics
     /// Panics if the length of `data` is over the allocated capacity of the
     /// triple buffer.
-    pub fn write_at(&mut self, data: &[T], offset: usize) {}
+    pub fn write_at(&mut self, data: &[T], offset: usize) {
+        self.write_idx = self.shared.write_at(self.write_idx, data, offset);
+    }
 }
 
-impl<T: Clone + Copy> Producer<T, ContiguousStorage<T>> {}
+impl<T: Clone + Copy> Producer<T, Contiguous<T>> {}
 
 impl<T: Clone + Copy, Storage> Consumer<T, Storage>
 where
@@ -253,16 +363,17 @@ where
     /// operation. Multiple read operations may cause the shared buffer indices
     /// to be desynchronised.
     #[inline(always)]
-    pub fn read_at_for(&mut self, offset: usize, length: usize) -> &[T] {}
+    pub fn read_at_for(&mut self, offset: usize, length: usize) -> &[T] {
+        let (idx, read) = self.shared.read_at_for(self.read_idx, offset, length);
+        self.read_idx = idx;
+        read
+    }
 }
 
 pub fn create_contiguous<T: Clone + Copy + Default>(
     capacity: usize,
-) -> (
-    Producer<T, ContiguousStorage<T>>,
-    Consumer<T, ContiguousStorage<T>>,
-) {
-    let storage = Arc::new(ContiguousStorage::with_capacity(capacity));
+) -> (Producer<T, Contiguous<T>>, Consumer<T, Contiguous<T>>) {
+    let storage = Arc::new(Contiguous::with_capacity(capacity));
     let producer = Producer::new(&storage);
     let consumer = Consumer::new(&storage);
     (producer, consumer)
@@ -270,44 +381,47 @@ pub fn create_contiguous<T: Clone + Copy + Default>(
 
 pub fn from_slice_contiguous<T: Clone + Copy + Default>(
     slice: &mut [T],
-) -> (
-    Producer<T, ContiguousStorage<T>>,
-    Consumer<T, ContiguousStorage<T>>,
-) {
-    let storage = Arc::new(ContiguousStorage::from_slice(slice));
+) -> (Producer<T, Contiguous<T>>, Consumer<T, Contiguous<T>>) {
+    let storage = Arc::new(Contiguous::from_slice(slice));
     let producer = Producer::new(&storage);
     let consumer = Consumer::new(&storage);
     (producer, consumer)
 }
 
-pub fn create_sectioned<const PARTS: usize>(
+pub fn create_sectioned<const PARTS: usize, S>(
     capacity: usize,
 ) -> (
-    Producer<u8, MappedStorage<PARTS>>,
-    Consumer<u8, MappedStorage<PARTS>>,
-) {
-    let storage = Arc::new(ContiguousStorage::with_capacity(capacity));
-    let producer = Producer::new(&storage);
-    let consumer = Consumer::new(&storage);
+    Producer<u8, MappedStorage<PARTS, S>>,
+    Consumer<u8, MappedStorage<PARTS, S>>,
+)
+where
+    S: BufferStorage<u8>,
+{
+    // let storage = Arc::new(Contiguous::with_capacity(capacity));
+    // let producer = Producer::new(&storage);
+    // let consumer = Consumer::new(&storage);
     todo!()
     // (producer, consumer)
 }
 
-pub fn from_slice_sectioned<const PARTS: usize>(
+pub fn from_slice_sectioned<const PARTS: usize, S>(
     slice: &mut [u32],
 ) -> (
-    Producer<u8, MappedStorage<PARTS>>,
-    Consumer<u8, MappedStorage<PARTS>>,
-) {
-    let storage = Arc::new(ContiguousStorage::from_slice(slice));
+    Producer<u8, MappedStorage<PARTS, S>>,
+    Consumer<u8, MappedStorage<PARTS, S>>,
+)
+where
+    S: BufferStorage<u8>,
+{
+    let storage = Arc::new(Contiguous::from_slice(slice));
     let producer = Producer::new(&storage);
     let consumer = Consumer::new(&storage);
     todo!()
     // (producer, consumer)
 }
 
-pub struct MappedStorage<const PARTS: usize> {
-    inner: ContiguousStorage<u8>,
+pub struct MappedStorage<const PARTS: usize, Inner: BufferStorage<u8>> {
+    inner: Inner,
 
     ranges: [usize; PARTS],
     offsets: [usize; PARTS],
@@ -353,10 +467,13 @@ impl MappingRange {
     }
 }
 
-impl<const PARTS: usize> MappedStorage<PARTS> {
+impl<const PARTS: usize, Inner> MappedStorage<PARTS, Inner>
+where
+    Inner: BufferStorage<u8>,
+{
     fn new(mapping: &MappingRange) -> Self {
         let alloc = mapping.total_length();
-        let (offsets, ranges) = mapping.to_arrays();
+        // let (offsets, ranges) = mapping.to_arrays();
 
         todo!()
     }
@@ -383,5 +500,3 @@ impl<const PARTS: usize> MappedStorage<PARTS> {
         assert!(range >= data.len());
     }
 }
-
-//todo: producer/consumer implementations with mapped storage type
