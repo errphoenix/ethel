@@ -7,6 +7,7 @@ edition = "2024"
 glam = "0.30.10"
 janus = { path = "../janus", features = ["expose_gl", "render"] }
 log = "0.4.29"
+paste = "1.0.15"
 rapier3d = "0.32.0"
 tracing = "0.1.44"
 
