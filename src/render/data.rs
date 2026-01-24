@@ -41,8 +41,9 @@ impl<const PARTS: usize> Layout<PARTS> {
         self.offsets[head] = offset;
         self.lengths[head] = length;
 
-        self.last += length + offset;
+        self.last = length + offset;
         self.head += 1;
+
         self
     }
 
@@ -54,8 +55,18 @@ impl<const PARTS: usize> Layout<PARTS> {
         self.lengths[index]
     }
 
+    /// Returns the aligned total length of all parts and their lengths.
+    ///
+    /// This is aligned to OpenGL's SSBO [`alignment offset requirement`],
+    /// through [`janus::gl::align_to_gl_ssbo`].
+    ///
+    /// This is **REQUIRED** for GL operations such as `glBindBufferRange`.
+    /// Using a non-aligned offset (directly accessing `last` from [`Layout`])
+    /// will lead to undefined behaviour in GL operations.
+    ///
+    /// [`alignment offset requirement`]: janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT
     pub fn len(&self) -> usize {
-        self.last
+        janus::align_to_gl_ssbo(self.last as i32) as usize
     }
 }
 
@@ -195,7 +206,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part);
+        let length = self.layout.length_at(part) / size_of::<T>();
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *const T;
@@ -231,7 +242,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part);
+        let length = self.layout.length_at(part) / size_of::<T>();
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *mut T;
