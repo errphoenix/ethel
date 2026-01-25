@@ -1,5 +1,4 @@
 use std::{
-    ops::BitOrAssign,
     ptr,
     sync::atomic::{AtomicU8, Ordering},
 };
@@ -134,6 +133,28 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         }
     }
 
+    /// Copy the given `data` in a `section` of the storage buffer.
+    ///
+    /// The `section` represents one of the three triple buffer's sections.
+    ///
+    /// Also see [RenderStorage::blit_part].
+    ///
+    /// # Panic
+    /// * If `section` is not a value within the range (0, 2).
+    pub fn blit_section(&self, section: usize, data: &[u8]) {
+        assert!(
+            section < 3,
+            "render storage is a triple buffer, section {section} cannot exist"
+        );
+
+        let src = data.as_ptr();
+        let len = self.layout.len();
+        let offset = section * len;
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), len);
+        }
+    }
+
     /// Get an immutable view to a `section` of the triple buffer.
     ///
     /// The `section` represents one of the three triple buffer's sections.
@@ -151,7 +172,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub fn view_section(&self, section: usize) -> &[u8] {
         assert!(
             section < 3,
-            "render storage is triple buffered, section {section} cannot exist"
+            "render storage is a triple buffer, section {section} cannot exist"
         );
 
         let len = self.layout.len();
@@ -193,14 +214,14 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// An immutable slice of the part of a section of the buffer, casted to
     /// the `T` type parameter of the function.
     ///
-    /// # Panic
+    /// # Safety
+    /// The type parameter `T` cannot be verified to be the actual type of the
+    /// data in this part, the caller must ensure this is always the case.
+    ///
+    ///  # Panic
     /// * If `section` is not a value within the range (0, 2).
     /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    ///
-    /// # Safety
-    /// As the type parameter `T` cannot be verified to be the actual type of
-    /// the data in the part, this function is not safe.
     pub unsafe fn view_part<T: Sized>(&self, section: usize, part: usize) -> &[T] {
         assert!(
             section < 3,
@@ -229,14 +250,14 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// A mutable slice of the part of a section of the buffer, casted to the
     /// `T` type parameter of the function.
     ///
+    /// # Safety
+    /// The type parameter `T` cannot be verified to be the actual type of the
+    /// data in this part, the caller must ensure this is always the case.
+    ///
     /// # Panic
     /// * If `section` is not a value within the range (0, 2).
     /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    ///
-    /// # Safety
-    /// As the type parameter `T` cannot be verified to be the actual type of
-    /// the data in the part, this function is not safe.
     pub unsafe fn view_part_mut<T: Sized>(&mut self, section: usize, part: usize) -> &mut [T] {
         assert!(
             section < 3,
@@ -254,6 +275,37 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *mut T;
             std::slice::from_raw_parts_mut(ptr, length)
+        }
+    }
+
+    /// Copy the given `data` in a `part` of a `section` of the storage buffer.
+    ///
+    /// A `part` represents a contiguous stream of data of the same type.
+    ///
+    /// # Safety
+    /// The type parameter `T` cannot be verified to be the actual type of the
+    /// data in this part, the caller must ensure this is always the case.
+    ///
+    /// # Panic
+    /// * If `section` is not a value within the range (0, 2).
+    /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
+    ///   constant type parameter.
+    pub unsafe fn blit_part<T: Sized>(&self, section: usize, part: usize, data: &[T]) {
+        assert!(
+            section < 3,
+            "render storage is a triple buffer, section {section} cannot exist"
+        );
+        assert!(
+            part < PARTS,
+            "attempted to access part {part}, but the buffer only has {PARTS} part"
+        );
+
+        let src = data.as_ptr();
+        let base_offset = section * self.layout.len();
+        let offset = self.layout.offset_at(part);
+        unsafe {
+            let dst = self.ptr.add(base_offset + offset) as *mut T;
+            std::ptr::copy_nonoverlapping(src, dst, data.len());
         }
     }
 }
