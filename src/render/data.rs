@@ -73,6 +73,45 @@ impl<const PARTS: usize> Layout<PARTS> {
     }
 }
 
+/// A triple buffer OpenGL buffer over a single memory block.
+///
+/// This handles alignments and offsets of each memory section and part (a
+/// contiguous memory block of data of the same type).
+///
+/// # OpenGL Representation
+/// The GPU buffers are coherent persistent copy-write buffers. It includes
+/// a convenience function to bind each part of the buffer as an SSBO
+/// ([`RenderStorage::bind_shader_storage`]).
+///
+/// # Operations
+/// Available operations are:
+/// * [`blit part`](RenderStorage::blit_part) to copy data from the CPU over
+///   the GPU buffers for one part.
+/// * [`blit section`](RenderStorage::blit_section) to copy data from the CPU
+///   over the GPU buffers for a whole section. This takes in raw bytes for
+///   type-erasure, as the section may contain parts of varying types.
+/// * [`view section`](RenderStorage::view_section) to gain an immutable view
+///   of a whole section from the GPU buffers.
+/// * [`view part`](RenderStorage::view_part) to gain an immutable view of a
+///   part of a section from the GPU buffers.
+/// * [`view section mutable`](RenderStorage::view_section_mut) to gain a
+///   mutable view of a whole section from the GPU buffers.
+/// * [`view part mutable`](RenderStorage::view_part_mut) to gain a mutable
+///   view of a part of a section from the GPU buffers.
+///
+/// The operations related to 'part' are all unsafe, as it isn't possible to
+/// verify that the type in the given data corresponds to the same type of the
+/// data present on the GPU buffers.
+///
+/// # Synchronisation
+/// [`RenderStorage`] can operate over cross-boundary synchronisation
+/// coordination of [`Boundary`] and [`Cross`] over its
+/// [`Producer`]-to-[`Consumer`] model.
+///
+/// [`Boundary`]: crate::state::cross::Boundary
+/// [`Cross`]: crate::state::cross::Cross
+/// [`Producer`]: crate::state::cross::Producer
+/// [`Consumer`]: crate::state::cross::Consumer
 pub struct RenderStorage<const PARTS: usize> {
     gl_obj: u32,
     layout: Layout<PARTS>,
