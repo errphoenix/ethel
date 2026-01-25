@@ -1,7 +1,11 @@
-use std::ptr;
+use std::{
+    ops::BitOrAssign,
+    ptr,
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 use glam::usize;
-use janus::gl;
+use janus::gl::{self, types::__GLsync};
 
 pub trait GlPropertyEnum {
     fn as_gl_enum(&self) -> u32;
@@ -75,6 +79,9 @@ pub struct RenderStorage<const PARTS: usize> {
     layout: Layout<PARTS>,
     ptr: *mut u8,
 }
+
+unsafe impl<const PARTS: usize> Sync for RenderStorage<PARTS> {}
+unsafe impl<const PARTS: usize> Send for RenderStorage<PARTS> {}
 
 impl<const PARTS: usize> RenderStorage<PARTS> {
     pub fn new(layout: Layout<PARTS>) -> Self {
@@ -262,6 +269,7 @@ macro_rules! layout_buffer {
     ) => {
         paste::paste! {
             #[repr(usize)]
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
             pub enum [< Layout$name >] {
                 $([< $part:camel >] = [< $part_idx _usize>],)+
             }
@@ -277,4 +285,128 @@ macro_rules! layout_buffer {
             }
         }
     };
+}
+
+impl<const PARTS: usize> Drop for RenderStorage<PARTS> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::BindBuffer(gl::COPY_WRITE_BUFFER, self.gl_obj);
+            gl::UnmapBuffer(gl::COPY_WRITE_BUFFER);
+            gl::DeleteBuffers(1, &self.gl_obj);
+        }
+        self.ptr = std::ptr::null_mut();
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StorageSection {
+    Front = 0,
+    Back = 1,
+    Spare = 2,
+}
+
+impl StorageSection {
+    fn as_bit(&self) -> u8 {
+        match self {
+            StorageSection::Front => 0b00000001,
+            StorageSection::Back => 0b00001000,
+            StorageSection::Spare => 0b01000000,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct SyncBarrier {
+    fences: [Option<*const __GLsync>; 3],
+}
+
+#[derive(Default, Debug)]
+pub struct SyncState {
+    locks: AtomicU8,
+}
+
+impl SyncBarrier {
+    pub fn new() -> Self {
+        Self {
+            fences: [Option::None; 3],
+        }
+    }
+
+    pub fn fetch(&mut self, to: &SyncState) {
+        let mut bits = 0u8;
+        for i in 0..3 {
+            if let Some(fence) = self.fences[i].take() {
+                let fence_query = unsafe { gl::ClientWaitSync(fence, 0, 0) };
+                if fence_query == gl::CONDITION_SATISFIED || fence_query == gl::ALREADY_SIGNALED {
+                    unsafe {
+                        gl::DeleteSync(fence);
+                    }
+                } else {
+                    match i {
+                        0 => bits |= StorageSection::Front.as_bit(),
+                        1 => bits |= StorageSection::Back.as_bit(),
+                        2 => bits |= StorageSection::Spare.as_bit(),
+                        _ => unreachable!(),
+                    }
+                    self.fences[i] = Some(fence);
+                }
+            }
+        }
+        to.set(bits);
+    }
+
+    pub fn set(&mut self, index: usize, fence: *const __GLsync) {
+        self.fences[index] = Some(fence);
+    }
+}
+
+impl Drop for SyncBarrier {
+    fn drop(&mut self) {
+        self.fences
+            .into_iter()
+            .filter_map(|maybe_fence| maybe_fence)
+            .for_each(|fence| unsafe {
+                gl::DeleteSync(fence);
+            });
+    }
+}
+
+impl SyncState {
+    pub fn new() -> Self {
+        Self {
+            locks: AtomicU8::new(0),
+        }
+    }
+
+    /// Performs an `OR` operation on the internal lock bit.
+    fn lock_bits(&self, section: u8) {
+        self.locks.fetch_or(section, Ordering::Release);
+    }
+
+    /// Performs an `AND` operation on the internal lock bit with the inverted
+    /// `section` bits.
+    fn unlock_bits(&self, section: u8) {
+        self.locks.fetch_and(!section, Ordering::Release);
+    }
+
+    /// Performs an `OR` operation on the internal lock bit.
+    fn lock(&self, section: StorageSection) {
+        self.lock_bits(section.as_bit());
+    }
+
+    /// Performs an `AND` operation on the internal lock bit with the inverted
+    /// `section` bit.
+    fn unlock(&self, section: StorageSection) {
+        self.unlock_bits(section.as_bit());
+    }
+
+    fn set(&self, bits: u8) {
+        self.locks.store(bits, Ordering::Release);
+    }
+
+    pub fn has_lock(&self, section: StorageSection) -> bool {
+        let bit = section.as_bit();
+        self.locks.load(Ordering::Acquire) & bit == bit
+    }
 }
