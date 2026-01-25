@@ -1,7 +1,7 @@
 use crate::{mesh, state::column::Column};
 
 pub mod column;
-pub mod triple_buffer;
+pub mod cross;
 
 // in case a switch to higher precision with f64 is required
 pub(crate) type Real = f32;

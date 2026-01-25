@@ -353,17 +353,47 @@ impl<const PARTS: usize> Drop for RenderStorage<PARTS> {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StorageSection {
-    Front = 0,
-    Back = 1,
-    Spare = 2,
+    Front = StorageSection::FRONT_BYTE,
+    Back = StorageSection::BACK_BYTE,
+    Spare = StorageSection::SPARE_BYTE,
 }
 
 impl StorageSection {
-    fn as_bit(&self) -> u8 {
+    const FRONT_BYTE: u8 = 0b00000001;
+    const BACK_BYTE: u8 = 0b00001000;
+    const SPARE_BYTE: u8 = 0b01000000;
+
+    pub fn from_byte(byte: u8) -> Self {
+        match byte {
+            Self::FRONT_BYTE => Self::Front,
+            Self::BACK_BYTE => Self::Back,
+            Self::SPARE_BYTE => Self::Spare,
+            _ => panic!(
+                r#"{byte} is not a valid storage section byte, valid options are: {} (front), {} (back), {} (spare)"#,
+                Self::FRONT_BYTE,
+                Self::BACK_BYTE,
+                Self::SPARE_BYTE
+            ),
+        }
+    }
+
+    pub fn next(self) -> Self {
         match self {
-            StorageSection::Front => 0b00000001,
-            StorageSection::Back => 0b00001000,
-            StorageSection::Spare => 0b01000000,
+            Self::Front => Self::Back,
+            Self::Back => Self::Spare,
+            Self::Spare => Self::Front,
+        }
+    }
+
+    pub fn advance(&mut self) {
+        *self = self.next();
+    }
+
+    pub fn as_index(&self) -> usize {
+        match self {
+            Self::Front => 0,
+            Self::Back => 1,
+            Self::Spare => 2,
         }
     }
 }
@@ -396,9 +426,9 @@ impl SyncBarrier {
                     }
                 } else {
                     match i {
-                        0 => bits |= StorageSection::Front.as_bit(),
-                        1 => bits |= StorageSection::Back.as_bit(),
-                        2 => bits |= StorageSection::Spare.as_bit(),
+                        0 => bits |= StorageSection::Front as u8,
+                        1 => bits |= StorageSection::Back as u8,
+                        2 => bits |= StorageSection::Spare as u8,
                         _ => unreachable!(),
                     }
                     self.fences[i] = Some(fence);
@@ -444,13 +474,13 @@ impl SyncState {
 
     /// Performs an `OR` operation on the internal lock bit.
     fn lock(&self, section: StorageSection) {
-        self.lock_bits(section.as_bit());
+        self.lock_bits(section as u8);
     }
 
     /// Performs an `AND` operation on the internal lock bit with the inverted
     /// `section` bit.
     fn unlock(&self, section: StorageSection) {
-        self.unlock_bits(section.as_bit());
+        self.unlock_bits(section as u8);
     }
 
     fn set(&self, bits: u8) {
@@ -458,7 +488,7 @@ impl SyncState {
     }
 
     pub fn has_lock(&self, section: StorageSection) -> bool {
-        let bit = section.as_bit();
+        let bit = section as u8;
         self.locks.load(Ordering::Acquire) & bit == bit
     }
 }
