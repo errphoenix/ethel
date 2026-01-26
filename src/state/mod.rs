@@ -24,11 +24,17 @@ pub struct State {
     positions: Column<Position>,
 
     renderables: Vec<Renderable>,
-    // consider arc-swap or rwlock for render input data
 }
 
 impl janus::context::Update for State {
-    fn update(&mut self, delta: janus::context::DeltaTime) {
-        todo!()
+    fn update(&mut self, delta: janus::context::DeltaTime) {}
+
+    fn step_duration(&self) -> std::time::Duration {
+        //todo
+        Duration::from_millis(6)
+    }
+
+    fn set_step_duration(&mut self, _step: std::time::Duration) {
+        //todo
     }
 }
