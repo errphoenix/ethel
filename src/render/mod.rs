@@ -50,6 +50,10 @@ impl View {
         self.transform.w_axis.xyz()
     }
 
+    pub fn translation_mut(&mut self) -> &mut glam::Vec4 {
+        &mut self.transform.w_axis
+    }
+
     pub fn transform(&self) -> &glam::Mat4 {
         &self.transform
     }
@@ -92,16 +96,60 @@ impl Resolution {
 
 /// Render state for the Janus rendering Context
 #[derive(Debug, Default)]
-pub struct Context {
+pub struct Renderer {
     resolution: Resolution,
-    metadata: Meshadata,
-    view: View,
+
+    pub(crate) metadata: Meshadata,
+    pub(crate) view: View,
+
+    pub shader: ShaderHandle,
 }
 
-impl janus::context::Draw for Context {
-    fn draw(&self, _delta: janus::context::DeltaTime) {
-        let _proj_ortho = projection_orthographic(self.resolution.width, self.resolution.height);
+impl Renderer {
+    pub fn resolution(&self) -> Resolution {
+        self.resolution
+    }
 
-        todo!()
+    pub fn set_resolution(&mut self, resolution: Resolution) {
+        self.resolution = resolution;
+    }
+
+    pub fn view(&self) -> &View {
+        &self.view
+    }
+
+    pub fn view_mut(&mut self) -> &mut View {
+        &mut self.view
+    }
+
+    pub fn metadata(&self) -> &Meshadata {
+        &self.metadata
+    }
+
+    pub fn metadata_mut(&mut self) -> &mut Meshadata {
+        &mut self.metadata
+    }
+
+    pub fn shader_handle(&self) -> &ShaderHandle {
+        &self.shader
+    }
+
+    pub fn set_shader_handle(&mut self, shader: ShaderHandle) {
+        self.shader = shader;
+    }
+}
+
+const FOV: f32 = 80.0;
+
+impl janus::context::Draw for Renderer {
+    fn draw(&mut self, delta: janus::context::DeltaTime) {
+        {
+            let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
+            let view_transform = self.view.transform;
+            self.shader.uniform_mat4_glam("u_view", view_transform);
+            self.shader.uniform_mat4_glam("u_projection", proj);
+        }
+
+        *self.view.translation_mut() -= glam::Vec4::ONE * (glam::Vec4::Z * *delta as f32);
     }
 }

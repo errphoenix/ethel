@@ -5,12 +5,12 @@ const uint MAX_VERTEX_DEFINITIONS = 64;
 struct Metadata {
     uint offset;
     uint length;
-}
+};
 
 struct Vertex {
     float position[3];
     float normal[3];
-}
+};
 
 layout(std430, binding = 1) readonly buffer mesh_storage
 {
@@ -21,7 +21,7 @@ layout(std430, binding = 1) readonly buffer mesh_storage
 struct Entity {
     uint mesh;
     uint transform;
-}
+};
 
 layout(std430, binding = 2) readonly buffer EntityMap 
 {
@@ -48,7 +48,7 @@ void main() {
     uint mesh_id_index = mapping.mesh;
     uint transform_index = mapping.transform;
 
-    uint mesh_id = mesh_ids[mesh_index];
+    uint mesh_id = mesh_ids[mesh_id_index];
     mat4 transform = transforms[transform_index];
 
     Metadata metadata = metadata[mesh_id];
