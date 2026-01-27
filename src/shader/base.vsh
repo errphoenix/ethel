@@ -12,7 +12,7 @@ struct Vertex {
     float normal[3];
 };
 
-layout(std430, binding = 1) readonly buffer mesh_storage
+layout(std430, binding = 5) readonly buffer mesh_storage
 {
     Metadata metadata[MAX_VERTEX_DEFINITIONS];
     Vertex vertex_storage[];
@@ -23,16 +23,16 @@ struct Entity {
     uint transform;
 };
 
-layout(std430, binding = 2) readonly buffer EntityMap 
+layout(std430, binding = 0) readonly buffer EntityMap 
 {
     Entity entities[];
 };
 
-layout(std430, binding = 3) readonly buffer MeshData 
+layout(std430, binding = 1) readonly buffer MeshData 
 {
     uint mesh_ids[];
 };
-layout(std430, binding = 4) readonly buffer Transforms
+layout(std430, binding = 2) readonly buffer Transforms
 {
     mat4 transforms[];
 };

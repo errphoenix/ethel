@@ -2,7 +2,7 @@ pub mod data;
 
 use glam::Mat4;
 
-use crate::mesh::Meshadata;
+pub const RENDER_STORAGE_PARTS: usize = 3;
 
 const ORTHO_NEAR: f32 = 0.0;
 const ORTHO_FAR: f32 = 2.0;
@@ -102,7 +102,9 @@ pub struct Renderer {
     pub(crate) metadata: Meshadata,
     pub(crate) view: View,
 
-    pub shader: ShaderHandle,
+    shader: ShaderHandle,
+
+    boundary: Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>>,
 }
 
 impl Renderer {
@@ -137,12 +139,24 @@ impl Renderer {
     pub fn set_shader_handle(&mut self, shader: ShaderHandle) {
         self.shader = shader;
     }
+
+    pub fn boundary(&self) -> &Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>> {
+        &self.boundary
+    }
+
+    pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>> {
+        &mut self.boundary
+    }
 }
 
 const FOV: f32 = 80.0;
 
 impl janus::context::Draw for Renderer {
     fn draw(&mut self, delta: janus::context::DeltaTime) {
+        unsafe {
+            janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT);
+        }
+
         {
             let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
             let view_transform = self.view.transform;

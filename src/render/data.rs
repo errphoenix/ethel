@@ -357,7 +357,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 /// # Example
 /// ```
 /// layout_buffer! {
-///     const Test = 3 {
+///     const Test = 3, {
 ///         numbers => 0, type u32 = 128;
 ///         healths => 1, type f32 = 128;
 ///     }
@@ -376,7 +376,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 ///
 /// ```
 /// layout_buffer! {
-///     const Test = 3 {
+///     const Test = 3, {
 ///         numbers => 0, type u32 = 128;
 ///         healths => 1, type f32 = 128;
 ///     }
@@ -387,13 +387,13 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 /// let section_index = 0;
 ///
 /// // SAFETY: as we are using the layout macro's enum of this storage's
-/// // layout to index the part, the types of the data contained within the
-/// // part is guaranteed to be the f32 type we specified in the macro.
+/// // layout to index the part, the type of the data contained within the
+/// // part is guaranteed to be the f32 type we specified in the macro for this
+/// // part.
 /// let healths = unsafe {
 ///     storage.view_part::<f32>(section_index, LayoutTest::Healths as usize)
 /// };
 /// ```
-///
 #[macro_export]
 macro_rules! layout_buffer {
     (

@@ -1,6 +1,11 @@
 use std::io::BufReader;
 
-use ethel::{render::Renderer, shader::ShaderHandle, state::State};
+use ethel::{
+    LayoutEntityData,
+    render::{Renderer, data::RenderStorage},
+    shader::ShaderHandle,
+    state::{State, cross},
+};
 use janus::window::DisplayParameters;
 
 fn main() {
@@ -11,8 +16,16 @@ fn main() {
     janus::run(ctx);
 }
 
-fn setup(_state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
+fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
+    let render_storage = RenderStorage::new(LayoutEntityData::create());
+    let (producer, consumer) = cross::create(render_storage);
+    *state.boundary_mut() = producer;
+    *renderer.boundary_mut() = consumer;
+
     renderer.set_shader_handle(load_shader());
+    unsafe {
+        janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+    }
     Ok(())
 }
 

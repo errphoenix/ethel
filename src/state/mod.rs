@@ -1,57 +1,16 @@
-use std::{
-    fmt::Display,
-    ops::{Deref, DerefMut},
-    time::Duration,
-};
+use std::time::Duration;
 
-use crate::{mesh, state::column::Column};
+use crate::{
+    mesh,
+    render::{self, data::RenderStorage},
+    state::{
+        column::Column,
+        cross::{Cross, Producer},
+    },
+};
 
 pub mod column;
 pub mod cross;
-
-#[derive(Clone, Copy, PartialEq, PartialOrd, Default, Debug)]
-pub struct Real(FloatType);
-
-type FloatType = f32;
-
-impl Display for Real {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Deref for Real {
-    type Target = FloatType;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Real {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl Real {
-    pub fn new(float: FloatType) -> Self {
-        Self(float)
-    }
-
-    pub fn as_f32(&self) -> f32 {
-        self.0 as f32
-    }
-
-    pub fn as_f64(&self) -> f64 {
-        self.0 as f64
-    }
-}
-
-// X, Y, Z
-type Position = [Real; 3];
-// Quaternion
-type Rotation = [Real; 4];
 
 #[derive(Debug)]
 struct Renderable {
@@ -63,13 +22,41 @@ struct Renderable {
 #[derive(Debug, Default)]
 pub struct State {
     meshes: Column<mesh::Id>,
-    positions: Column<Position>,
+    positions: Column<glam::Vec3>,
 
     renderables: Vec<Renderable>,
+
+    boundary: Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>>,
+    transforms: Box<glam::Mat4>,
+}
+
+impl State {
+    pub fn boundary(&self) -> &Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>> {
+        &self.boundary
+    }
+
+    pub fn boundary_mut(
+        &mut self,
+    ) -> &mut Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>> {
+        &mut self.boundary
+    }
+
+    pub fn upload(&self) {
+        self.boundary.cross(|section, storage| {});
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GpuEntityData {
+    mesh: u32,
+    transform: u32,
 }
 
 impl janus::context::Update for State {
-    fn update(&mut self, delta: janus::context::DeltaTime) {}
+    fn update(&mut self, _delta: janus::context::DeltaTime) {
+        self.upload();
+    }
 
     fn step_duration(&self) -> std::time::Duration {
         //todo

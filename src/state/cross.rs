@@ -16,6 +16,7 @@ use crate::render::data::{StorageSection, SyncBarrier, SyncState};
 /// It also contains the actual `Storage`, such as [`RenderStorage`].
 ///
 /// [`RenderStorage`]: crate::render::data::RenderStorage
+#[derive(Debug, Default)]
 pub struct Boundary<Storage> {
     storage: Storage,
     working_section: AtomicU8,
@@ -64,7 +65,7 @@ impl<Storage> Boundary<Storage> {
 ///
 /// The consumer does not check for locks, as it is the part of the boundary
 /// that commands the locks.
-///
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Consumer;
 
 /// The producer is the "writer" over the shared storage.
@@ -74,6 +75,7 @@ pub struct Consumer;
 ///
 /// It will only operate if the section of the buffer it is working on is not
 /// currently under a lock. Otherwise, the operation safely aborts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Producer;
 
 /// Operator over a [`shared storage boundary`](Boundary).
@@ -83,6 +85,7 @@ pub struct Producer;
 /// * A [`Producer`], a "writer" over the shared storage
 ///
 /// See the documentation for the respective types for more information.
+#[derive(Default, Debug)]
 pub struct Cross<Role, Storage> {
     boundary: Arc<Boundary<Storage>>,
     _role: std::marker::PhantomData<Role>,
