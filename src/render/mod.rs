@@ -1,6 +1,17 @@
+pub mod command;
 pub mod data;
 
-use glam::Mat4;
+use glam::{Mat4, Vec4Swizzles};
+
+use crate::{
+    mesh::Meshadata,
+    render::{
+        command::{DrawArraysIndirectCommand, GpuCommandQueue},
+        data::RenderStorage,
+    },
+    shader::ShaderHandle,
+    state::cross::{Consumer, Cross},
+};
 
 pub const RENDER_STORAGE_PARTS: usize = 3;
 
@@ -103,6 +114,7 @@ pub struct Renderer {
     pub(crate) view: View,
 
     shader: ShaderHandle,
+    command_queue: GpuCommandQueue<DrawArraysIndirectCommand>,
 
     boundary: Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>>,
 }
@@ -146,6 +158,14 @@ impl Renderer {
 
     pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>> {
         &mut self.boundary
+    }
+
+    pub fn command_queue(&self) -> &GpuCommandQueue<DrawArraysIndirectCommand> {
+        &self.command_queue
+    }
+
+    pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<DrawArraysIndirectCommand> {
+        &mut self.command_queue
     }
 }
 

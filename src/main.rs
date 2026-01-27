@@ -2,7 +2,7 @@ use std::io::BufReader;
 
 use ethel::{
     LayoutEntityData,
-    render::{Renderer, data::RenderStorage},
+    render::{Renderer, command::GpuCommandQueue, data::RenderStorage},
     shader::ShaderHandle,
     state::{State, cross},
 };
@@ -17,20 +17,26 @@ fn main() {
 }
 
 fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
-    let render_storage = RenderStorage::new(LayoutEntityData::create());
-    let (producer, consumer) = cross::create(render_storage);
-    *state.boundary_mut() = producer;
-    *renderer.boundary_mut() = consumer;
+    {
+        let render_storage = RenderStorage::new(LayoutEntityData::create());
+        let (producer, consumer) = cross::create(render_storage);
+        *state.boundary_mut() = producer;
+        *renderer.boundary_mut() = consumer;
+    }
+    {
+        let mut vsh = BufReader::new(include_bytes!("shader/base.vsh").as_slice());
+        let mut fsh = BufReader::new(include_bytes!("shader/base.fsh").as_slice());
+        let shader = ShaderHandle::new(&mut vsh, &mut fsh);
+        renderer.set_shader_handle(shader);
+    }
 
-    renderer.set_shader_handle(load_shader());
+    {
+        const COMMAND_QUEUE_ALLOC: usize = 8;
+        *renderer.command_queue_mut() = GpuCommandQueue::new(COMMAND_QUEUE_ALLOC);
+    }
+
     unsafe {
         janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     }
     Ok(())
-}
-
-fn load_shader() -> ShaderHandle {
-    let mut vsh = BufReader::new(include_bytes!("shader/base.vsh").as_slice());
-    let mut fsh = BufReader::new(include_bytes!("shader/base.fsh").as_slice());
-    ShaderHandle::new(&mut vsh, &mut fsh)
 }
