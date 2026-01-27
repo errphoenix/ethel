@@ -1,23 +1,27 @@
 #[derive(Clone, Debug, Default)]
 pub struct Entry<T> {
-    owner: usize,
+    owner: u32,
     inner: T,
 }
 
 impl<T> Entry<T> {
-    pub fn new(owner: usize, value: T) -> Self {
+    pub fn new(owner: u32, value: T) -> Self {
         Self {
             owner,
             inner: value,
         }
     }
 
-    pub fn owner(&self) -> usize {
+    pub fn owner(&self) -> u32 {
         self.owner
     }
 
     pub fn inner_value(&self) -> &T {
         &self.inner
+    }
+
+    pub fn inner_value_mut(&mut self) -> &mut T {
+        &mut self.inner
     }
 }
 
@@ -84,7 +88,7 @@ impl<T: Default> Column<T> {
         self.indices[index] = 0;
 
         if let Some(owner_last) = self.contiguous.last().map(Entry::owner) {
-            self.indices[owner_last] = index;
+            self.indices[owner_last as usize] = slot;
         }
 
         self.contiguous.swap_remove(slot);
@@ -111,7 +115,7 @@ impl<T: Default> Column<T> {
         let index = self.next_slot_index();
         let slot = self.contiguous.len();
         self.indices[index] = slot;
-        self.contiguous.push(Entry::new(index, value));
+        self.contiguous.push(Entry::new(index as u32, value));
         index
     }
 
@@ -135,6 +139,13 @@ impl<T: Default> Column<T> {
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.contiguous.iter().skip(1).map(Entry::inner_value)
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.contiguous
+            .iter_mut()
+            .skip(1)
+            .map(Entry::inner_value_mut)
     }
 
     pub fn direct(&self) -> &Vec<Entry<T>> {

@@ -235,7 +235,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// # Panic
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
-    pub fn view_section_mut(&mut self, section: usize) -> &mut [u8] {
+    pub fn view_section_mut(&self, section: usize) -> &mut [u8] {
         assert!(
             section < 3,
             "render storage is a triple buffer, section {section} cannot exist"
@@ -299,7 +299,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// * If `section` is not a value within the range (0, 2).
     /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    pub unsafe fn view_part_mut<T: Sized>(&mut self, section: usize, part: usize) -> &mut [T] {
+    pub unsafe fn view_part_mut<T: Sized>(&self, section: usize, part: usize) -> &mut [T] {
         assert!(
             section < 3,
             "render storage is a triple buffer, section {section} cannot exist"

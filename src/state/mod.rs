@@ -13,7 +13,7 @@ pub mod column;
 pub mod cross;
 
 #[derive(Debug)]
-struct Renderable {
+struct Entity {
     mesh: u32,
     position: u32,
     rotation: u32,
@@ -24,10 +24,9 @@ pub struct State {
     meshes: Column<mesh::Id>,
     positions: Column<glam::Vec3>,
 
-    renderables: Vec<Renderable>,
+    entities: Vec<Entity>,
 
     boundary: Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>>,
-    transforms: Box<glam::Mat4>,
 }
 
 impl State {
@@ -41,20 +40,34 @@ impl State {
         &mut self.boundary
     }
 
-    pub fn upload(&self) {
-        self.boundary.cross(|section, storage| {});
+    pub fn upload(&mut self) {
+        self.boundary.cross(|section, storage| {
+            let matrices = unsafe { storage.view_part_mut::<[f32; 16]>(section as usize, 0) };
+            self.pack_matrices(matrices);
+        });
+    }
+
+    fn pack_matrices(&self, out: &mut [[f32; 16]]) {
+        self.positions.direct().iter().for_each(|item| {
+            let idx = item.owner() as usize;
+            let pos = item.inner_value();
+            out[idx] = glam::Mat4::from_translation(*pos).to_cols_array();
+        });
     }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GpuEntityData {
-    mesh: u32,
-    transform: u32,
+    mesh_id_index: u32,
 }
 
 impl janus::context::Update for State {
-    fn update(&mut self, _delta: janus::context::DeltaTime) {
+    fn update(&mut self, delta: janus::context::DeltaTime) {
+        self.positions
+            .iter_mut()
+            .for_each(|pos| pos.x += delta.as_f32() * 0.1);
+
         self.upload();
     }
 
