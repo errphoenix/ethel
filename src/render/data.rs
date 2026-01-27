@@ -10,6 +10,7 @@ pub trait GlPropertyEnum {
     fn as_gl_enum(&self) -> u32;
 }
 
+#[derive(Clone, Debug)]
 pub struct Layout<const PARTS: usize> {
     head: usize,
     last: usize,
@@ -112,6 +113,7 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// [`Cross`]: crate::state::cross::Cross
 /// [`Producer`]: crate::state::cross::Producer
 /// [`Consumer`]: crate::state::cross::Consumer
+#[derive(Clone, Default, Debug)]
 pub struct RenderStorage<const PARTS: usize> {
     gl_obj: u32,
     layout: Layout<PARTS>,
@@ -349,6 +351,49 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     }
 }
 
+/// Convenience macro to create a [`Layout`] with an useful enum to access its
+/// parts.
+///
+/// # Example
+/// ```
+/// layout_buffer! {
+///     const Test = 3 {
+///         numbers => 0, type u32 = 128;
+///         healths => 1, type f32 = 128;
+///     }
+/// };
+/// ```
+///
+/// This will create an enum called `LayoutTest`. Each entry of this enum
+/// corresponds to the parts defined in the layout (`LayoutTest::Numbers` and
+/// `LayoutTest::Healths`).
+///
+/// The created enum also contains an associated function `LayoutTest::create`,
+/// which will create a [`Layout`] with the defined parts.
+///
+/// The created enum has the `#[repr(usize)]` attribute, which means that the
+/// entries of the enum may be used in [`RenderStorage`] part methods:
+///
+/// ```
+/// layout_buffer! {
+///     const Test = 3 {
+///         numbers => 0, type u32 = 128;
+///         healths => 1, type f32 = 128;
+///     }
+/// };
+///
+/// let storage = RenderStorage::<2>::new(LayoutTest::create());
+/// // the section of the triple buffer, hard-coded to 0 for the example
+/// let section_index = 0;
+///
+/// // SAFETY: as we are using the layout macro's enum of this storage's
+/// // layout to index the part, the types of the data contained within the
+/// // part is guaranteed to be the f32 type we specified in the macro.
+/// let healths = unsafe {
+///     storage.view_part::<f32>(section_index, LayoutTest::Healths as usize)
+/// };
+/// ```
+///
 #[macro_export]
 macro_rules! layout_buffer {
     (
