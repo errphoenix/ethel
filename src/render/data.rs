@@ -16,6 +16,7 @@ pub struct Layout<const PARTS: usize> {
     last: usize,
     offsets: [usize; PARTS],
     lengths: [usize; PARTS],
+    shader: [u32; PARTS],
 }
 
 impl<const PARTS: usize> Default for Layout<PARTS> {
@@ -32,6 +33,7 @@ impl<const PARTS: usize> Layout<PARTS> {
             last: 0,
             offsets: [0; PARTS],
             lengths: [0; PARTS],
+            shader: [u32::MAX; PARTS],
         }
     }
 
@@ -51,12 +53,26 @@ impl<const PARTS: usize> Layout<PARTS> {
         self
     }
 
+    pub fn with_shader_storage(mut self, binding: u32) -> Self {
+        self.shader[self.head - 1] = binding;
+        self
+    }
+
     pub fn offset_at(&self, index: usize) -> usize {
         self.offsets[index]
     }
 
     pub fn length_at(&self, index: usize) -> usize {
         self.lengths[index]
+    }
+
+    pub fn ssbo_of(&self, index: usize) -> Option<u32> {
+        let binding = self.shader[index];
+        if binding != u32::MAX {
+            Some(binding)
+        } else {
+            None
+        }
     }
 
     /// Returns the aligned total length of all parts and their lengths.
@@ -83,6 +99,8 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// The GPU buffers are coherent persistent copy-write buffers. It includes
 /// a convenience function to bind each part of the buffer as an SSBO
 /// ([`RenderStorage::bind_shader_storage`]).
+///
+/// This will only bind the parts that specified an SSBO binding in [`Layout`].
 ///
 /// # Operations
 /// Available operations are:
@@ -151,6 +169,10 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         }
     }
 
+    pub fn layout(&self) -> &Layout<PARTS> {
+        &self.layout
+    }
+
     /// Binds all the buffered data of `section` to the GPU's SSBOs.
     ///
     /// Each part is bound to a different SSBO.
@@ -160,16 +182,19 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         let base_offset = (self.layout.len() * section) as isize;
 
         for part in 0..PARTS {
-            let offset = self.layout.offset_at(part) as isize;
-            let length = self.layout.length_at(part) as isize;
-            unsafe {
-                gl::BindBufferRange(
-                    gl::SHADER_STORAGE_BUFFER,
-                    part as u32,
-                    self.gl_obj,
-                    base_offset + offset,
-                    length,
-                );
+            let binding = self.layout.shader[part];
+            if binding != u32::MAX {
+                let offset = self.layout.offset_at(part) as isize;
+                let length = self.layout.length_at(part) as isize;
+                unsafe {
+                    gl::BindBufferRange(
+                        gl::SHADER_STORAGE_BUFFER,
+                        binding,
+                        self.gl_obj,
+                        base_offset + offset,
+                        length,
+                    );
+                }
             }
         }
     }
@@ -221,6 +246,19 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         unsafe { std::slice::from_raw_parts(self.ptr.add(offset), len) }
     }
 
+    pub unsafe fn view_section_raw(&self, section: usize) -> (*mut u8, usize) {
+        assert!(
+            section < 3,
+            "render storage is a triple buffer, section {section} cannot exist"
+        );
+
+        let len = self.layout.len();
+        let offset = section * len;
+
+        let ptr = unsafe { self.ptr.add(offset) };
+        (ptr, len)
+    }
+
     /// Get a mutable view to a `section` of the triple buffer.
     ///
     /// The `section` represents one of the three triple buffer's sections.
@@ -270,7 +308,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         );
         assert!(
             part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} part"
+            "attempted to access part {part}, but the buffer only has {PARTS} parts"
         );
 
         let base_offset = section * self.layout.len();
@@ -281,6 +319,24 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
             let ptr = self.ptr.add(base_offset + offset) as *const T;
             std::slice::from_raw_parts(ptr, length)
         }
+    }
+
+    pub unsafe fn view_part_raw<T: Sized>(&self, section: usize, part: usize) -> (*mut T, usize) {
+        assert!(
+            section < 3,
+            "render storage is a triple buffer, section {section} cannot exist"
+        );
+        assert!(
+            part < PARTS,
+            "attempted to access part {part}, but the buffer only has {PARTS} parts"
+        );
+
+        let base_offset = section * self.layout.len();
+        let offset = self.layout.offset_at(part);
+        let length = self.layout.length_at(part) / size_of::<T>();
+
+        let ptr = unsafe { self.ptr.add(base_offset + offset) as *mut T };
+        (ptr, length)
     }
 
     /// Get a mutable view to the `part` of a `section` of the triple buffer.
@@ -306,7 +362,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         );
         assert!(
             part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} part"
+            "attempted to access part {part}, but the buffer only has {PARTS} parts"
         );
 
         let base_offset = section * self.layout.len();
@@ -338,7 +394,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
         );
         assert!(
             part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} part"
+            "attempted to access part {part}, but the buffer only has {PARTS} parts"
         );
 
         let src = data.as_ptr();
@@ -359,7 +415,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 /// layout_buffer! {
 ///     const Test = 3, {
 ///         numbers => 0, type u32 = 128;
-///         healths => 1, type f32 = 128;
+///         healths => 1, type f32 = 128, shader 1;
 ///     }
 /// };
 /// ```
@@ -378,7 +434,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 /// layout_buffer! {
 ///     const Test = 3, {
 ///         numbers => 0, type u32 = 128;
-///         healths => 1, type f32 = 128;
+///         healths => 1, type f32 = 128, shader 1;
 ///     }
 /// };
 ///
@@ -399,7 +455,7 @@ macro_rules! layout_buffer {
     (
         const $name:ty = $len:expr, {
             $(
-                $part:ident => $part_idx:expr, type $part_ty:ty = $part_len:expr;
+                $part:ident => $part_idx:expr, type $part_ty:ty = $part_len:expr $(, shader $part_ssbo:expr)? ;
             )+
         }
     ) => {
@@ -415,6 +471,9 @@ macro_rules! layout_buffer {
                     let mut layout = crate::render::data::Layout::<$len>::new();
                     $(
                         layout = layout.section::<$part_ty>($part_len);
+                        $(
+                            layout = layout.with_shader_storage($part_ssbo);
+                        )?
                     )+
                     layout
                 }
