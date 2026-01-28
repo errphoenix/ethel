@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::{
-    mesh,
+    RENDER_STORAGE_PARTS, mesh,
     render::{self, data::RenderStorage},
     state::{
         column::Column,
@@ -26,17 +26,15 @@ pub struct State {
 
     entities: Vec<Entity>,
 
-    boundary: Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>>,
+    boundary: Cross<Producer, RenderStorage<RENDER_STORAGE_PARTS>>,
 }
 
 impl State {
-    pub fn boundary(&self) -> &Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>> {
+    pub fn boundary(&self) -> &Cross<Producer, RenderStorage<RENDER_STORAGE_PARTS>> {
         &self.boundary
     }
 
-    pub fn boundary_mut(
-        &mut self,
-    ) -> &mut Cross<Producer, RenderStorage<{ render::RENDER_STORAGE_PARTS }>> {
+    pub fn boundary_mut(&mut self) -> &mut Cross<Producer, RenderStorage<RENDER_STORAGE_PARTS>> {
         &mut self.boundary
     }
 

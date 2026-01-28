@@ -31,8 +31,7 @@ fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
     }
 
     {
-        const COMMAND_QUEUE_ALLOC: usize = 8;
-        *renderer.command_queue_mut() = GpuCommandQueue::new(COMMAND_QUEUE_ALLOC);
+        *renderer.command_queue_mut() = GpuCommandQueue::new(ethel::COMMAND_QUEUE_ALLOC);
     }
 
     unsafe {

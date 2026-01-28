@@ -4,6 +4,7 @@ pub mod data;
 use glam::{Mat4, Vec4Swizzles};
 
 use crate::{
+    RENDER_STORAGE_PARTS,
     mesh::Meshadata,
     render::{
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
@@ -12,8 +13,6 @@ use crate::{
     shader::ShaderHandle,
     state::cross::{Consumer, Cross},
 };
-
-pub const RENDER_STORAGE_PARTS: usize = 3;
 
 const ORTHO_NEAR: f32 = 0.0;
 const ORTHO_FAR: f32 = 2.0;
