@@ -250,6 +250,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
                 slice,
                 offset: offset as u32,
                 length: length as u32,
+                source: self.gl_obj,
             }
         }
     }
@@ -295,6 +296,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
                 slice,
                 offset: offset as u32,
                 length: length as u32,
+                source: self.gl_obj,
             }
         }
     }
@@ -328,15 +330,17 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part) / size_of::<T>();
+        let length = self.layout.length_at(part);
+        let len = length / size_of::<T>();
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *const T;
-            let slice = std::slice::from_raw_parts(ptr, length);
+            let slice = std::slice::from_raw_parts(ptr, len);
             View {
                 slice,
                 offset: offset as u32,
-                length: length as u32,
+                length: len as u32,
+                source: self.gl_obj,
             }
         }
     }
@@ -387,15 +391,17 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part) / size_of::<T>();
+        let length = self.layout.length_at(part);
+        let len = length / size_of::<T>();
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *mut T;
-            let slice = std::slice::from_raw_parts_mut(ptr, length);
+            let slice = std::slice::from_raw_parts_mut(ptr, len);
             ViewMut {
                 slice,
                 offset: offset as u32,
                 length: length as u32,
+                source: self.gl_obj,
             }
         }
     }
@@ -518,10 +524,12 @@ impl<const PARTS: usize> Drop for RenderStorage<PARTS> {
     }
 }
 
+#[derive(Debug)]
 pub struct View<'buf, T: Sized> {
     slice: &'buf [T],
     offset: u32,
     length: u32,
+    source: u32,
 }
 
 impl<'buf, T: Sized> View<'buf, T> {
@@ -533,12 +541,19 @@ impl<'buf, T: Sized> View<'buf, T> {
         self.slice
     }
 
+    /// The original offset of the data in the buffer it belongs to.
     pub const fn offset(&self) -> u32 {
         self.offset
     }
 
+    /// The length in bytes.
     pub const fn length(&self) -> u32 {
         self.length
+    }
+
+    /// The original OpenGL buffer object. this view belongs to.
+    pub const fn source(&self) -> u32 {
+        self.source
     }
 }
 
@@ -587,15 +602,16 @@ pub struct ViewMut<'buf, T: Sized> {
     slice: &'buf mut [T],
     offset: u32,
     length: u32,
+    source: u32,
 }
 
 impl<'buf, T: Sized> ViewMut<'buf, T> {
-    pub const fn as_mut_ptr(&mut self) -> *mut T {
-        self.slice.as_mut_ptr()
-    }
-
     pub const fn as_ptr(&self) -> *const T {
         self.slice.as_ptr()
+    }
+
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
+        self.slice.as_mut_ptr()
     }
 
     pub const fn as_mut_slice(&'buf mut self) -> &'buf mut [T] {
@@ -606,12 +622,19 @@ impl<'buf, T: Sized> ViewMut<'buf, T> {
         self.slice.as_ref()
     }
 
+    /// The original offset of the data in the buffer it belongs to.
     pub const fn offset(&self) -> u32 {
         self.offset
     }
 
+    /// The length in bytes.
     pub const fn length(&self) -> u32 {
         self.length
+    }
+
+    /// The original OpenGL buffer object. this view belongs to.
+    pub const fn source(&self) -> u32 {
+        self.source
     }
 }
 

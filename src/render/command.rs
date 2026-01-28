@@ -1,7 +1,4 @@
-use std::{
-    os::raw::c_void,
-    sync::atomic::{AtomicU16, AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
