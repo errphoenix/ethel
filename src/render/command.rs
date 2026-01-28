@@ -1,4 +1,7 @@
-use std::os::raw::c_void;
+use std::{
+    os::raw::c_void,
+    sync::atomic::{AtomicU16, AtomicUsize, Ordering},
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
@@ -51,34 +54,23 @@ impl DrawCmd for DrawElementsIndirectCommand {
 }
 
 #[derive(Debug, Default)]
-pub struct GpuCommandQueue<C: DrawCmd> {
+pub struct GpuCommandQueue<C: DrawCmd + Clone + Copy> {
     queue: Vec<C>,
-    gl_cap: isize,
-    gl_obj: u32,
+    upload_head: AtomicUsize,
+    fixed_buffer_len: usize,
 }
 
-impl<C: DrawCmd> GpuCommandQueue<C> {
-    pub fn new(capacity: usize) -> Self {
-        let queue = Vec::with_capacity(capacity);
-        let command_buffer = {
-            let mut buf = 0;
-            let length = (size_of::<C>() * capacity) as isize;
-
-            unsafe {
-                janus::gl::CreateBuffers(1, &mut buf);
-                janus::gl::NamedBufferData(buf, length, std::ptr::null(), janus::gl::STREAM_DRAW);
-            }
-            buf
-        };
-
+impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
+    pub fn new(buffer_len: usize) -> Self {
         Self {
-            queue,
-            gl_cap: capacity as isize,
-            gl_obj: command_buffer,
+            queue: Vec::with_capacity(buffer_len),
+            upload_head: AtomicUsize::new(0),
+            fixed_buffer_len: buffer_len,
         }
     }
 
     pub fn clear(&mut self) {
+        self.upload_head.store(0, Ordering::Release);
         self.queue.clear();
     }
 
@@ -90,42 +82,48 @@ impl<C: DrawCmd> GpuCommandQueue<C> {
         self.queue.push(command);
     }
 
-    pub fn upload(&mut self) {
-        let len = self.queue.len() as isize;
-        if len > self.gl_cap {
-            unsafe {
-                janus::gl::NamedBufferData(
-                    self.gl_obj,
-                    len,
-                    std::ptr::null(),
-                    janus::gl::STREAM_DRAW,
-                );
-            }
+    /// Perform an uploading operation onto a command `buffer`.
+    ///
+    /// One upload operation can only upload up to the buffer size initially
+    /// set when creating the command queue, which corresponds to the size of
+    /// the command buffer on the GPU.
+    ///
+    /// It may be required to perform this operation multiple times per frame
+    /// if the total command count in the queue surpasses the buffer capacity.
+    /// The command queue keeps track of the last uploaded command, so this
+    /// can be done safely from the caller.
+    ///
+    /// Although, since a second upload operation will begin drawing at the
+    /// beginning of the command buffer, dispatching the draw call in-between
+    /// uploads is required or the commands will be lost.
+    ///
+    /// # Returns
+    /// * `Ok` if the operation was successful and all commands were uploaded
+    /// * `Err` with the amount of left-over commands to upload if not all
+    ///   commands were uploaded.
+    pub fn upload(&self, buffer: &mut [C]) -> Result<(), usize> {
+        let count = self.queue.len();
+
+        let head = self.upload_head.load(Ordering::Acquire);
+        let remaining = count - head;
+        let upload_size = remaining.min(self.fixed_buffer_len);
+
+        let mut i = 0;
+        for j in head..upload_size {
+            buffer[i] = self.queue[j];
+            i += 1;
+        }
+        self.upload_head.store(head + i, Ordering::Release);
+
+        let exceed = count.saturating_sub(self.fixed_buffer_len);
+        if exceed != 0 {
+            return Err(exceed);
         }
 
-        unsafe {
-            janus::gl::NamedBufferSubData(
-                self.gl_obj,
-                0,
-                len,
-                self.queue.as_ptr() as *const c_void,
-            );
-        }
+        Ok(())
     }
 
     pub fn call(&self) {
-        C::call(self.queue.len() as i32);
-    }
-}
-
-impl<C: DrawCmd> Drop for GpuCommandQueue<C> {
-    fn drop(&mut self) {
-        if self.gl_obj == 0 {
-            return;
-        }
-
-        unsafe {
-            janus::gl::DeleteBuffers(1, &self.gl_obj);
-        }
+        C::call(self.fixed_buffer_len as i32);
     }
 }

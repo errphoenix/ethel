@@ -7,7 +7,7 @@ use crate::{
     mesh::Meshadata,
     render::{
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
-        data::RenderStorage,
+        data::{RenderStorage, SyncBarrier},
     },
     shader::ShaderHandle,
     state::cross::{Consumer, Cross},
@@ -116,6 +116,7 @@ pub struct Renderer {
     shader: ShaderHandle,
     command_queue: GpuCommandQueue<DrawArraysIndirectCommand>,
 
+    sync_barrier: SyncBarrier,
     boundary: Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>>,
 }
 
@@ -185,5 +186,13 @@ impl janus::context::Draw for Renderer {
         }
 
         *self.view.translation_mut() -= glam::Vec4::ONE * (glam::Vec4::Z * *delta as f32);
+
+        //todo
+
+        self.boundary
+            .cross(&mut self.sync_barrier, |section, storage| {
+                storage.bind_shader_storage(section as usize);
+                self.command_queue.call();
+            });
     }
 }

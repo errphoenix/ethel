@@ -60,6 +60,7 @@ impl State {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GpuEntityData {
     mesh_id_index: u32,
+    transform_index: u32,
 }
 
 impl janus::context::Update for State {
@@ -67,6 +68,7 @@ impl janus::context::Update for State {
         self.positions
             .iter_mut()
             .for_each(|pos| pos.x += delta.as_f32() * 0.1);
+        //todo
 
         self.upload();
     }
