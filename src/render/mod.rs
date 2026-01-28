@@ -192,7 +192,7 @@ impl janus::context::Draw for Renderer {
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
                 storage.bind_shader_storage(section as usize);
-                self.command_queue.call();
+                // self.command_queue.call();
             });
     }
 }

@@ -1,4 +1,5 @@
 use std::{
+    ops::{Deref, DerefMut},
     ptr,
     sync::atomic::{AtomicU8, Ordering},
 };
@@ -235,15 +236,22 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// # Panic
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
-    pub fn view_section(&self, section: usize) -> &[u8] {
+    pub fn view_section(&self, section: usize) -> View<'_, u8> {
         assert!(
             section < 3,
             "render storage is a triple buffer, section {section} cannot exist"
         );
 
-        let len = self.layout.len();
-        let offset = section * len;
-        unsafe { std::slice::from_raw_parts(self.ptr.add(offset), len) }
+        let length = self.layout.len();
+        let offset = section * length;
+        unsafe {
+            let slice = std::slice::from_raw_parts(self.ptr.add(offset), length);
+            View {
+                slice,
+                offset: offset as u32,
+                length: length as u32,
+            }
+        }
     }
 
     pub unsafe fn view_section_raw(&self, section: usize) -> (*mut u8, usize) {
@@ -273,15 +281,22 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// # Panic
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
-    pub fn view_section_mut(&self, section: usize) -> &mut [u8] {
+    pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, u8> {
         assert!(
             section < 3,
             "render storage is a triple buffer, section {section} cannot exist"
         );
 
-        let len = self.layout.len();
-        let offset = section * len;
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.add(offset), len) }
+        let length = self.layout.len();
+        let offset = section * length;
+        unsafe {
+            let slice = std::slice::from_raw_parts_mut(self.ptr.add(offset), length);
+            ViewMut {
+                slice,
+                offset: offset as u32,
+                length: length as u32,
+            }
+        }
     }
 
     /// Get an immutable view to the `part` of a `section` of the triple
@@ -301,7 +316,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// * If `section` is not a value within the range (0, 2).
     /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    pub unsafe fn view_part<T: Sized>(&self, section: usize, part: usize) -> &[T] {
+    pub unsafe fn view_part<T: Sized>(&self, section: usize, part: usize) -> View<'_, T> {
         assert!(
             section < 3,
             "render storage is a triple buffer, section {section} cannot exist"
@@ -317,7 +332,12 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *const T;
-            std::slice::from_raw_parts(ptr, length)
+            let slice = std::slice::from_raw_parts(ptr, length);
+            View {
+                slice,
+                offset: offset as u32,
+                length: length as u32,
+            }
         }
     }
 
@@ -355,7 +375,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// * If `section` is not a value within the range (0, 2).
     /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    pub unsafe fn view_part_mut<T: Sized>(&self, section: usize, part: usize) -> &mut [T] {
+    pub unsafe fn view_part_mut<T: Sized>(&self, section: usize, part: usize) -> ViewMut<'_, T> {
         assert!(
             section < 3,
             "render storage is a triple buffer, section {section} cannot exist"
@@ -371,7 +391,12 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *mut T;
-            std::slice::from_raw_parts_mut(ptr, length)
+            let slice = std::slice::from_raw_parts_mut(ptr, length);
+            ViewMut {
+                slice,
+                offset: offset as u32,
+                length: length as u32,
+            }
         }
     }
 
@@ -490,6 +515,103 @@ impl<const PARTS: usize> Drop for RenderStorage<PARTS> {
             gl::DeleteBuffers(1, &self.gl_obj);
         }
         self.ptr = std::ptr::null_mut();
+    }
+}
+
+pub struct View<'buf, T: Sized> {
+    slice: &'buf [T],
+    offset: u32,
+    length: u32,
+}
+
+impl<'buf, T: Sized> View<'buf, T> {
+    pub const fn as_ptr(&self) -> *const T {
+        self.slice.as_ptr()
+    }
+
+    pub const fn as_slice(&self) -> &'buf [T] {
+        self.slice
+    }
+
+    pub const fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    pub const fn length(&self) -> u32 {
+        self.length
+    }
+}
+
+impl<T> View<'_, T>
+where
+    T: Sized + Clone,
+{
+    pub fn to_vec(&self) -> Vec<T> {
+        self.slice.to_vec()
+    }
+}
+
+impl<T> ViewMut<'_, T>
+where
+    T: Sized + Clone,
+{
+    pub fn to_vec(&self) -> Vec<T> {
+        self.slice.to_vec()
+    }
+}
+
+impl<T: Sized> Deref for View<'_, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.slice
+    }
+}
+
+impl<T: Sized> Deref for ViewMut<'_, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.slice
+    }
+}
+
+impl<T: Sized> DerefMut for ViewMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.slice
+    }
+}
+
+#[derive(Debug)]
+pub struct ViewMut<'buf, T: Sized> {
+    slice: &'buf mut [T],
+    offset: u32,
+    length: u32,
+}
+
+impl<'buf, T: Sized> ViewMut<'buf, T> {
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
+        self.slice.as_mut_ptr()
+    }
+
+    pub const fn as_ptr(&self) -> *const T {
+        self.slice.as_ptr()
+    }
+
+    pub const fn as_mut_slice(&'buf mut self) -> &'buf mut [T] {
+        self.slice
+    }
+
+    pub fn as_slice(&'buf self) -> &'buf [T] {
+        self.slice.as_ref()
+    }
+
+    pub const fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    pub const fn length(&self) -> u32 {
+        self.length
     }
 }
 

@@ -42,8 +42,8 @@ impl State {
 
     pub fn upload(&mut self) {
         self.boundary.cross(|section, storage| {
-            let matrices = unsafe { storage.view_part_mut::<[f32; 16]>(section as usize, 0) };
-            self.pack_matrices(matrices);
+            let mut matrices = unsafe { storage.view_part_mut::<[f32; 16]>(section as usize, 0) };
+            self.pack_matrices(&mut matrices);
         });
     }
 
