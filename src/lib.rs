@@ -9,8 +9,9 @@ const ENTITY_ALLOCATION: usize = 512;
 
 layout_buffer! {
     const EntityData = { render::RENDER_STORAGE_PARTS }, {
-        entity_map => 0, type GpuEntityData = ENTITY_ALLOCATION;
-        mesh_data => 1, type mesh::Id = ENTITY_ALLOCATION;
-        transforms => 2, type [f32; 16] = ENTITY_ALLOCATION;
+        // add command buffer
+        entity_map => 1, type GpuEntityData = ENTITY_ALLOCATION, shader 1;
+        mesh_data => 2, type mesh::Id = ENTITY_ALLOCATION, shader 2;
+        transforms => 3, type [f32; 16] = ENTITY_ALLOCATION, shader 3;
     }
 }
