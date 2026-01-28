@@ -110,17 +110,36 @@ impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
             buffer[i] = self.queue[j];
             i += 1;
         }
-        self.upload_head.store(head + i, Ordering::Release);
+        let new_head = head + i;
+        self.upload_head.store(new_head, Ordering::Release);
 
-        let exceed = count.saturating_sub(self.fixed_buffer_len);
+        let exceed = count.saturating_sub(new_head);
         if exceed != 0 {
             return Err(exceed);
         }
 
         Ok(())
     }
+}
 
-    pub fn call(&self) {
-        C::call(self.fixed_buffer_len as i32);
+pub struct GpuCommandDispatch<'buf, C: DrawCmd + Clone + Copy> {
+    command_buffer: super::data::View<'buf, C>,
+}
+
+impl<'buf, C: DrawCmd + Clone + Copy> GpuCommandDispatch<'buf, C> {
+    pub const fn from_view(view: super::data::View<'buf, C>) -> Self {
+        Self {
+            command_buffer: view,
+        }
+    }
+
+    pub fn dispatch(&self) {
+        let length = self.command_buffer.len();
+        let gl_obj = self.command_buffer.source();
+
+        unsafe {
+            janus::gl::BindBuffer(janus::gl::DISPATCH_INDIRECT_BUFFER, gl_obj);
+        }
+        C::call(length as i32);
     }
 }
