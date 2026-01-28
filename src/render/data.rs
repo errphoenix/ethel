@@ -91,7 +91,30 @@ impl<const PARTS: usize> Layout<PARTS> {
     }
 }
 
-/// A triple buffer OpenGL buffer over a single memory block.
+/// A triple buffered OpenGL buffer over multiple memory blocks.
+///
+/// Unlike [`PartitionedTriBuffer`], this buffer is made for only one type, and
+/// each triple buffer section is a dinstict OpenGL buffer.
+///
+/// This is useful for OpenGL indexed buffers, such as indirect command
+/// buffers and array buffers, that do not support `glBindBufferRange` (which
+/// [`PartitionedTriBuffer`] depends on).
+///
+/// This is also the reason as to why multiple types (parts) are not supported
+/// in [`TriBuffer`].
+#[derive(Clone, Default, Debug)]
+pub struct TriBuffer<T: Sized + Clone> {
+    gl_obj: [u32; 3],
+    ptr: [*mut T; 3],
+    capacity: usize,
+
+    _marker: std::marker::PhantomData<T>,
+}
+
+unsafe impl<T> Sync for TriBuffer<T> where T: Sized + Clone {}
+unsafe impl<T> Send for TriBuffer<T> where T: Sized + Clone {}
+
+/// A partitioned triple buffered OpenGL buffer over a single memory block.
 ///
 /// This handles alignments and offsets of each memory section and part (a
 /// contiguous memory block of data of the same type).
@@ -99,24 +122,24 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// # OpenGL Representation
 /// The GPU buffers are coherent persistent copy-write buffers. It includes
 /// a convenience function to bind each part of the buffer as an SSBO
-/// ([`RenderStorage::bind_shader_storage`]).
+/// ([`PartitionedTriBuffer::bind_shader_storage`]).
 ///
 /// This will only bind the parts that specified an SSBO binding in [`Layout`].
 ///
 /// # Operations
 /// Available operations are:
-/// * [`blit part`](RenderStorage::blit_part) to copy data from the CPU over
+/// * [`blit part`](PartitionedTriBuffer::blit_part) to copy data from the CPU over
 ///   the GPU buffers for one part.
-/// * [`blit section`](RenderStorage::blit_section) to copy data from the CPU
+/// * [`blit section`](PartitionedTriBuffer::blit_section) to copy data from the CPU
 ///   over the GPU buffers for a whole section. This takes in raw bytes for
 ///   type-erasure, as the section may contain parts of varying types.
-/// * [`view section`](RenderStorage::view_section) to gain an immutable view
+/// * [`view section`](PartitionedTriBuffer::view_section) to gain an immutable view
 ///   of a whole section from the GPU buffers.
-/// * [`view part`](RenderStorage::view_part) to gain an immutable view of a
+/// * [`view part`](PartitionedTriBuffer::view_part) to gain an immutable view of a
 ///   part of a section from the GPU buffers.
-/// * [`view section mutable`](RenderStorage::view_section_mut) to gain a
+/// * [`view section mutable`](PartitionedTriBuffer::view_section_mut) to gain a
 ///   mutable view of a whole section from the GPU buffers.
-/// * [`view part mutable`](RenderStorage::view_part_mut) to gain a mutable
+/// * [`view part mutable`](PartitionedTriBuffer::view_part_mut) to gain a mutable
 ///   view of a part of a section from the GPU buffers.
 ///
 /// The operations related to 'part' are all unsafe, as it isn't possible to
@@ -124,7 +147,7 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// data present on the GPU buffers.
 ///
 /// # Synchronisation
-/// [`RenderStorage`] can operate over cross-boundary synchronisation
+/// [`PartitionedTriBuffer`] can operate over cross-boundary synchronisation
 /// coordination of [`Boundary`] and [`Cross`] over its
 /// [`Producer`]-to-[`Consumer`] model.
 ///
@@ -133,16 +156,130 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// [`Producer`]: crate::state::cross::Producer
 /// [`Consumer`]: crate::state::cross::Consumer
 #[derive(Clone, Default, Debug)]
-pub struct RenderStorage<const PARTS: usize> {
+pub struct PartitionedTriBuffer<const PARTS: usize> {
     gl_obj: u32,
     layout: Layout<PARTS>,
     ptr: *mut u8,
 }
 
-unsafe impl<const PARTS: usize> Sync for RenderStorage<PARTS> {}
-unsafe impl<const PARTS: usize> Send for RenderStorage<PARTS> {}
+unsafe impl<const PARTS: usize> Sync for PartitionedTriBuffer<PARTS> {}
+unsafe impl<const PARTS: usize> Send for PartitionedTriBuffer<PARTS> {}
 
-impl<const PARTS: usize> RenderStorage<PARTS> {
+impl<T> TriBuffer<T>
+where
+    T: Sized + Clone,
+{
+    pub fn new(capacity: usize) -> Self {
+        let mut gl_obj = [0; 3];
+        let mut ptr = [std::ptr::null_mut(); 3];
+        let total_size = (capacity * size_of::<T>()) as isize;
+
+        unsafe {
+            gl::CreateBuffers(3, gl_obj.as_mut_ptr());
+
+            let flags = gl::MAP_WRITE_BIT | gl::MAP_COHERENT_BIT | gl::MAP_PERSISTENT_BIT;
+            for i in 0..3 {
+                gl::NamedBufferStorage(
+                    gl_obj[i],
+                    total_size,
+                    std::ptr::null(),
+                    flags | gl::DYNAMIC_STORAGE_BIT,
+                );
+                ptr[i] = gl::MapNamedBuffer(gl_obj[i], flags) as *mut T;
+            }
+        }
+
+        Self {
+            gl_obj,
+            ptr,
+            capacity,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Binds the specified `section` of the tri-buffer to the given
+    /// `ssbo_index`.
+    ///
+    /// # Panic
+    /// If `section` is not a value within the range (0, 2).
+    pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize) {
+        assert!(
+            section < 3,
+            "attempted to access section {section} in a triple buffer (3 sections)"
+        );
+
+        unsafe {
+            gl::BindBufferBase(
+                gl::SHADER_STORAGE_BUFFER,
+                ssbo_index as u32,
+                self.gl_obj[section],
+            );
+        }
+    }
+
+    pub fn view_section(&self, section: usize) -> View<'_, T> {
+        assert!(
+            section < 3,
+            "attempted to access section {section} in a triple buffer (3 sections)"
+        );
+
+        let ptr = self.ptr[section];
+        let slice = unsafe { std::slice::from_raw_parts(ptr, self.capacity) };
+        View {
+            slice,
+            offset: 0,
+            length: self.capacity as u32,
+            source: self.gl_obj[section],
+        }
+    }
+
+    pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, T> {
+        assert!(
+            section < 3,
+            "attempted to access section {section} in a triple buffer (3 sections)"
+        );
+
+        let ptr = self.ptr[section];
+        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.capacity) };
+        ViewMut {
+            slice,
+            offset: 0,
+            length: self.capacity as u32,
+            source: self.gl_obj[section],
+        }
+    }
+
+    pub fn blit_section(&self, section: usize, data: &[T]) {
+        assert!(
+            section < 3,
+            "attempted to access section {section} in a triple buffer (3 sections)"
+        );
+
+        let src = data.as_ptr();
+        let len = self.capacity;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, self.ptr[section], len);
+        }
+    }
+}
+
+impl<T> Drop for TriBuffer<T>
+where
+    T: Sized + Clone,
+{
+    fn drop(&mut self) {
+        unsafe {
+            for i in 0..3 {
+                gl::UnmapNamedBuffer(self.gl_obj[i]);
+            }
+            gl::DeleteBuffers(3, self.gl_obj.as_ptr());
+        }
+        self.ptr = [std::ptr::null_mut(); 3];
+    }
+}
+
+impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     pub fn new(layout: Layout<PARTS>) -> Self {
         let mut gl_obj = 0;
         let section_length = layout.len();
@@ -156,7 +293,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
             gl::BufferStorage(
                 gl::COPY_WRITE_BUFFER,
                 total_length,
-                ptr::null(),
+                std::ptr::null(),
                 flags | gl::DYNAMIC_STORAGE_BIT,
             );
 
@@ -179,9 +316,16 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// Each part is bound to a different SSBO.
     /// The SSBOs binding indices correspond to the order of each part
     /// specified in the buffer's [`layout`](Layout).
+    ///
+    /// # Panic
+    /// If `section` is not a value within the range (0, 2).
     pub fn bind_shader_storage(&self, section: usize) {
-        let base_offset = (self.layout.len() * section) as isize;
+        assert!(
+            section < 3,
+            "attempted to access section {section} in a triple buffer (3 sections)"
+        );
 
+        let base_offset = (self.layout.len() * section) as isize;
         for part in 0..PARTS {
             let binding = self.layout.shader[part];
             if binding != u32::MAX {
@@ -207,11 +351,11 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     /// Also see [RenderStorage::blit_part].
     ///
     /// # Panic
-    /// * If `section` is not a value within the range (0, 2).
+    /// If `section` is not a value within the range (0, 2).
     pub fn blit_section(&self, section: usize, data: &[u8]) {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
 
         let src = data.as_ptr();
@@ -239,7 +383,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub fn view_section(&self, section: usize) -> View<'_, u8> {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
 
         let length = self.layout.len();
@@ -258,7 +402,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub unsafe fn view_section_raw(&self, section: usize) -> (*mut u8, usize) {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
 
         let len = self.layout.len();
@@ -285,7 +429,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, u8> {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
 
         let length = self.layout.len();
@@ -321,7 +465,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub unsafe fn view_part<T: Sized>(&self, section: usize, part: usize) -> View<'_, T> {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
         assert!(
             part < PARTS,
@@ -348,7 +492,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub unsafe fn view_part_raw<T: Sized>(&self, section: usize, part: usize) -> (*mut T, usize) {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
         assert!(
             part < PARTS,
@@ -382,7 +526,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub unsafe fn view_part_mut<T: Sized>(&self, section: usize, part: usize) -> ViewMut<'_, T> {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
         assert!(
             part < PARTS,
@@ -421,7 +565,7 @@ impl<const PARTS: usize> RenderStorage<PARTS> {
     pub unsafe fn blit_part<T: Sized>(&self, section: usize, part: usize, data: &[T]) {
         assert!(
             section < 3,
-            "render storage is a triple buffer, section {section} cannot exist"
+            "attempted to access section {section} in a triple buffer (3 sections)"
         );
         assert!(
             part < PARTS,
@@ -513,7 +657,7 @@ macro_rules! layout_buffer {
     };
 }
 
-impl<const PARTS: usize> Drop for RenderStorage<PARTS> {
+impl<const PARTS: usize> Drop for PartitionedTriBuffer<PARTS> {
     fn drop(&mut self) {
         unsafe {
             gl::BindBuffer(gl::COPY_WRITE_BUFFER, self.gl_obj);

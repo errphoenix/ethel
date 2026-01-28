@@ -8,7 +8,7 @@ use crate::{
     mesh::Meshadata,
     render::{
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
-        data::{RenderStorage, SyncBarrier},
+        data::{PartitionedTriBuffer, SyncBarrier},
     },
     shader::ShaderHandle,
     state::cross::{Consumer, Cross},
@@ -116,7 +116,7 @@ pub struct Renderer {
     command_queue: GpuCommandQueue<DrawArraysIndirectCommand>,
 
     sync_barrier: SyncBarrier,
-    boundary: Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>>,
+    boundary: Cross<Consumer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>>,
 }
 
 impl Renderer {
@@ -152,11 +152,13 @@ impl Renderer {
         self.shader = shader;
     }
 
-    pub fn boundary(&self) -> &Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>> {
+    pub fn boundary(&self) -> &Cross<Consumer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>> {
         &self.boundary
     }
 
-    pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, RenderStorage<RENDER_STORAGE_PARTS>> {
+    pub fn boundary_mut(
+        &mut self,
+    ) -> &mut Cross<Consumer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>> {
         &mut self.boundary
     }
 

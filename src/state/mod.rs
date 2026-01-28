@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     RENDER_STORAGE_PARTS, mesh,
-    render::{self, data::RenderStorage},
+    render::{self, data::PartitionedTriBuffer},
     state::{
         column::Column,
         cross::{Cross, Producer},
@@ -26,15 +26,17 @@ pub struct State {
 
     entities: Vec<Entity>,
 
-    boundary: Cross<Producer, RenderStorage<RENDER_STORAGE_PARTS>>,
+    boundary: Cross<Producer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>>,
 }
 
 impl State {
-    pub fn boundary(&self) -> &Cross<Producer, RenderStorage<RENDER_STORAGE_PARTS>> {
+    pub fn boundary(&self) -> &Cross<Producer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>> {
         &self.boundary
     }
 
-    pub fn boundary_mut(&mut self) -> &mut Cross<Producer, RenderStorage<RENDER_STORAGE_PARTS>> {
+    pub fn boundary_mut(
+        &mut self,
+    ) -> &mut Cross<Producer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>> {
         &mut self.boundary
     }
 

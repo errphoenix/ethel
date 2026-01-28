@@ -2,7 +2,7 @@ use std::io::BufReader;
 
 use ethel::{
     LayoutEntityData,
-    render::{Renderer, command::GpuCommandQueue, data::RenderStorage},
+    render::{Renderer, command::GpuCommandQueue, data::PartitionedTriBuffer},
     shader::ShaderHandle,
     state::{State, cross},
 };
@@ -18,7 +18,7 @@ fn main() {
 
 fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
     {
-        let render_storage = RenderStorage::new(LayoutEntityData::create());
+        let render_storage = PartitionedTriBuffer::new(LayoutEntityData::create());
         let (producer, consumer) = cross::create(render_storage);
         *state.boundary_mut() = producer;
         *renderer.boundary_mut() = consumer;
