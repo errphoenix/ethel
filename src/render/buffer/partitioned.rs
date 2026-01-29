@@ -97,18 +97,15 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    pub fn initialise_part<T: Sized + Clone, F: Fn() -> T>(
+    pub fn initialise_partition<T: Sized + Clone, F: Fn() -> T>(
         &self,
-        part: usize,
+        partition: usize,
         strategy: InitStrategy<T, F>,
     ) {
-        assert!(
-            part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} parts"
-        );
+        assert_partition::<PARTS>(partition);
 
-        let len = self.layout.length_at(part);
-        let offset = self.layout.offset_at(part);
+        let len = self.layout.length_at(partition);
+        let offset = self.layout.offset_at(partition);
 
         match strategy {
             InitStrategy::Zero => {
@@ -156,10 +153,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
     pub fn bind_shader_storage(&self, section: usize) {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        super::assert_section(section);
 
         let base_offset = (self.layout.len() * section) as isize;
         for part in 0..PARTS {
@@ -179,24 +173,35 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    /// Copy the given `data` in a `section` of the storage buffer.
+    /// Copy the given `data` in a `section` of the storage buffer at a given
+    /// `offset`.
+    ///
+    /// This is the equivalent of a `memcpy` operation.
+    ///
+    /// The given `offset` must be in bytes.
     ///
     /// The `section` represents one of the three triple buffer's sections.
     ///
     /// Also see [PartitionedTriBuffer::blit_part].
     ///
-    /// # Panic
-    /// If `section` is not a value within the range (0, 2).
-    pub fn blit_section(&self, section: usize, data: &[u8]) {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+    /// # Panics
+    /// * If `section` is not a value within the range (0, 2).
+    /// * If `offset` is greater than the length of the section.
+    pub fn blit_section(&self, section: usize, data: &[u8], offset: usize) {
+        super::assert_section(section);
 
         let src = data.as_ptr();
         let section_len = self.layout.len();
-        let data_len = section_len.min(data.len());
-        let offset = section * section_len;
+
+        assert!(
+            section_len > offset,
+            "attempted to blit at offset {offset} with section length {section_len}"
+        );
+
+        let avail = section_len - offset;
+        let data_len = avail.min(data.len());
+        let offset = (section * section_len) + offset;
+
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), data_len);
         }
@@ -217,10 +222,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
     pub fn view_section(&self, section: usize) -> View<'_, u8> {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        super::assert_section(section);
 
         let length = self.layout.len();
         let offset = section * length;
@@ -236,10 +238,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     }
 
     pub unsafe fn view_section_raw(&self, section: usize) -> (*mut u8, usize) {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        super::assert_section(section);
 
         let len = self.layout.len();
         let offset = section * len;
@@ -263,10 +262,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
     pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, u8> {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        super::assert_section(section);
 
         let length = self.layout.len();
         let offset = section * length;
@@ -281,36 +277,30 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    /// Get an immutable view to the `part` of a `section` of the triple
+    /// Get an immutable view to the `partition` of a `section` of the triple
     /// buffer.
     ///
-    /// A `part` represents a contiguous stream of data of the same type.
+    /// A `partition` represents a contiguous stream of data of the same type.
     ///
     /// # Return
-    /// An immutable slice of the part of a section of the buffer, casted to
-    /// the `T` type parameter of the function.
+    /// An immutable slice of the partition of a section of the buffer, casted
+    /// to the `T` type parameter of the function.
     ///
     /// # Safety
     /// The type parameter `T` cannot be verified to be the actual type of the
-    /// data in this part, the caller must ensure this is always the case.
+    /// data in this partition, the caller must ensure this is always the case.
     ///
     ///  # Panic
     /// * If `section` is not a value within the range (0, 2).
-    /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
+    /// * If `partition` is invalid, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    pub unsafe fn view_part<T: Sized>(&self, section: usize, part: usize) -> View<'_, T> {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
-        assert!(
-            part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} parts"
-        );
+    pub unsafe fn view_part<T: Sized>(&self, section: usize, partition: usize) -> View<'_, T> {
+        super::assert_section(section);
+        assert_partition::<PARTS>(partition);
 
         let base_offset = section * self.layout.len();
-        let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part);
+        let offset = self.layout.offset_at(partition);
+        let length = self.layout.length_at(partition);
         let len = length / size_of::<T>();
 
         unsafe {
@@ -325,53 +315,50 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    pub unsafe fn view_part_raw<T: Sized>(&self, section: usize, part: usize) -> (*mut T, usize) {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
-        assert!(
-            part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} parts"
-        );
+    pub unsafe fn view_part_raw<T: Sized>(
+        &self,
+        section: usize,
+        partition: usize,
+    ) -> (*mut T, usize) {
+        super::assert_section(section);
+        assert_partition::<PARTS>(partition);
 
         let base_offset = section * self.layout.len();
-        let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part) / size_of::<T>();
+        let offset = self.layout.offset_at(partition);
+        let length = self.layout.length_at(partition) / size_of::<T>();
 
         let ptr = unsafe { self.ptr.add(base_offset + offset) as *mut T };
         (ptr, length)
     }
 
-    /// Get a mutable view to the `part` of a `section` of the triple buffer.
+    /// Get a mutable view to the `partition` of a `section` of the triple
+    /// buffer.
     ///
-    /// A `part` represents a contiguous stream of data of the same type.
+    /// A `partition` represents a contiguous stream of data of the same type.
     ///
     /// # Return
-    /// A mutable slice of the part of a section of the buffer, casted to the
-    /// `T` type parameter of the function.
+    /// A mutable slice of the partition of a section of the buffer, casted to
+    /// the `T` type parameter of the function.
     ///
     /// # Safety
     /// The type parameter `T` cannot be verified to be the actual type of the
-    /// data in this part, the caller must ensure this is always the case.
+    /// data in this partition, the caller must ensure this is always the case.
     ///
     /// # Panic
     /// * If `section` is not a value within the range (0, 2).
-    /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
+    /// * If `partition` is invalid, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
-    pub unsafe fn view_part_mut<T: Sized>(&self, section: usize, part: usize) -> ViewMut<'_, T> {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
-        assert!(
-            part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} parts"
-        );
+    pub unsafe fn view_part_mut<T: Sized>(
+        &self,
+        section: usize,
+        partition: usize,
+    ) -> ViewMut<'_, T> {
+        super::assert_section(section);
+        assert_partition::<PARTS>(partition);
 
         let base_offset = section * self.layout.len();
-        let offset = self.layout.offset_at(part);
-        let length = self.layout.length_at(part);
+        let offset = self.layout.offset_at(partition);
+        let length = self.layout.length_at(partition);
         let len = length / size_of::<T>();
 
         unsafe {
@@ -386,32 +373,43 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    /// Copy the given `data` in a `part` of a `section` of the storage buffer.
+    /// Copy the given `data` in a `partition` of a `section` of the buffer at
+    /// the given `offset`.
     ///
-    /// A `part` represents a contiguous stream of data of the same type.
+    /// A `partition` represents a contiguous stream of data of the same type.
     ///
     /// # Safety
     /// The type parameter `T` cannot be verified to be the actual type of the
-    /// data in this part, the caller must ensure this is always the case.
+    /// data in this partition, the caller must ensure this is always the case.
     ///
     /// # Panic
     /// * If `section` is not a value within the range (0, 2).
-    /// * If `part` is not a valid section, i.e. it is greater than the `PARTS`
-    ///   constant type parameter.
-    pub unsafe fn blit_part<T: Sized>(&self, section: usize, part: usize, data: &[T]) {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
-        assert!(
-            part < PARTS,
-            "attempted to access part {part}, but the buffer only has {PARTS} parts"
-        );
+    /// * If `partition` is not a valid partition, i.e. it is greater than the
+    ///   `PARTS`constant type parameter.
+    /// * If `offset` is greater than the length of the partition.
+    pub unsafe fn blit_part<T: Sized + Clone + Copy>(
+        &self,
+        section: usize,
+        partition: usize,
+        data: &[T],
+        offset: usize,
+    ) {
+        super::assert_section(section);
+        assert_partition::<PARTS>(partition);
 
         let src = data.as_ptr();
         let base_offset = section * self.layout.len();
-        let offset = self.layout.offset_at(part);
-        let data_len = self.layout.length_at(part).min(data.len());
+
+        let partition_len = self.layout.length_at(partition);
+        assert!(
+            partition_len > offset,
+            "attempted to blit at offset {offset} with partition length {partition_len}"
+        );
+
+        let avail = partition_len - offset;
+        let offset = self.layout.offset_at(partition) + offset;
+
+        let data_len = avail.min(data.len());
 
         unsafe {
             let dst = self.ptr.add(base_offset + offset) as *mut T;
@@ -429,4 +427,11 @@ impl<const PARTS: usize> Drop for PartitionedTriBuffer<PARTS> {
         }
         self.ptr = std::ptr::null_mut();
     }
+}
+
+fn assert_partition<const PARTS: usize>(partition: usize) {
+    assert!(
+        partition < PARTS,
+        "attempted to access partition {partition} in a buffer with only {PARTS} partitions"
+    );
 }

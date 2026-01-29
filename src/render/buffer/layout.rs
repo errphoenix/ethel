@@ -229,7 +229,7 @@ macro_rules! layout_buffer {
                             $(
                                 let mode = crate::render::buffer::InitStrategy::FillWith(|| $init);
                             )?
-                            buffer.initialise_part::<$part_ty, _>($part_idx, mode);
+                            buffer.initialise_partition::<$part_ty, _>($part_idx, mode);
                         }
                     )+
                 }

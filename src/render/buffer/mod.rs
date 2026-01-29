@@ -41,7 +41,7 @@ pub enum InitStrategy<T: Sized + Clone, F: Fn() -> T> {
 ///
 /// [`PartitionedTriBuffer`]: partitioned::PartitionedTriBuffer
 #[derive(Clone, Default, Debug)]
-pub struct TriBuffer<T: Sized + Clone> {
+pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
     capacity: usize,
@@ -49,12 +49,12 @@ pub struct TriBuffer<T: Sized + Clone> {
     _marker: std::marker::PhantomData<T>,
 }
 
-unsafe impl<T> Sync for TriBuffer<T> where T: Sized + Clone {}
-unsafe impl<T> Send for TriBuffer<T> where T: Sized + Clone {}
+unsafe impl<T> Sync for TriBuffer<T> where T: Sized + Clone + Copy {}
+unsafe impl<T> Send for TriBuffer<T> where T: Sized + Clone + Copy {}
 
 impl<T> TriBuffer<T>
 where
-    T: Sized + Clone,
+    T: Sized + Clone + Copy,
 {
     pub fn new<F: Fn() -> T>(capacity: usize, init: InitStrategy<T, F>) -> Self {
         let mut gl_obj = [0; 3];
@@ -118,10 +118,7 @@ where
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
     pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize) {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        assert_section(section);
 
         unsafe {
             janus::gl::BindBufferBase(
@@ -133,10 +130,7 @@ where
     }
 
     pub fn view_section(&self, section: usize) -> View<'_, T> {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        assert_section(section);
 
         let ptr = self.ptr[section];
         let slice = unsafe { std::slice::from_raw_parts(ptr, self.capacity) };
@@ -149,10 +143,7 @@ where
     }
 
     pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, T> {
-        assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
-        );
+        assert_section(section);
 
         let ptr = self.ptr[section];
         let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.capacity) };
@@ -164,24 +155,38 @@ where
         }
     }
 
-    pub fn blit_section(&self, section: usize, data: &[T]) {
+    /// Copy the given `data` into a `section` of the triple buffer at a given
+    /// `offset`.
+    ///
+    /// This is the equivalent of a `memcpy` operation.
+    ///
+    /// The given `offset` must be the amount of elements `T` to skip inside
+    /// of the buffer, not bytes.
+    ///
+    /// # Panics
+    /// * If `section` is not a value within the range (0, 2).
+    /// * If `offset` is greater than the length of the section.
+    pub fn blit_section(&self, section: usize, data: &[T], offset: usize) {
+        assert_section(section);
         assert!(
-            section < 3,
-            "attempted to access section {section} in a triple buffer (3 sections)"
+            self.capacity > offset,
+            "attempted to blit at offset {offset} with section length {}",
+            self.capacity
         );
 
         let src = data.as_ptr();
-        let len = self.capacity.min(data.len());
+        let avail = self.capacity - offset;
+        let len = avail.min(data.len());
 
         unsafe {
-            std::ptr::copy_nonoverlapping(src, self.ptr[section], len);
+            std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
         }
     }
 }
 
 impl<T> Drop for TriBuffer<T>
 where
-    T: Sized + Clone,
+    T: Sized + Clone + Copy,
 {
     fn drop(&mut self) {
         unsafe {
@@ -354,4 +359,11 @@ impl StorageSection {
             Self::Spare => 2,
         }
     }
+}
+
+fn assert_section(section: usize) {
+    assert!(
+        section < 3,
+        "attempted to access section {section} in a triple buffer (=3 sections)"
+    );
 }
