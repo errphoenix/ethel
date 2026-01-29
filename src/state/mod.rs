@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     RENDER_STORAGE_PARTS, mesh,
-    render::{self, data::PartitionedTriBuffer},
+    render::buffer::partitioned::PartitionedTriBuffer,
     state::{
         column::Column,
         cross::{Cross, Producer},

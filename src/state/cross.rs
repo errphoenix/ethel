@@ -3,7 +3,10 @@ use std::sync::{
     atomic::{AtomicU8, Ordering},
 };
 
-use crate::render::data::{StorageSection, SyncBarrier, SyncState};
+use crate::render::{
+    buffer::StorageSection,
+    sync::{SyncBarrier, SyncState},
+};
 
 /// The shared storage boundary.
 ///

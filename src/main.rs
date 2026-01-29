@@ -2,7 +2,7 @@ use std::io::BufReader;
 
 use ethel::{
     LayoutEntityData,
-    render::{Renderer, command::GpuCommandQueue, data::PartitionedTriBuffer},
+    render::{Renderer, buffer::partitioned::PartitionedTriBuffer, command::GpuCommandQueue},
     shader::ShaderHandle,
     state::{State, cross},
 };

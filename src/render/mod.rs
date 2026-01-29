@@ -1,5 +1,6 @@
+pub mod buffer;
 pub mod command;
-pub mod data;
+pub mod sync;
 
 use glam::{Mat4, Vec4Swizzles};
 
@@ -7,12 +8,17 @@ use crate::{
     RENDER_STORAGE_PARTS,
     mesh::Meshadata,
     render::{
+        buffer::partitioned::PartitionedTriBuffer,
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
-        data::{PartitionedTriBuffer, SyncBarrier},
+        sync::SyncBarrier,
     },
     shader::ShaderHandle,
     state::cross::{Consumer, Cross},
 };
+
+pub trait GlPropertyEnum {
+    fn as_gl_enum(&self) -> u32;
+}
 
 const ORTHO_NEAR: f32 = 0.0;
 const ORTHO_FAR: f32 = 2.0;
@@ -33,11 +39,11 @@ pub struct Resolution {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct View {
+pub struct ViewPoint {
     transform: glam::Mat4,
 }
 
-impl View {
+impl ViewPoint {
     pub fn new() -> Self {
         Self::default()
     }
@@ -110,7 +116,7 @@ pub struct Renderer {
     resolution: Resolution,
 
     pub(crate) metadata: Meshadata,
-    pub(crate) view: View,
+    pub(crate) view: ViewPoint,
 
     shader: ShaderHandle,
     command_queue: GpuCommandQueue<DrawArraysIndirectCommand>,
@@ -128,11 +134,11 @@ impl Renderer {
         self.resolution = resolution;
     }
 
-    pub fn view(&self) -> &View {
+    pub fn view(&self) -> &ViewPoint {
         &self.view
     }
 
-    pub fn view_mut(&mut self) -> &mut View {
+    pub fn view_mut(&mut self) -> &mut ViewPoint {
         &mut self.view
     }
 

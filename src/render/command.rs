@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::render::buffer::View;
+
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct DrawArraysIndirectCommand {
@@ -123,11 +125,11 @@ impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
 }
 
 pub struct GpuCommandDispatch<'buf, C: DrawCmd + Clone + Copy> {
-    command_buffer: super::data::View<'buf, C>,
+    command_buffer: View<'buf, C>,
 }
 
 impl<'buf, C: DrawCmd + Clone + Copy> GpuCommandDispatch<'buf, C> {
-    pub const fn from_view(view: super::data::View<'buf, C>) -> Self {
+    pub const fn from_view(view: View<'buf, C>) -> Self {
         Self {
             command_buffer: view,
         }
