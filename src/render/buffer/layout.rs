@@ -27,7 +27,7 @@ impl<const PARTS: usize> Layout<PARTS> {
 
     pub fn section<T: Sized>(mut self, count: usize) -> Self {
         let head = self.head;
-        assert!(head < PARTS, "layout only allows {PARTS} sections");
+        assert!(head < PARTS, "layout only permits {PARTS} partitions");
         let length = size_of::<T>() * count;
 
         let alignment = unsafe { janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT } as usize;
@@ -80,8 +80,8 @@ impl<const PARTS: usize> Layout<PARTS> {
     }
 }
 
-/// Convenience macro to create a [`Layout`] with a useful enum to access its
-/// parts.
+/// Convenience macro to create a [`Layout`] with a useful enum to access
+/// buffer partitions.
 ///
 /// # Example
 /// ```
@@ -104,6 +104,9 @@ impl<const PARTS: usize> Layout<PARTS> {
 ///         enum positions: 128 {
 ///             type (f32, f32);
 ///             bind 2;
+///             init with {
+///                 get_spawn_pos()
+///             };
 ///             shader 1;
 ///         };
 ///     }
@@ -143,6 +146,9 @@ impl<const PARTS: usize> Layout<PARTS> {
 ///         enum positions: 128 {
 ///             type (f32, f32);
 ///             bind 2;
+///             init with {
+///                 get_spawn_pos()
+///             };
 ///             shader 1;
 ///         };
 ///     }
@@ -161,7 +167,7 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// };
 /// ```
 ///
-/// ## Partitioned Buffer Initialiation
+/// ## Partitioned Buffer Initialisation
 ///
 /// To properly initialise a [`PartitionedTriBuffer`], the macro generates yet
 /// another convenience associated function to ensure the data within each

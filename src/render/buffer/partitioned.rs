@@ -28,6 +28,21 @@ use crate::render::buffer::{InitStrategy, View, ViewMut, layout::Layout};
 /// * [`view part mutable`](PartitionedTriBuffer::view_part_mut) to gain a mutable
 ///   view of a part of a section from the GPU buffers.
 ///
+/// <div class="warning">
+///
+/// ###Note
+///
+/// Reading from the GPU buffers is slower than reading from system memory,
+/// thus it is not recommended to mutate data through the `view_*_mut`
+/// functions in performance-critical scenarios.
+///
+/// Instead, prefer the usage of `blit_part` and `blit_section` to mutate
+/// data as these correspond to a single `memcpy` operation directly to the
+/// underlying memory, which is significantly faster because the required
+/// modification is reduced to a single operation.
+///
+/// </div>
+///
 /// The operations related to 'part' are all unsafe, as it isn't possible to
 /// verify that the type in the given data corresponds to the same type of the
 /// data present on the GPU buffers.

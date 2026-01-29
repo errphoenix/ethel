@@ -8,17 +8,19 @@ use crate::render::{
     sync::{SyncBarrier, SyncState},
 };
 
-/// The shared storage boundary.
+/// Common shader storage and metadata to synchronise [`cross`](Cross)
+/// operators.
 ///
-/// This represents the common shared state between the [`consumer cross`] and
-/// the [`producer cross`].
+/// This represents the common shared state between the [`Consumer`] and the
+/// [`Producer`] cross operators.
 ///
 /// The [`Boundary`] handles common synchronisation caching and keeps track of
 /// the current working section of the buffer.
 ///
-/// It also contains the actual `Storage`, such as [`RenderStorage`].
+/// It also contains the actual `Storage`, such as the ones provided by the
+/// [`render::buffer`] module.
 ///
-/// [`RenderStorage`]: crate::render::data::RenderStorage
+/// [`render::buffer`]: crate::render::buffer
 #[derive(Debug, Default)]
 pub struct Boundary<Storage> {
     storage: Storage,
@@ -84,8 +86,10 @@ pub struct Producer;
 /// Operator over a [`shared storage boundary`](Boundary).
 ///
 /// This can either be:
-/// * A [`Consumer`], a "reader" over the shared storage
-/// * A [`Producer`], a "writer" over the shared storage
+/// * [`Consumer`], the "reader" over the shared storage.
+/// * [`Producer`], the "writer" over the shared storage.
+///
+/// This role is encoded into its type through the `Role` generic.
 ///
 /// See the documentation for the respective types for more information.
 #[derive(Default, Debug)]
