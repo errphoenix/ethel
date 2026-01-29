@@ -70,6 +70,7 @@ impl ShaderHandle {
     }
 
     pub fn uniform_location(&self, name: &str) -> UniformLocation {
+        // todo: cache uniform locations
         let c_name = std::ffi::CString::new(name).unwrap();
         UniformLocation(unsafe { gl::GetUniformLocation(self.gl_obj, c_name.as_ptr()) })
     }

@@ -30,16 +30,17 @@ use crate::render::buffer::{InitStrategy, View, ViewMut, layout::Layout};
 ///
 /// <div class="warning">
 ///
-/// ###Note
+/// ### Note
 ///
-/// Reading from the GPU buffers is slower than reading from system memory,
-/// thus it is not recommended to mutate data through the `view_*_mut`
-/// functions in performance-critical scenarios.
+/// Similarly to [`TriBuffer`], reading from the GPU buffers is slower than
+/// reading from system memory, thus it is not recommended to mutate data
+/// through the `view_*_mut` functions in performance-critical scenarios.
 ///
-/// Instead, prefer the usage of `blit_part` and `blit_section` to mutate
-/// data as these correspond to a single `memcpy` operation directly to the
-/// underlying memory, which is significantly faster because the required
-/// modification is reduced to a single operation.
+/// Prefer the usage of `blit_part` and `blit_section` to mutate data as these
+/// correspond to a single `memcpy` operation directly to the underlying
+/// memory, which is significantly faster because the required modification is
+/// reduced to a single operation.
+/// They're also not unsafe, unlike `view_*_mut`.
 ///
 /// </div>
 ///
@@ -182,7 +183,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     ///
     /// The `section` represents one of the three triple buffer's sections.
     ///
-    /// Also see [RenderStorage::blit_part].
+    /// Also see [PartitionedTriBuffer::blit_part].
     ///
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
@@ -193,10 +194,11 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         );
 
         let src = data.as_ptr();
-        let len = self.layout.len();
-        let offset = section * len;
+        let section_len = self.layout.len();
+        let data_len = section_len.min(data.len());
+        let offset = section * section_len;
         unsafe {
-            std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), len);
+            std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), data_len);
         }
     }
 
@@ -204,7 +206,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     ///
     /// The `section` represents one of the three triple buffer's sections.
     ///
-    /// Also see [RenderStorage::view_part].
+    /// Also see [PartitionedTriBuffer::view_part].
     ///
     /// # Return
     /// Returns a slice of bytes of the given section.
@@ -250,7 +252,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     ///
     /// The `section` represents one of the three triple buffer's sections.
     ///
-    /// Also see [RenderStorage::view_part_mut].
+    /// Also see [PartitionedTriBuffer::view_part_mut].
     ///
     /// # Return
     /// Returns a slice of bytes of the given section.
@@ -409,9 +411,11 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         let src = data.as_ptr();
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(part);
+        let data_len = self.layout.length_at(part).min(data.len());
+
         unsafe {
             let dst = self.ptr.add(base_offset + offset) as *mut T;
-            std::ptr::copy_nonoverlapping(src, dst, data.len());
+            std::ptr::copy_nonoverlapping(src, dst, data_len);
         }
     }
 }

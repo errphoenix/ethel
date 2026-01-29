@@ -22,6 +22,23 @@ pub enum InitStrategy<T: Sized + Clone, F: Fn() -> T> {
 /// This is also the reason as to why multiple types (parts) are not supported
 /// in [`TriBuffer`].
 ///
+/// <div class="warning">
+///
+/// ### Note
+///
+/// Reading from the GPU buffers is slower than reading from system memory,
+/// thus it is not recommended to mutate data through the `view_section_mut`
+/// functions in performance-critical scenarios.
+///
+/// Prefer the usage of `blit_section` to mutate data as these correspond to a
+/// single `memcpy` operation directly to the underlying memory, which is
+/// significantly faster because the required modification is reduced to a
+/// single operation. They're also not unsafe, unlike `view_section_mut`.
+///
+/// This is also valid for [`PartitionedTriBuffer`].
+///
+/// </div>
+///
 /// [`PartitionedTriBuffer`]: partitioned::PartitionedTriBuffer
 #[derive(Clone, Default, Debug)]
 pub struct TriBuffer<T: Sized + Clone> {
@@ -154,7 +171,7 @@ where
         );
 
         let src = data.as_ptr();
-        let len = self.capacity;
+        let len = self.capacity.min(data.len());
 
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr[section], len);
