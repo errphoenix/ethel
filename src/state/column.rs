@@ -1,3 +1,20 @@
+/// A wrapper for an entry of a [`Column`] over the `T` type.
+///
+/// Other than the inner value of `T`, this also contains the owning indirect
+/// index that points to this entry in its [`Column`].
+///
+/// The index is only 4 bytes, this means that for optimal cache-line
+/// utilisation this must be taken into account.
+/// On most systems, a cache-line is 64 bytes, thus the size of `T` should be
+/// up to `60` bytes.
+///
+/// For a 64 bytes cache-line the optimal size is a factor of `64`:
+/// * `8` bytes, as in: `4` for `T` + `4`.
+/// * `16` bytes, as in: `12` for `T` + `4`.
+/// * `32` bytes, as in: `28` for `T` + `4`.
+/// * `64` bytes, as in: `60` for `T` + `4`.
+///
+/// Sizes `4`, `2`, and `1` are omitted for obvious reasons.
 #[derive(Clone, Debug, Default)]
 pub struct Entry<T> {
     owner: u32,
@@ -12,6 +29,15 @@ impl<T> Entry<T> {
         }
     }
 
+    /// Get the indirect index that points to this entry in its original
+    /// [`Column`].
+    ///
+    /// The owning indirect index provided by the entry is the same indirect
+    /// index that any external entity or system would use to refer to this
+    /// entry.
+    ///
+    /// As this is a stable index, it can safely be used across entites and
+    /// systems to track data without copying or reference counting.
     pub fn owner(&self) -> u32 {
         self.owner
     }
@@ -47,6 +73,9 @@ pub struct Column<T: Default> {
 }
 
 impl<T: Default> Column<T> {
+    /// Create a blank new Column with a size of `1`.
+    ///
+    /// The only element present is the degenerate element at index `0`.
     pub fn new() -> Self {
         Self {
             indices: vec![0],
@@ -55,6 +84,10 @@ impl<T: Default> Column<T> {
         }
     }
 
+    /// Creata a blank new column with the given `capacity`.
+    ///
+    /// All elements are initialised with their [`Default`] implementation.
+    /// This includes the degenerate element at index `0`.
     pub fn with_capacity(capacity: usize) -> Self {
         let mut stable_indices = Vec::with_capacity(capacity);
         let mut contiguous = Vec::with_capacity(capacity);
@@ -111,6 +144,20 @@ impl<T: Default> Column<T> {
         }
     }
 
+    /// Add a `value` to the Column.
+    ///
+    /// This will automatically handle getting a valid slot for the inserted
+    /// value:
+    /// * If there is any freed slot that was previously occupied by a value
+    ///   that has since been [`free'd`](Column::free), that slot will be
+    ///   occupied. If there are multiple slots, no particular slot is
+    ///   prioritised.
+    /// * Otherwise, `value` is appended at the end of the Column. This may
+    ///   cause it to grow and reallocate if the current capacity is not
+    ///   sufficient.
+    ///
+    /// # Returns
+    /// Returns the indirect index of the newly inserted [`Entry`].
     pub fn put(&mut self, value: T) -> usize {
         let index = self.next_slot_index();
         let slot = self.contiguous.len();
@@ -137,10 +184,18 @@ impl<T: Default> Column<T> {
         &mut self.contiguous[direct_index].inner
     }
 
+    /// Get an immutable iterator to the inner contiguous data.
+    ///
+    /// This skips the degenerate element at index 0 and maps each [`Entry`] to
+    /// its real inner value.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.contiguous.iter().skip(1).map(Entry::inner_value)
     }
 
+    /// Get a mutable iterator to the inner contiguous data.
+    ///
+    /// This skips the degenerate element at index 0 and maps each [`Entry`] to
+    /// its real inner value.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.contiguous
             .iter_mut()
@@ -148,7 +203,29 @@ impl<T: Default> Column<T> {
             .map(Entry::inner_value_mut)
     }
 
-    pub fn direct(&self) -> &Vec<Entry<T>> {
+    pub fn indirect(&self) -> &[usize] {
+        &self.indices
+    }
+
+    /// Get an immutable slice to the inner contiguous data.
+    ///
+    /// Each [`Entry`] in the returned slice also contains the slot (or
+    /// component id) that an external object would use to refer to this
+    /// entry.
+    ///
+    /// Note that this also contains the degenerate element at index 0, which
+    /// you likely want to skip.
+    pub fn contiguous(&self) -> &[Entry<T>] {
         &self.contiguous
+    }
+}
+
+impl<T: Default> IntoIterator for Column<T> {
+    type Item = Entry<T>;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.contiguous.into_iter()
     }
 }

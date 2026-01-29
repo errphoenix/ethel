@@ -48,7 +48,7 @@ impl State {
     }
 
     fn pack_matrices(&self, out: &mut [[f32; 16]]) {
-        self.positions.direct().iter().for_each(|item| {
+        self.positions.contiguous().iter().for_each(|item| {
             let idx = item.owner() as usize;
             let pos = item.inner_value();
             out[idx] = glam::Mat4::from_translation(*pos).to_cols_array();

@@ -28,7 +28,7 @@ fn col_iteration(cr: &mut Criterion) {
     cr.bench_function("iter_nomap", |b| {
         b.iter(|| {
             let mut sum = 0i128;
-            col.direct().iter().for_each(|e| {
+            col.contiguous().iter().for_each(|e| {
                 sum += op(e.inner_value());
             });
             std::hint::black_box(sum)
@@ -48,7 +48,7 @@ fn col_iteration(cr: &mut Criterion) {
     cr.bench_function("loop_nomap", |b| {
         b.iter(|| {
             let mut sum = 0i128;
-            for e in col.direct() {
+            for e in col.contiguous() {
                 sum += op(e.inner_value());
             }
             std::hint::black_box(sum)
