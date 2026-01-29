@@ -1,6 +1,5 @@
 use std::{
     ops::{Deref, DerefMut},
-    ptr,
     sync::atomic::{AtomicU8, Ordering},
 };
 
@@ -59,10 +58,12 @@ impl<const PARTS: usize> Layout<PARTS> {
         self
     }
 
+    /// The local offset (in bytes) of the part at `index`.
     pub fn offset_at(&self, index: usize) -> usize {
         self.offsets[index]
     }
 
+    /// The length (in bytes) of the part at `index`.
     pub fn length_at(&self, index: usize) -> usize {
         self.lengths[index]
     }
@@ -165,11 +166,17 @@ pub struct PartitionedTriBuffer<const PARTS: usize> {
 unsafe impl<const PARTS: usize> Sync for PartitionedTriBuffer<PARTS> {}
 unsafe impl<const PARTS: usize> Send for PartitionedTriBuffer<PARTS> {}
 
+#[derive(Clone, Copy, Debug)]
+pub enum InitStrategy<T: Sized + Clone, F: Fn() -> T> {
+    Zero,
+    FillWith(F),
+}
+
 impl<T> TriBuffer<T>
 where
     T: Sized + Clone,
 {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new<F: Fn() -> T>(capacity: usize, init: InitStrategy<T, F>) -> Self {
         let mut gl_obj = [0; 3];
         let mut ptr = [std::ptr::null_mut(); 3];
         let total_size = (capacity * size_of::<T>()) as isize;
@@ -186,6 +193,32 @@ where
                     flags | gl::DYNAMIC_STORAGE_BIT,
                 );
                 ptr[i] = gl::MapNamedBuffer(gl_obj[i], flags) as *mut T;
+            }
+        }
+
+        match init {
+            InitStrategy::Zero => {
+                for i in 0..3 {
+                    unsafe {
+                        gl::ClearNamedBufferData(
+                            gl_obj[i],
+                            gl::R32UI,
+                            gl::RED_INTEGER,
+                            gl::UNSIGNED_INT,
+                            std::ptr::null(),
+                        );
+                    }
+                }
+            }
+            InitStrategy::FillWith(func) => {
+                for i in 0..3 {
+                    let ptr = ptr[i];
+                    for j in 0..capacity {
+                        unsafe {
+                            std::ptr::write(ptr.add(j), func());
+                        }
+                    }
+                }
             }
         }
 
@@ -304,6 +337,52 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
             gl_obj,
             layout,
             ptr,
+        }
+    }
+
+    pub fn initialise_part<T: Sized + Clone, F: Fn() -> T>(
+        &self,
+        part: usize,
+        strategy: InitStrategy<T, F>,
+    ) {
+        assert!(
+            part < PARTS,
+            "attempted to access part {part}, but the buffer only has {PARTS} parts"
+        );
+
+        let len = self.layout.length_at(part);
+        let offset = self.layout.offset_at(part);
+
+        match strategy {
+            InitStrategy::Zero => {
+                for i in 0..3 {
+                    let section_offset = (self.layout.len() * i) as isize;
+                    unsafe {
+                        gl::ClearNamedBufferSubData(
+                            self.gl_obj,
+                            gl::R32UI,
+                            section_offset + offset as isize,
+                            len as isize,
+                            gl::RED_INTEGER,
+                            gl::UNSIGNED_INT,
+                            std::ptr::null(),
+                        );
+                    }
+                }
+            }
+            InitStrategy::FillWith(func) => {
+                let ptr = self.ptr as *mut T;
+                let len = len / size_of::<T>();
+
+                for i in 0..3 {
+                    unsafe {
+                        let ptr = ptr.add(self.layout.len() * i);
+                        for i in 0..len {
+                            std::ptr::write(ptr.add(i), func());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -582,22 +661,41 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     }
 }
 
-/// Convenience macro to create a [`Layout`] with an useful enum to access its
+/// Convenience macro to create a [`Layout`] with a useful enum to access its
 /// parts.
 ///
 /// # Example
 /// ```
 /// layout_buffer! {
-///     const Test = 3, {
-///         numbers => 0, type u32 = 128;
-///         healths => 1, type f32 = 128, shader 1;
+///     const Test: 3, {
+///         enum numbers: 32 => {
+///             type u32;
+///             bind 0;
+///         };
+///
+///         enum healths: 128 => {
+///             type f32;
+///             bind 1;
+///             init with {
+///                 20.0
+///             };
+///             shader 0;
+///         };
+///
+///         enum positions: 128 {
+///             type (f32, f32);
+///             bind 2;
+///             shader 1;
+///         };
 ///     }
 /// };
 /// ```
 ///
 /// This will create an enum called `LayoutTest`. Each entry of this enum
-/// corresponds to the parts defined in the layout (`LayoutTest::Numbers` and
-/// `LayoutTest::Healths`).
+/// corresponds to the parts defined in the layout (`LayoutTest::Numbers`,
+/// `LayoutTest::Healths`, and `LayoutTest::Positions`).
+///
+/// ## Access
 ///
 /// The created enum also contains an associated function `LayoutTest::create`,
 /// which will create a [`Layout`] with the defined parts.
@@ -607,30 +705,69 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 ///
 /// ```
 /// layout_buffer! {
-///     const Test = 3, {
-///         numbers => 0, type u32 = 128;
-///         healths => 1, type f32 = 128, shader 1;
+///     const Test: 3, {
+///         enum numbers: 32 => {
+///             type u32;
+///             bind 0;
+///         };
+///
+///         enum healths: 128 => {
+///             type f32;
+///             bind 1;
+///             init with {
+///                 20.0
+///             };
+///             shader 0;
+///         };
+///
+///         enum positions: 128 {
+///             type (f32, f32);
+///             bind 2;
+///             shader 1;
+///         };
 ///     }
 /// };
 ///
-/// let storage = RenderStorage::<2>::new(LayoutTest::create());
+/// let storage = PartitionedTriBuffer::<3>::new(LayoutTest::create());
 /// // the section of the triple buffer, hard-coded to 0 for the example
 /// let section_index = 0;
 ///
-/// // SAFETY: as we are using the layout macro's enum of this storage's
-/// // layout to index the part, the type of the data contained within the
-/// // part is guaranteed to be the f32 type we specified in the macro for this
-/// // part.
+/// // SAFETY: as we are using the layout macro's enum of this buffer's
+/// // layout to index the partition, the type of the data contained within the
+/// // partition is guaranteed to be the f32 type we specified in the macro
+/// // for this partition.
 /// let healths = unsafe {
 ///     storage.view_part::<f32>(section_index, LayoutTest::Healths as usize)
 /// };
 /// ```
+///
+/// ## Partitioned Buffer Initialiation
+/// To properly initialise [`PartitionedTriBuffers`](PartitionedTriBuffer), the
+/// macro creates yet another convenience function to ensure the data within
+/// each defined partition is not "garbage data".
+///
+/// This is an associated function of the generated enum, such as
+/// `LayoutTest::initialise_partitions`.
+///
+/// The value of the initialised data is equal for all entries of a partition,
+/// and it corresponds to the value returned within the 'init with' code block.
+/// If this code block is absent, all bytes present in the partition are reset
+/// to 0 upon initialisation.
+///
+/// These corresponds to the [`InitStrategy::FillWith`] and
+/// [`InitStrategy::Zero`] initialisation strategies respectively, with the
+/// latter being the default.
 #[macro_export]
 macro_rules! layout_buffer {
     (
-        const $name:ty = $len:expr, {
+        const $name:ty: $len:expr, {
             $(
-                $part:ident => $part_idx:expr, type $part_ty:ty = $part_len:expr $(, shader $part_ssbo:expr)? ;
+                enum $part:ident: $part_len:expr => {
+                    type $part_ty:ty;
+                    bind $part_idx:expr;
+                    $(init with $init:block;)?
+                    $(shader $part_ssbo:expr;)?
+                };
             )+
         }
     ) => {
@@ -651,6 +788,19 @@ macro_rules! layout_buffer {
                         )?
                     )+
                     layout
+                }
+
+                pub fn initialise_partitions<const PARTS: usize>(buffer: &crate::render::data::PartitionedTriBuffer<PARTS>) {
+                    $(
+                        #[allow(unused_variables)]
+                        {
+                            let mode = crate::render::data::InitStrategy::<$part_ty, fn() -> $part_ty>::Zero;
+                            $(
+                                let mode = crate::render::data::InitStrategy::FillWith(|| $init);
+                            )?
+                            buffer.initialise_part::<$part_ty, _>($part_idx, mode);
+                        }
+                    )+
                 }
             }
         }

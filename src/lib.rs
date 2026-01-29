@@ -12,11 +12,31 @@ pub const COMMAND_QUEUE_ALLOC: usize = 8;
 pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 
 layout_buffer! {
-    const EntityData = RENDER_STORAGE_PARTS, {
-        // add command buffer
-        commands => 0, type DrawCommand = COMMAND_QUEUE_ALLOC;
-        entity_map => 1, type GpuEntityData = ENTITY_ALLOCATION, shader 1;
-        mesh_data => 2, type mesh::Id = ENTITY_ALLOCATION, shader 2;
-        transforms => 3, type [f32; 16] = ENTITY_ALLOCATION, shader 3;
+    const EntityData: RENDER_STORAGE_PARTS, {
+        enum entity_map: ENTITY_ALLOCATION => {
+            type DrawCommand;
+            bind 0;
+            init with {
+                DrawCommand::default()
+            };
+            shader 1;
+        };
+
+        enum mesh_data: ENTITY_ALLOCATION => {
+            type mesh::Id;
+            bind 1;
+            shader 2;
+        };
+
+        enum positions: ENTITY_ALLOCATION => {
+            type [f32; 3];
+            bind 2;
+            shader 3;
+        };
+        enum rotations: ENTITY_ALLOCATION => {
+            type [f32; 4];
+            bind 3;
+            shader 4;
+        };
     }
 }
