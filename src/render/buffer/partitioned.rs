@@ -58,7 +58,7 @@ use crate::render::buffer::{InitStrategy, View, ViewMut, layout::Layout};
 /// [`Cross`]: crate::state::cross::Cross
 /// [`Producer`]: crate::state::cross::Producer
 /// [`Consumer`]: crate::state::cross::Consumer
-#[derive(Clone, Default, Debug)]
+#[derive(Default, Debug)]
 pub struct PartitionedTriBuffer<const PARTS: usize> {
     gl_obj: u32,
     layout: Layout<PARTS>,

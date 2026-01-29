@@ -40,7 +40,7 @@ pub enum InitStrategy<T: Sized + Clone, F: Fn() -> T> {
 /// </div>
 ///
 /// [`PartitionedTriBuffer`]: partitioned::PartitionedTriBuffer
-#[derive(Clone, Default, Debug)]
+#[derive(Default, Debug)]
 pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
