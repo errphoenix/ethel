@@ -25,7 +25,7 @@ impl<const PARTS: usize> Layout<PARTS> {
         }
     }
 
-    pub fn section<T: Sized>(mut self, count: usize) -> Self {
+    pub fn partition<T: Sized>(mut self, count: usize) -> Self {
         let head = self.head;
         assert!(head < PARTS, "layout only permits {PARTS} partitions");
         let length = size_of::<T>() * count;
@@ -213,7 +213,7 @@ macro_rules! layout_buffer {
                 pub fn create() -> crate::render::buffer::layout::Layout<$len> {
                     let mut layout = crate::render::buffer::layout::Layout::<$len>::new();
                     $(
-                        layout = layout.section::<$part_ty>($part_len);
+                        layout = layout.partition::<$part_ty>($part_len);
                         $(
                             layout = layout.with_shader_storage($part_ssbo);
                         )?
