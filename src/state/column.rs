@@ -1,9 +1,9 @@
-use std::ops::{Deref, DerefMut};
+use std::borrow::{Borrow, BorrowMut};
 
-/// A wrapper for an entry of a [`Column`] over the `T` type.
+/// A wrapper for an entry of an [`IndexArrayColumn`] over the `T` type.
 ///
 /// Other than the inner value of `T`, this also contains the owning indirect
-/// index that points to this entry in its [`Column`].
+/// index that points to this entry in its [`IndexArrayColumn`].
 ///
 /// The index is only 4 bytes, this means that for optimal cache-line
 /// utilisation this must be taken into account.
@@ -15,8 +15,6 @@ use std::ops::{Deref, DerefMut};
 /// * `16` bytes, as in: `12` for `T` + `4`.
 /// * `32` bytes, as in: `28` for `T` + `4`.
 /// * `64` bytes, as in: `60` for `T` + `4`.
-///
-/// Sizes `4`, `2`, and `1` are omitted for obvious reasons.
 #[derive(Clone, Debug, Default)]
 pub struct Entry<T> {
     owner: u32,
@@ -32,7 +30,7 @@ impl<T> Entry<T> {
     }
 
     /// Get the indirect index that points to this entry in its original
-    /// [`Column`].
+    /// [`IndexArrayColumn`].
     ///
     /// The owning indirect index provided by the entry is the same indirect
     /// index that any external entity or system would use to refer to this
@@ -53,15 +51,156 @@ impl<T> Entry<T> {
     }
 }
 
+impl<T> Borrow<T> for Entry<T> {
+    fn borrow(&self) -> &T {
+        self.inner_value()
+    }
+}
+
+impl<T> BorrowMut<T> for Entry<T> {
+    fn borrow_mut(&mut self) -> &mut T {
+        self.inner_value_mut()
+    }
+}
+
+trait SlotColumn: Default {
+    fn slots_map(&self) -> &Vec<u32>;
+
+    fn slots_map_mut(&mut self) -> &mut Vec<u32>;
+
+    fn free_list(&self) -> &Vec<u32>;
+
+    fn free_list_mut(&mut self) -> &mut Vec<u32>;
+
+    fn next_slot_index(&mut self) -> u32 {
+        if let Some(cached_index) = self.free_list_mut().pop() {
+            cached_index
+        } else {
+            let new_index = self.slots_map().len() as u32;
+            // uninitialised index pushed solely to ensure that an available
+            // slot exists when requested, it is not tracked.
+            // the stability of this data structure depends entirely on
+            // replacing this dummy value with a real one before other
+            // operations and avoiding "forgetting" this UNTRACKED empty slot.
+            // this is done properly by Column::put.
+            self.slots_map_mut().push(0);
+            new_index
+        }
+    }
+}
+
+pub trait Column<T: Default>: SlotColumn + Default {
+    /// The total amount of initialised slots.
+    ///
+    /// This includes indirect indices of degenerates (zero), as is it a sparse
+    /// collection.
+    fn size(&self) -> usize;
+
+    /// The total length of the contiguous data.
+    fn len(&self) -> usize;
+
+    /// Get the indirect index present at `slot`.
+    ///
+    /// The returned indirect index is not a stable index and will change
+    /// depending on the internal memory layout of the Column.
+    #[inline]
+    fn get_indirect(&self, slot: u32) -> Option<u32> {
+        self.slots_map().get(slot as usize).copied()
+    }
+
+    /// Get the indirect index present at `slot`.
+    ///
+    /// The returned indirect index is not a stable index and will change
+    /// depending on the internal memory layout of the Column.
+    ///
+    /// # Panics
+    /// If the given `slot` is not present in the slots map; i.e. it is out of
+    /// bounds.
+    #[inline]
+    fn get_indirect_unchecked(&self, slot: u32) -> u32 {
+        self.slots_map()[slot as usize]
+    }
+
+    /// Mark the indexing slot at `slot` as free.
+    ///
+    /// The `slot` must be a stable indirect index (slot).
+    ///
+    /// # Panics
+    /// * If `slot` is out of bounds
+    /// * If `slot == 0`, since it is a reserved slot to mark degenerate
+    ///   elements
+    fn free(&mut self, slot: u32);
+
+    /// Add a `value` to the Column.
+    ///
+    /// This will automatically handle getting a valid slot for the inserted
+    /// value:
+    /// * If there is any freed slot that was previously occupied by a value
+    ///   that has since been [`free'd`](Column::free), that slot will be
+    ///   occupied. If there are multiple slots, no particular slot is
+    ///   prioritised.
+    /// * Otherwise, `value` is appended at the end of the Column. This may
+    ///   cause it to grow and reallocate if the current capacity is not
+    ///   sufficient.
+    ///
+    /// # Returns
+    /// Returns the indirect index of the newly inserted element.
+    fn put(&mut self, value: T) -> u32;
+}
+
+pub trait IterColumn<'iter, T, R>
+where
+    T: Default,
+    R: Default + Borrow<T> + BorrowMut<T> + 'iter,
+{
+    fn contiguous(&self) -> &[R];
+
+    fn contiguous_mut(&mut self) -> &mut [R];
+
+    /// Get an immutable iterator to the inner contiguous data.
+    ///
+    /// This skips the first degenerate element at index 0.
+    ///
+    /// # Returns
+    /// The data present in the inner contiguous collection.
+    ///
+    /// For [`IndexArrayColumn`], this does not return `T` but an [`Entry`] wrapping
+    /// the real `T` value.
+    ///
+    /// See [`Entry`] for more info on managing this type and memory layout
+    /// considerations.
+    #[inline]
+    fn iter(&'iter self) -> impl Iterator<Item = &'iter R> {
+        self.contiguous().iter().skip(1)
+    }
+
+    /// Get an mutable iterator to the inner contiguous data.
+    ///
+    /// This skips the first degenerate element at index 0.
+    ///
+    /// # Returns
+    /// The data present in the inner contiguous collection.
+    ///
+    /// For [`IndexArrayColumn`], this does not return `T` but an [`Entry`] wrapping
+    /// the real `T` value.
+    ///
+    /// See [`Entry`] for more info on managing this type and memory layout
+    /// considerations.
+    #[inline]
+    fn iter_mut(&'iter mut self) -> impl Iterator<Item = &'iter mut R> {
+        self.contiguous_mut().iter_mut().skip(1)
+    }
+}
+
 #[derive(Debug, Default)]
-pub struct Column<T: Default> {
+pub struct IndexArrayColumn<T: Default> {
     /// These indices are guaranteed to be consistent and are never moved
     /// around to maintain cache locality.
     ///
     /// Each index refers to an index into the `contiguous` data vector.
     ///
     /// Often referred to as "indirect indices".
-    indices: Vec<usize>,
+    indices: Vec<u32>,
 
     /// The "real" collection. This is contiguous, optimised for cache
     /// locality.
@@ -71,10 +210,10 @@ pub struct Column<T: Default> {
     contiguous: Vec<Entry<T>>,
 
     /// Keeps track of free slots of the indirect `indices`.
-    free: Vec<usize>,
+    free: Vec<u32>,
 }
 
-impl<T: Default> Column<T> {
+impl<T: Default> IndexArrayColumn<T> {
     /// Create a blank new Column with a size of `1`.
     ///
     /// The only element present is the degenerate element at index `0`.
@@ -103,210 +242,339 @@ impl<T: Default> Column<T> {
             ..Default::default()
         }
     }
+}
 
-    /// Mark the indexing slot at `index` as free.
-    ///
-    /// The `index` must be a stable indirect index.
-    ///
-    /// # Panics
-    /// * If `index` is out of bounds
-    /// * If `index == 0`, since that is a reserved index
-    pub fn free(&mut self, index: usize) {
-        if index == 0 {
-            panic!("slot 0 is reserved");
-        }
-
-        let slot = self.indices[index];
-        if slot == 0 {
-            return;
-        }
-        self.indices[index] = 0;
-
-        if let Some(owner_last) = self.contiguous.last().map(Entry::owner) {
-            self.indices[owner_last as usize] = slot;
-        }
-
-        self.contiguous.swap_remove(slot);
-        self.free.push(index);
-    }
-
-    fn next_slot_index(&mut self) -> usize {
-        if let Some(free) = self.free.pop() {
-            free
-        } else {
-            let i = self.indices.len();
-            // uninitialised index pushed solely to ensure that an available
-            // slot exists when requested, it is not tracked.
-            // the stability of this data structure depends entirely on
-            // replacing this dummy value with a real one before other
-            // operations and avoiding "forgetting" this UNTRACKED empty slot.
-            // this is done properly by Column::put.
-            self.indices.push(0);
-            i
-        }
-    }
-
-    /// Add a `value` to the Column.
-    ///
-    /// This will automatically handle getting a valid slot for the inserted
-    /// value:
-    /// * If there is any freed slot that was previously occupied by a value
-    ///   that has since been [`free'd`](Column::free), that slot will be
-    ///   occupied. If there are multiple slots, no particular slot is
-    ///   prioritised.
-    /// * Otherwise, `value` is appended at the end of the Column. This may
-    ///   cause it to grow and reallocate if the current capacity is not
-    ///   sufficient.
-    ///
-    /// # Returns
-    /// Returns the indirect index of the newly inserted [`Entry`].
-    pub fn put(&mut self, value: T) -> usize {
-        let index = self.next_slot_index();
-        let slot = self.contiguous.len();
-        self.indices[index] = slot;
-        self.contiguous.push(Entry::new(index as u32, value));
-        index
-    }
-
-    pub fn get_indirect(&self, index: usize) -> &T {
-        let slot = self.indices[index];
-        &self.contiguous[slot].inner
-    }
-
-    pub fn get_direct(&self, direct_index: usize) -> &T {
-        &self.contiguous[direct_index].inner
-    }
-
-    pub fn get_indirect_mut(&mut self, index: usize) -> &mut T {
-        let slot = self.indices[index];
-        &mut self.contiguous[slot].inner
-    }
-
-    pub fn get_direct_mut(&mut self, direct_index: usize) -> &mut T {
-        &mut self.contiguous[direct_index].inner
-    }
-
-    /// Get an immutable iterator to the inner contiguous data.
-    ///
-    /// This skips the degenerate element at index 0 and maps each [`Entry`] to
-    /// its real inner value.
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.contiguous.iter().skip(1).map(Entry::inner_value)
-    }
-
-    /// Get a mutable iterator to the inner contiguous data.
-    ///
-    /// This skips the degenerate element at index 0 and maps each [`Entry`] to
-    /// its real inner value.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-        self.contiguous
-            .iter_mut()
-            .skip(1)
-            .map(Entry::inner_value_mut)
-    }
-
-    pub fn indirect(&self) -> &[usize] {
+impl<T: Default> SlotColumn for IndexArrayColumn<T> {
+    fn slots_map(&self) -> &Vec<u32> {
         &self.indices
     }
 
-    /// Get an immutable slice to the inner contiguous data.
-    ///
-    /// Each [`Entry`] in the returned slice also contains the slot (or
-    /// component id) that an external object would use to refer to this
-    /// entry.
-    ///
-    /// Note that this also contains the degenerate element at index 0, which
-    /// you likely want to skip.
-    pub fn contiguous(&self) -> &[Entry<T>] {
-        &self.contiguous
+    fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.indices
+    }
+
+    fn free_list(&self) -> &Vec<u32> {
+        &self.free
+    }
+
+    fn free_list_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.free
     }
 }
 
-impl<T: Default> IntoIterator for Column<T> {
+impl<T: Default> Column<T> for IndexArrayColumn<T> {
+    fn len(&self) -> usize {
+        self.contiguous.len()
+    }
+
+    fn size(&self) -> usize {
+        self.indices.len()
+    }
+
+    fn free(&mut self, slot: u32) {
+        if slot == 0 {
+            panic!("slot 0 is reserved for degenerate elements and must not be freed");
+        }
+
+        let contiguous_slot = self.indices[slot as usize];
+        if contiguous_slot == 0 {
+            return;
+        }
+        self.indices[slot as usize] = 0;
+
+        if let Some(owner_last) = self.contiguous.last().map(Entry::owner) {
+            self.indices[owner_last as usize] = contiguous_slot;
+        }
+
+        self.contiguous.swap_remove(contiguous_slot as usize);
+        self.free.push(slot);
+    }
+
+    fn put(&mut self, value: T) -> u32 {
+        let index = self.next_slot_index();
+        let slot = self.contiguous.len();
+        self.indices[index as usize] = slot as u32;
+        self.contiguous.push(Entry::new(index, value));
+        index
+    }
+}
+
+impl<'iter, T: Default + 'iter> IterColumn<'iter, T, Entry<T>> for IndexArrayColumn<T> {
+    fn contiguous(&self) -> &[Entry<T>] {
+        &self.contiguous
+    }
+
+    fn contiguous_mut(&mut self) -> &mut [Entry<T>] {
+        &mut self.contiguous
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ArrayColumn<T: Default> {
+    /// These indices are guaranteed to be consistent and are never moved
+    /// around to maintain cache locality.
+    ///
+    /// Each index refers to an index into the `contiguous` data vector.
+    ///
+    /// Often referred to as "indirect indices".
+    indices: Vec<u32>,
+
+    /// The "real" collection. This is contiguous, optimised for cache
+    /// locality.
+    ///
+    /// Each element stores directly the value of `T` without any metadata.
+    contiguous: Vec<T>,
+
+    /// Keeps track of free slots of the indirect `indices`.
+    free: Vec<u32>,
+}
+
+impl<T: Default> ArrayColumn<T> {
+    /// Create a blank new Column with a size of `1`.
+    ///
+    /// The only element present is the degenerate element at index `0`.
+    pub fn new() -> Self {
+        Self {
+            indices: vec![0],
+            contiguous: vec![T::default()],
+            ..Default::default()
+        }
+    }
+
+    /// Creata a blank new column with the given `capacity`.
+    ///
+    /// All elements are initialised with their [`Default`] implementation.
+    /// This includes the degenerate element at index `0`.
+    pub fn with_capacity(capacity: usize) -> Self {
+        let mut stable_indices = Vec::with_capacity(capacity);
+        let mut contiguous = Vec::with_capacity(capacity);
+
+        stable_indices.push(0);
+        contiguous.push(T::default());
+
+        Self {
+            indices: stable_indices,
+            contiguous,
+            ..Default::default()
+        }
+    }
+}
+
+impl<T: Default> SlotColumn for ArrayColumn<T> {
+    fn slots_map(&self) -> &Vec<u32> {
+        &self.indices
+    }
+
+    fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.indices
+    }
+
+    fn free_list(&self) -> &Vec<u32> {
+        &self.free
+    }
+
+    fn free_list_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.free
+    }
+}
+
+impl<T: Default> Column<T> for ArrayColumn<T> {
+    fn len(&self) -> usize {
+        self.contiguous.len()
+    }
+
+    fn size(&self) -> usize {
+        self.indices.len()
+    }
+
+    fn free(&mut self, slot: u32) {
+        if slot == 0 {
+            panic!("slot 0 is reserved for degenerate elements and must not be freed");
+        }
+
+        let contiguous_slot = self.indices[slot as usize];
+        if contiguous_slot == 0 {
+            return;
+        }
+        self.indices[slot as usize] = 0;
+
+        self.contiguous.swap_remove(contiguous_slot as usize);
+        self.free.push(slot);
+
+        todo!("maintain index stability during ArrayColumn::free");
+    }
+
+    fn put(&mut self, value: T) -> u32 {
+        let index = self.next_slot_index();
+        let slot = self.contiguous.len();
+        self.indices[index as usize] = slot as u32;
+        self.contiguous.push(value);
+        index
+    }
+}
+
+impl<'iter, T: Default + 'iter> IterColumn<'iter, T, T> for ArrayColumn<T> {
+    fn contiguous(&self) -> &[T] {
+        &self.contiguous
+    }
+
+    fn contiguous_mut(&mut self) -> &mut [T] {
+        &mut self.contiguous
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ParallelIndexArrayColumn<T: Default> {
+    /// These indices are guaranteed to be consistent and are never moved
+    /// around to maintain cache locality.
+    ///
+    /// Each index refers to an index into the `contiguous` data vector.
+    ///
+    /// Often referred to as "indirect indices".
+    indices: Vec<u32>,
+
+    /// The "real" collection. This is contiguous, optimised for cache
+    /// locality.
+    ///
+    /// Each element stores directly the value of `T` without any metadata.
+    contiguous: Vec<T>,
+
+    /// Keeps track of free slots of the indirect `indices`.
+    free: Vec<u32>,
+
+    /// The owner indices of each `T` element. This is parallel to the
+    /// `contiguous` vec.
+    owners: Vec<u32>,
+}
+
+impl<T: Default> ParallelIndexArrayColumn<T> {
+    /// Create a blank new Column with a size of `1`.
+    ///
+    /// The only element present is the degenerate element at index `0`.
+    pub fn new() -> Self {
+        Self {
+            indices: vec![0],
+            contiguous: vec![T::default()],
+            owners: vec![0],
+            ..Default::default()
+        }
+    }
+
+    /// Creata a blank new column with the given `capacity`.
+    ///
+    /// All elements are initialised with their [`Default`] implementation.
+    /// This includes the degenerate element at index `0`.
+    pub fn with_capacity(capacity: usize) -> Self {
+        let mut stable_indices = Vec::with_capacity(capacity);
+        let mut contiguous = Vec::with_capacity(capacity);
+        let mut owners = Vec::with_capacity(capacity);
+
+        stable_indices.push(0);
+        contiguous.push(T::default());
+        owners.push(0);
+
+        Self {
+            indices: stable_indices,
+            contiguous,
+            owners,
+            ..Default::default()
+        }
+    }
+
+    pub fn handles(&self) -> &[u32] {
+        &self.owners
+    }
+}
+
+impl<T: Default> SlotColumn for ParallelIndexArrayColumn<T> {
+    fn slots_map(&self) -> &Vec<u32> {
+        &self.indices
+    }
+
+    fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.indices
+    }
+
+    fn free_list(&self) -> &Vec<u32> {
+        &self.free
+    }
+
+    fn free_list_mut(&mut self) -> &mut Vec<u32> {
+        &mut self.free
+    }
+}
+
+impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
+    fn len(&self) -> usize {
+        self.contiguous.len()
+    }
+
+    fn size(&self) -> usize {
+        self.indices.len()
+    }
+
+    fn free(&mut self, slot: u32) {
+        if slot == 0 {
+            panic!("slot 0 is reserved for degenerate elements and must not be freed");
+        }
+
+        let contiguous_slot = self.indices[slot as usize];
+        if contiguous_slot == 0 {
+            return;
+        }
+        self.indices[slot as usize] = 0;
+
+        self.owners.swap_remove(contiguous_slot as usize);
+        self.contiguous.swap_remove(contiguous_slot as usize);
+        self.free.push(slot);
+    }
+
+    fn put(&mut self, value: T) -> u32 {
+        let index = self.next_slot_index();
+        let slot = self.contiguous.len();
+        self.indices[index as usize] = slot as u32;
+        self.contiguous.push(value);
+        self.owners.push(index);
+        index
+    }
+}
+
+impl<'iter, T: Default + 'iter> IterColumn<'iter, T, T> for ParallelIndexArrayColumn<T> {
+    fn contiguous(&self) -> &[T] {
+        &self.contiguous
+    }
+
+    fn contiguous_mut(&mut self) -> &mut [T] {
+        &mut self.contiguous
+    }
+}
+
+impl<T: Default> IntoIterator for IndexArrayColumn<T> {
     type Item = Entry<T>;
 
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = std::vec::IntoIter<Entry<T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.contiguous.into_iter()
     }
 }
 
-#[derive(Debug, Default)]
-pub struct StagingColumn<Lo: Default, Re: Default> {
-    inner: Column<Lo>,
-    stage: Vec<Re>,
-}
+impl<T: Default> IntoIterator for ArrayColumn<T> {
+    type Item = T;
 
-impl<T, S> StagingColumn<T, S>
-where
-    T: Default,
-    S: Default + From<T>,
-{
-    pub fn new() -> Self {
-        Self {
-            inner: Column::new(),
-            stage: vec![S::default()],
-        }
-    }
+    type IntoIter = std::vec::IntoIter<T>;
 
-    pub fn with_capacity(capacity: usize) -> Self {
-        let mut stage = Vec::with_capacity(capacity);
-        stage.push(S::default());
-
-        Self {
-            inner: Column::with_capacity(capacity),
-            stage,
-        }
-    }
-
-    pub fn pod(&self) -> &[S] {
-        &self.stage
+    fn into_iter(self) -> Self::IntoIter {
+        self.contiguous.into_iter()
     }
 }
 
-impl<T, S> StagingColumn<T, S>
-where
-    T: Default + Clone + Copy,
-    S: Default + From<T>,
-{
-    pub fn sync_stage(&mut self) {
-        self.inner
-            .iter()
-            .zip(&mut self.stage)
-            .for_each(|(inner, stage)| {
-                *stage = S::from(*inner);
-            });
-    }
-}
+impl<T: Default> IntoIterator for ParallelIndexArrayColumn<T> {
+    type Item = T;
 
-impl StagingColumn<glam::Vec3, glam::Vec4> {
-    pub fn sync_stage_shuffle_vector(&mut self) {
-        self.inner
-            .iter()
-            .zip(&mut self.stage)
-            .for_each(|(inner, stage)| *stage = glam::Vec4::new(inner.x, inner.y, inner.z, 1.0));
-    }
-}
+    type IntoIter = std::vec::IntoIter<T>;
 
-impl<T, S> Deref for StagingColumn<T, S>
-where
-    T: Default,
-    S: Default + From<T>,
-{
-    type Target = Column<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T, S> DerefMut for StagingColumn<T, S>
-where
-    T: Default,
-    S: Default + From<T>,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+    fn into_iter(self) -> Self::IntoIter {
+        self.contiguous.into_iter()
     }
 }
