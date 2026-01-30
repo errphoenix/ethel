@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 /// A wrapper for an entry of a [`Column`] over the `T` type.
 ///
 /// Other than the inner value of `T`, this also contains the owning indirect
@@ -227,5 +229,84 @@ impl<T: Default> IntoIterator for Column<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.contiguous.into_iter()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct StagingColumn<Lo: Default, Re: Default> {
+    inner: Column<Lo>,
+    stage: Vec<Re>,
+}
+
+impl<T, S> StagingColumn<T, S>
+where
+    T: Default,
+    S: Default + From<T>,
+{
+    pub fn new() -> Self {
+        Self {
+            inner: Column::new(),
+            stage: vec![S::default()],
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        let mut stage = Vec::with_capacity(capacity);
+        stage.push(S::default());
+
+        Self {
+            inner: Column::with_capacity(capacity),
+            stage,
+        }
+    }
+
+    pub fn pod(&self) -> &[S] {
+        &self.stage
+    }
+}
+
+impl<T, S> StagingColumn<T, S>
+where
+    T: Default + Clone + Copy,
+    S: Default + From<T>,
+{
+    pub fn sync_stage(&mut self) {
+        self.inner
+            .iter()
+            .zip(&mut self.stage)
+            .for_each(|(inner, stage)| {
+                *stage = S::from(*inner);
+            });
+    }
+}
+
+impl StagingColumn<glam::Vec3, glam::Vec4> {
+    pub fn sync_stage_shuffle_vector(&mut self) {
+        self.inner
+            .iter()
+            .zip(&mut self.stage)
+            .for_each(|(inner, stage)| *stage = glam::Vec4::new(inner.x, inner.y, inner.z, 1.0));
+    }
+}
+
+impl<T, S> Deref for StagingColumn<T, S>
+where
+    T: Default,
+    S: Default + From<T>,
+{
+    type Target = Column<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T, S> DerefMut for StagingColumn<T, S>
+where
+    T: Default,
+    S: Default + From<T>,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
