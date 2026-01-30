@@ -2,10 +2,12 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
+use std::time::Instant;
+
 use glam::{Mat4, Vec4Swizzles};
 
 use crate::{
-    RENDER_STORAGE_PARTS,
+    FrameStorageBuffers, RENDER_STORAGE_PARTS,
     mesh::Meshadata,
     render::{
         buffer::partitioned::PartitionedTriBuffer,
@@ -119,10 +121,9 @@ pub struct Renderer {
     pub(crate) view: ViewPoint,
 
     shader: ShaderHandle,
-    command_queue: GpuCommandQueue<DrawArraysIndirectCommand>,
 
     sync_barrier: SyncBarrier,
-    boundary: Cross<Consumer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>>,
+    boundary: Cross<Consumer, FrameStorageBuffers>,
 }
 
 impl Renderer {
@@ -158,22 +159,12 @@ impl Renderer {
         self.shader = shader;
     }
 
-    pub fn boundary(&self) -> &Cross<Consumer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>> {
+    pub fn boundary(&self) -> &Cross<Consumer, FrameStorageBuffers> {
         &self.boundary
     }
 
-    pub fn boundary_mut(
-        &mut self,
-    ) -> &mut Cross<Consumer, PartitionedTriBuffer<RENDER_STORAGE_PARTS>> {
+    pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, FrameStorageBuffers> {
         &mut self.boundary
-    }
-
-    pub fn command_queue(&self) -> &GpuCommandQueue<DrawArraysIndirectCommand> {
-        &self.command_queue
-    }
-
-    pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<DrawArraysIndirectCommand> {
-        &mut self.command_queue
     }
 }
 
@@ -181,6 +172,7 @@ const FOV: f32 = 80.0;
 
 impl janus::context::Draw for Renderer {
     fn draw(&mut self, delta: janus::context::DeltaTime) {
+        let t0 = Instant::now();
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT);
         }
@@ -198,8 +190,11 @@ impl janus::context::Draw for Renderer {
 
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
-                storage.bind_shader_storage(section as usize);
-                // self.command_queue.call();
+                let scene = &storage.scene;
+                scene.bind_shader_storage(section.as_index());
             });
+        let t1 = Instant::now();
+
+        println!("render thread time: {}", (t1 - t0).as_nanos());
     }
 }

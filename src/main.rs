@@ -1,8 +1,12 @@
 use std::io::BufReader;
 
 use ethel::{
-    LayoutEntityData,
-    render::{Renderer, buffer::partitioned::PartitionedTriBuffer, command::GpuCommandQueue},
+    FrameStorageBuffers, LayoutEntityData,
+    render::{
+        Renderer,
+        buffer::{InitStrategy, TriBuffer, partitioned::PartitionedTriBuffer},
+        command::GpuCommandQueue,
+    },
     shader::ShaderHandle,
     state::{State, cross},
 };
@@ -18,8 +22,12 @@ fn main() {
 
 fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
     {
-        let render_storage = PartitionedTriBuffer::new(LayoutEntityData::create());
-        let (producer, consumer) = cross::create(render_storage);
+        let command = TriBuffer::new_zeroed(ethel::COMMAND_QUEUE_ALLOC, InitStrategy::Zero);
+        let scene = PartitionedTriBuffer::new(LayoutEntityData::create());
+
+        let frame_storage_buffers = FrameStorageBuffers { command, scene };
+
+        let (producer, consumer) = cross::create(frame_storage_buffers);
         *state.boundary_mut() = producer;
         *renderer.boundary_mut() = consumer;
     }
@@ -31,7 +39,7 @@ fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
     }
 
     {
-        *renderer.command_queue_mut() = GpuCommandQueue::new(ethel::COMMAND_QUEUE_ALLOC);
+        *state.command_queue_mut() = GpuCommandQueue::new(ethel::COMMAND_QUEUE_ALLOC);
     }
 
     unsafe {

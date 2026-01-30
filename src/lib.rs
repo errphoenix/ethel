@@ -3,11 +3,13 @@ pub mod render;
 pub mod shader;
 pub mod state;
 
-pub use state::GpuEntityData;
+pub use state::GpuEntityMapping;
+
+use crate::render::buffer::{PartitionedTriBuffer, TriBuffer};
 
 pub const RENDER_STORAGE_PARTS: usize = 4;
 pub const ENTITY_ALLOCATION: usize = 512;
-pub const COMMAND_QUEUE_ALLOC: usize = 8;
+pub const COMMAND_QUEUE_ALLOC: usize = 64;
 
 pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 
@@ -39,4 +41,10 @@ layout_buffer! {
             shader 4;
         };
     }
+}
+
+#[derive(Debug, Default)]
+pub struct FrameStorageBuffers {
+    pub command: TriBuffer<DrawCommand>,
+    pub scene: PartitionedTriBuffer<RENDER_STORAGE_PARTS>,
 }

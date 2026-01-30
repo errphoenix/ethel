@@ -10,6 +10,18 @@ pub enum InitStrategy<T: Sized + Clone, F: Fn() -> T> {
     FillWith(F),
 }
 
+macro_rules! assert_tb_section {
+    ($s:expr) => {
+        let s = $s;
+        assert!(
+            s < 3,
+            "attempted to access section {s} in a triple buffer (=3 sections)"
+        );
+    };
+}
+
+pub(crate) use assert_tb_section;
+
 /// A triple buffered OpenGL buffer over multiple memory blocks.
 ///
 /// Unlike [`PartitionedTriBuffer`], this buffer is made for only one type, and
@@ -56,6 +68,10 @@ impl<T> TriBuffer<T>
 where
     T: Sized + Clone + Copy,
 {
+    pub fn new_zeroed(capacity: usize, init: InitStrategy<T, fn() -> T>) -> Self {
+        Self::new(capacity, init)
+    }
+
     pub fn new<F: Fn() -> T>(capacity: usize, init: InitStrategy<T, F>) -> Self {
         let mut gl_obj = [0; 3];
         let mut ptr = [std::ptr::null_mut(); 3];
@@ -118,7 +134,7 @@ where
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
     pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize) {
-        assert_section(section);
+        assert_tb_section!(section);
 
         unsafe {
             janus::gl::BindBufferBase(
@@ -130,7 +146,7 @@ where
     }
 
     pub fn view_section(&self, section: usize) -> View<'_, T> {
-        assert_section(section);
+        assert_tb_section!(section);
 
         let ptr = self.ptr[section];
         let slice = unsafe { std::slice::from_raw_parts(ptr, self.capacity) };
@@ -143,7 +159,7 @@ where
     }
 
     pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, T> {
-        assert_section(section);
+        assert_tb_section!(section);
 
         let ptr = self.ptr[section];
         let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.capacity) };
@@ -167,7 +183,7 @@ where
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
     pub fn blit_section(&self, section: usize, data: &[T], offset: usize) {
-        assert_section(section);
+        assert_tb_section!(section);
         assert!(
             self.capacity > offset,
             "attempted to blit at offset {offset} with section length {}",
@@ -359,11 +375,4 @@ impl StorageSection {
             Self::Spare => 2,
         }
     }
-}
-
-fn assert_section(section: usize) {
-    assert!(
-        section < 3,
-        "attempted to access section {section} in a triple buffer (=3 sections)"
-    );
 }

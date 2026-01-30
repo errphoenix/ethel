@@ -1,4 +1,15 @@
-use crate::render::buffer::{InitStrategy, View, ViewMut, layout::Layout};
+use crate::render::buffer::{InitStrategy, View, ViewMut, assert_tb_section, layout::Layout};
+
+macro_rules! assert_partition {
+    ($pt:expr, $pi:expr) => {
+        let pt = $pt;
+        let pi = $pi;
+        assert!(
+            pi < pt,
+            "attempted to access partition {pi} in a buffer with only {pt} partitions"
+        );
+    };
+}
 
 /// A partitioned triple buffered OpenGL buffer over a single memory block.
 ///
@@ -103,7 +114,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         partition: usize,
         strategy: InitStrategy<T, F>,
     ) {
-        assert_partition::<PARTS>(partition);
+        assert_partition!(PARTS, partition);
 
         let len = self.layout.length_at(partition);
         let offset = self.layout.offset_at(partition);
@@ -154,7 +165,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
     pub fn bind_shader_storage(&self, section: usize) {
-        super::assert_section(section);
+        assert_tb_section!(section);
 
         let base_offset = (self.layout.len() * section) as isize;
         for part in 0..PARTS {
@@ -189,7 +200,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
     pub fn blit_section(&self, section: usize, data: &[u8], offset: usize) {
-        super::assert_section(section);
+        assert_tb_section!(section);
 
         let src = data.as_ptr();
         let section_len = self.layout.len();
@@ -223,7 +234,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
     pub fn view_section(&self, section: usize) -> View<'_, u8> {
-        super::assert_section(section);
+        assert_tb_section!(section);
 
         let length = self.layout.len();
         let offset = section * length;
@@ -239,7 +250,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     }
 
     pub unsafe fn view_section_raw(&self, section: usize) -> (*mut u8, usize) {
-        super::assert_section(section);
+        assert_tb_section!(section);
 
         let len = self.layout.len();
         let offset = section * len;
@@ -263,7 +274,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
     pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, u8> {
-        super::assert_section(section);
+        assert_tb_section!(section);
 
         let length = self.layout.len();
         let offset = section * length;
@@ -296,8 +307,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// * If `partition` is invalid, i.e. it is greater than the `PARTS`
     ///   constant type parameter.
     pub unsafe fn view_part<T: Sized>(&self, section: usize, partition: usize) -> View<'_, T> {
-        super::assert_section(section);
-        assert_partition::<PARTS>(partition);
+        assert_tb_section!(section);
+        assert_partition!(PARTS, partition);
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(partition);
@@ -321,8 +332,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         section: usize,
         partition: usize,
     ) -> (*mut T, usize) {
-        super::assert_section(section);
-        assert_partition::<PARTS>(partition);
+        assert_tb_section!(section);
+        assert_partition!(PARTS, partition);
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(partition);
@@ -354,8 +365,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         section: usize,
         partition: usize,
     ) -> ViewMut<'_, T> {
-        super::assert_section(section);
-        assert_partition::<PARTS>(partition);
+        assert_tb_section!(section);
+        assert_partition!(PARTS, partition);
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(partition);
@@ -395,8 +406,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         data: &[T],
         offset: usize,
     ) {
-        super::assert_section(section);
-        assert_partition::<PARTS>(partition);
+        assert_tb_section!(section);
+        assert_partition!(PARTS, partition);
 
         let src = data.as_ptr();
         let base_offset = section * self.layout.len();
@@ -428,11 +439,4 @@ impl<const PARTS: usize> Drop for PartitionedTriBuffer<PARTS> {
         }
         self.ptr = std::ptr::null_mut();
     }
-}
-
-fn assert_partition<const PARTS: usize>(partition: usize) {
-    assert!(
-        partition < PARTS,
-        "attempted to access partition {partition} in a buffer with only {PARTS} partitions"
-    );
 }
