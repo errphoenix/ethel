@@ -1,13 +1,10 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    FrameStorageBuffers, LayoutEntityData, RENDER_STORAGE_PARTS, mesh,
-    render::{
-        buffer::partitioned::PartitionedTriBuffer,
-        command::{DrawArraysIndirectCommand, GpuCommandQueue},
-    },
+    FrameStorageBuffers, LayoutEntityData, mesh,
+    render::command::GpuCommandQueue,
     state::{
-        column::Column,
+        column::{IterColumn, ParallelIndexArrayColumn},
         cross::{Cross, Producer},
     },
 };
@@ -24,10 +21,10 @@ struct Entity {
 
 #[derive(Debug, Default)]
 pub struct State {
-    mesh_ids: Column<mesh::Id>,
+    mesh_ids: Vec<mesh::Id>,
 
-    positions: Column<glam::Vec4>,
-    rotations: Column<glam::Quat>,
+    positions: ParallelIndexArrayColumn<glam::Vec4>,
+    rotations: ParallelIndexArrayColumn<glam::Quat>,
 
     entities: Vec<Entity>,
 
@@ -48,8 +45,14 @@ impl State {
         self.boundary.cross(|section, storage| {
             let scene = &storage.scene;
             let index = section.as_index();
-            let rotations = self.rotations.iter();
 
+            let positions = self.positions.contiguous();
+            let rotations = self.rotations.contiguous();
+
+            unsafe {
+                scene.blit_part(index, LayoutEntityData::Positions as usize, positions, 0);
+                scene.blit_part(index, LayoutEntityData::Rotations as usize, rotations, 0);
+            }
             // unsafe {
             //     scene.blit_part(
             //         section.as_index(),
