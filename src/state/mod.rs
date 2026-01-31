@@ -53,15 +53,6 @@ impl State {
                 scene.blit_part(index, LayoutEntityData::Positions as usize, positions, 0);
                 scene.blit_part(index, LayoutEntityData::Rotations as usize, rotations, 0);
             }
-            // unsafe {
-            //     scene.blit_part(
-            //         section.as_index(),
-            //         LayoutEntityData::Rotations as usize,
-            //         &rotations,
-            //         0,
-            //     );
-            // }
-            //todo
         });
     }
 

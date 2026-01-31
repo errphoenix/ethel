@@ -1,7 +1,5 @@
 #version 460 core
 
-const uint MAX_VERTEX_DEFINITIONS = 64;
-
 struct Metadata {
     uint offset;
     uint length;
@@ -12,10 +10,13 @@ struct Vertex {
     float normal[3];
 };
 
-layout(std430, binding = 10) readonly buffer MeshStorage
+layout(std430, binding = 10) readonly buffer VertexStorage
 {
-    Metadata metadata[MAX_VERTEX_DEFINITIONS];
     Vertex vertex_storage[];
+};
+
+layout(std430, binding = 11) readonly buffer MeshMetadata {
+    Metadata metadata[];
 };
 
 struct Entity {
@@ -25,7 +26,7 @@ struct Entity {
 
     // Pad to 16 bytes for compatibility
     // While on my system the ssbo alignment is 4, for now we will force 
-    // alignment to 16 bytes to ensure compatibility we might handle this 
+    // alignment to 16 bytes to ensure compatibility. we might handle this 
     // differently later on.
     uint _pad; 
 };

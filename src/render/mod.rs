@@ -196,5 +196,24 @@ impl janus::context::Draw for Renderer {
         let t1 = Instant::now();
 
         println!("render thread time: {}", (t1 - t0).as_nanos());
+
+        #[cfg(debug_assertions)]
+        {
+            let mut err = 0;
+            loop {
+                use tracing::Level;
+
+                err = unsafe { janus::gl::GetError() };
+                if err == 0 {
+                    break;
+                }
+
+                tracing::event!(
+                    name: "render.debug.gl_err",
+                    Level::DEBUG,
+                    "gl error: {err}"
+                );
+            }
+        }
     }
 }

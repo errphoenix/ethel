@@ -1,6 +1,8 @@
+pub mod immutable;
 pub mod layout;
 pub mod partitioned;
 
+pub use immutable::{ImmutableBuffer, UninitImmutableBuffer};
 pub use layout::Layout;
 pub use partitioned::PartitionedTriBuffer;
 
