@@ -10,7 +10,7 @@ use crate::{
     FrameStorageBuffers, RENDER_STORAGE_PARTS,
     mesh::Meshadata,
     render::{
-        buffer::partitioned::PartitionedTriBuffer,
+        buffer::{ImmutableBuffer, partitioned::PartitionedTriBuffer},
         command::{DrawArraysIndirectCommand, GpuCommandQueue},
         sync::SyncBarrier,
     },
@@ -115,9 +115,10 @@ impl Resolution {
 /// Render state for the Janus rendering Context
 #[derive(Debug, Default)]
 pub struct Renderer {
-    resolution: Resolution,
-
+    mesh_buffer: ImmutableBuffer<2>,
     pub(crate) metadata: Meshadata,
+
+    resolution: Resolution,
     pub(crate) view: ViewPoint,
 
     shader: ShaderHandle,
@@ -127,6 +128,14 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    pub fn mesh_buffer(&self) -> &ImmutableBuffer<2> {
+        &self.mesh_buffer
+    }
+
+    pub fn mesh_buffer_mut(&mut self) -> &mut ImmutableBuffer<2> {
+        &mut self.mesh_buffer
+    }
+
     pub fn resolution(&self) -> Resolution {
         self.resolution
     }

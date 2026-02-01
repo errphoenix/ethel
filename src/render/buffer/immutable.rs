@@ -34,7 +34,7 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
                 gl_obj,
                 0,
                 total_length,
-                janus::gl::WRITE_ONLY | janus::gl::MAP_INVALIDATE_BUFFER_BIT,
+                janus::gl::MAP_WRITE_BIT | janus::gl::MAP_INVALIDATE_BUFFER_BIT,
             )
         } as *mut u8;
 
