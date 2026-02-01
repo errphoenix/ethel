@@ -5,10 +5,10 @@ use crate::render::buffer::View;
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct DrawArraysIndirectCommand {
-    count: u32,
-    instance_count: u32,
-    first_vertex: u32,
-    base_instance: u32,
+    pub count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub base_instance: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

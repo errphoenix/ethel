@@ -11,6 +11,7 @@ pub struct UninitImmutableBuffer<const PARTS: usize> {
     gl_obj: u32,
     ptr: *mut u8,
     layout: Layout<PARTS>,
+    mapped: bool,
 
     // Unitialised buffer must not be sent to other threads
     // Drop impl requires GL calls, as does its creation
@@ -42,6 +43,7 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
             layout,
             ptr,
             gl_obj,
+            mapped: true,
             _marker: std::marker::PhantomData,
         }
     }
@@ -88,7 +90,9 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
     ///
     /// # Returns
     /// An [`ImmutableBuffer`] preserving the OpenGL buffer object.
-    pub fn finish(self) -> ImmutableBuffer<PARTS> {
+    pub fn finish(mut self) -> ImmutableBuffer<PARTS> {
+        self.mapped = false;
+
         unsafe {
             janus::gl::UnmapNamedBuffer(self.gl_obj);
         }
@@ -103,10 +107,13 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
 
 impl<const PARTS: usize> Drop for UninitImmutableBuffer<PARTS> {
     fn drop(&mut self) {
-        unsafe {
-            janus::gl::UnmapNamedBuffer(self.gl_obj);
-            janus::gl::DeleteBuffers(1, &self.gl_obj);
+        if self.mapped {
+            unsafe {
+                janus::gl::UnmapNamedBuffer(self.gl_obj);
+                janus::gl::DeleteBuffers(1, &self.gl_obj);
+            }
         }
+
         self.ptr = std::ptr::null_mut();
     }
 }

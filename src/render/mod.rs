@@ -11,7 +11,7 @@ use crate::{
     mesh::Meshadata,
     render::{
         buffer::{ImmutableBuffer, partitioned::PartitionedTriBuffer},
-        command::{DrawArraysIndirectCommand, GpuCommandQueue},
+        command::{DrawArraysIndirectCommand, GpuCommandDispatch, GpuCommandQueue},
         sync::SyncBarrier,
     },
     shader::ShaderHandle,

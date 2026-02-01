@@ -80,19 +80,18 @@ where
         let total_size = (capacity * size_of::<T>()) as isize;
 
         unsafe {
-            janus::gl::CreateBuffers(3, gl_obj.as_mut_ptr());
+            janus::gl::CreateBuffers(1, &mut gl_obj[0]);
+            janus::gl::CreateBuffers(1, &mut gl_obj[1]);
+            janus::gl::CreateBuffers(1, &mut gl_obj[2]);
 
             let flags = janus::gl::MAP_WRITE_BIT
+                | janus::gl::MAP_READ_BIT
                 | janus::gl::MAP_COHERENT_BIT
                 | janus::gl::MAP_PERSISTENT_BIT;
+
             for i in 0..3 {
-                janus::gl::NamedBufferStorage(
-                    gl_obj[i],
-                    total_size,
-                    std::ptr::null(),
-                    flags | janus::gl::DYNAMIC_STORAGE_BIT,
-                );
-                ptr[i] = janus::gl::MapNamedBuffer(gl_obj[i], flags) as *mut T;
+                janus::gl::NamedBufferStorage(gl_obj[i], total_size, std::ptr::null(), flags);
+                ptr[i] = janus::gl::MapNamedBuffer(gl_obj[i], janus::gl::READ_WRITE) as *mut T;
             }
         }
 
