@@ -4,7 +4,7 @@ use ethel::{
     FrameStorageBuffers, LayoutEntityData,
     mesh::{LayoutMeshStorage, MeshStaging, Vertex},
     render::{
-        Renderer,
+        Renderer, Resolution,
         buffer::{self, InitStrategy, TriBuffer, partitioned::PartitionedTriBuffer},
         command::GpuCommandQueue,
     },
@@ -22,14 +22,6 @@ fn main() {
 }
 
 fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
-    loop {
-        let err = unsafe { janus::gl::GetError() };
-        if err == 0 {
-            break;
-        }
-        println!("init gl error: {err}")
-    }
-
     {
         let triangle = [
             Vertex {
@@ -68,6 +60,12 @@ fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
         // todo: handle mesh id handles properly
 
         state.create_entity(0, (0.0, 0.0, -5.0, 1.0), glam::Quat::IDENTITY);
+        state.create_entity(0, (0.0, 0.0, 5.0, 1.0), glam::Quat::IDENTITY);
+        state.create_entity(0, (0.0, 3.0, -5.0, 1.0), glam::Quat::IDENTITY);
+        state.create_entity(0, (10.0, 1.0, -4.0, 1.0), glam::Quat::IDENTITY);
+        state.create_entity(0, (5.0, 5.0, 0.0, 1.0), glam::Quat::IDENTITY);
+        state.create_entity(0, (-5.0, 2.0, 0.0, 1.0), glam::Quat::IDENTITY);
+        state.create_entity(0, (0.0, 2.0, -1.0, 1.0), glam::Quat::IDENTITY);
     }
 
     {
@@ -91,7 +89,13 @@ fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
         *state.command_queue_mut() = GpuCommandQueue::new(ethel::COMMAND_QUEUE_ALLOC);
     }
 
+    renderer.set_resolution(Resolution {
+        width: 1280f32,
+        height: 720f32,
+    });
+
     unsafe {
+        janus::gl::Viewport(0, 0, 1280, 720);
         janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     }
     Ok(())

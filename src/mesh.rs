@@ -82,7 +82,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
 }
 
-pub const VERTEX_STORAGE_ALLOCATION: usize = 1_048_576;
+pub const VERTEX_STORAGE_ALLOCATION: usize = 512;
 pub const MESH_COUNT: usize = 128;
 
 layout_buffer! {

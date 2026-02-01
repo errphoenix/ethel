@@ -73,12 +73,26 @@ impl State {
             let scene = &storage.scene;
             let index = section.as_index();
 
+            let i_positions = self.positions.handles();
+            let i_rotations = self.rotations.handles();
             let positions = self.positions.contiguous();
             let rotations = self.rotations.contiguous();
 
             unsafe {
-                scene.blit_part(index, LayoutEntityData::Positions as usize, positions, 0);
-                scene.blit_part(index, LayoutEntityData::Rotations as usize, rotations, 0);
+                scene.blit_part(
+                    index,
+                    LayoutEntityData::ImapPositions as usize,
+                    i_positions,
+                    0,
+                );
+                scene.blit_part(
+                    index,
+                    LayoutEntityData::ImapRotations as usize,
+                    i_rotations,
+                    0,
+                );
+                scene.blit_part(index, LayoutEntityData::PodPositions as usize, positions, 0);
+                scene.blit_part(index, LayoutEntityData::PodRotations as usize, rotations, 0);
             }
         });
     }

@@ -36,8 +36,8 @@ pub(crate) fn projection_perspective(width: f32, height: f32, fov_degrees: f32) 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct Resolution {
-    width: f32,
-    height: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -189,16 +189,17 @@ impl janus::context::Draw for Renderer {
         {
             let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
             let view_transform = self.view.transform;
+            self.shader.bind();
             self.shader.uniform_mat4_glam("u_view", view_transform);
             self.shader.uniform_mat4_glam("u_projection", proj);
         }
-
-        *self.view.translation_mut() -= glam::Vec4::ONE * (glam::Vec4::Z * *delta as f32);
 
         //todo
 
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
+                self.mesh_buffer.bind_shader_storage();
+
                 let scene = &storage.scene;
                 scene.bind_shader_storage(section.as_index());
 
