@@ -62,4 +62,73 @@ impl Meshadata {
     pub fn head(&self) -> u32 {
         self.head
     }
+
+    pub fn inner_metadata(&self) -> &[Metadata] {
+        &self.metadata
+    }
+}
+
+impl Deref for Meshadata {
+    type Target = [Metadata];
+
+    fn deref(&self) -> &Self::Target {
+        &self.metadata
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+}
+
+pub const VERTEX_STORAGE_ALLOCATION: usize = 1_048_576;
+pub const MESH_COUNT: usize = 128;
+
+layout_buffer! {
+    const MeshStorage: 2, {
+        enum vertex_storage: VERTEX_STORAGE_ALLOCATION => {
+            type Vertex;
+            bind 0;
+            shader 10;
+        };
+
+        enum metadata: MESH_COUNT => {
+            type Metadata;
+            bind 1;
+            shader 11;
+        };
+    }
+}
+
+#[derive(Debug)]
+pub struct MeshStaging {
+    metadata: Meshadata,
+    vertex_storage: Vec<Vertex>,
+}
+
+impl MeshStaging {
+    pub fn new() -> Self {
+        Self {
+            metadata: Meshadata::new(),
+            vertex_storage: Vec::with_capacity(VERTEX_STORAGE_ALLOCATION),
+        }
+    }
+
+    pub fn stage(&mut self, vertices: &[Vertex]) -> Id {
+        self.vertex_storage.extend_from_slice(vertices);
+        self.metadata.add(vertices.len() as u32)
+    }
+
+    pub fn metadata(&self) -> &Meshadata {
+        &self.metadata
+    }
+
+    pub fn vertex_storage(&self) -> &[Vertex] {
+        &self.vertex_storage
+    }
+
+    pub fn close(self) -> Meshadata {
+        self.metadata
+    }
 }

@@ -201,7 +201,11 @@ impl janus::context::Draw for Renderer {
             .cross(&mut self.sync_barrier, |section, storage| {
                 let scene = &storage.scene;
                 scene.bind_shader_storage(section.as_index());
+
+                let cmd = storage.command.view_section(section.as_index());
+                GpuCommandDispatch::from_view(cmd).dispatch();
             });
+
         let t1 = Instant::now();
 
         println!("render thread time: {}", (t1 - t0).as_nanos());

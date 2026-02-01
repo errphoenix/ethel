@@ -15,10 +15,11 @@ use std::borrow::{Borrow, BorrowMut};
 /// * `16` bytes, as in: `12` for `T` + `4`.
 /// * `32` bytes, as in: `28` for `T` + `4`.
 /// * `64` bytes, as in: `60` for `T` + `4`.
+#[repr(C)]
 #[derive(Clone, Debug, Default)]
 pub struct Entry<T> {
-    owner: u32,
     inner: T,
+    owner: u32,
 }
 
 impl<T> Entry<T> {
