@@ -66,7 +66,7 @@ out vec3 fs_world;
 out vec3 fs_normal;
 
 void main() {
-    Entity mapping = entities[gl_InstanceID];
+    Entity mapping = entities[gl_DrawID];
     uint mesh_id_index = mapping.mesh_index;
     uint position_index = imap_positions[mapping.position_id];
     uint rotation_index = imap_rotations[mapping.rotation_id];

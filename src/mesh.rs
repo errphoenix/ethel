@@ -1,3 +1,7 @@
+use std::ops::Deref;
+
+use crate::layout_buffer;
+
 /// The ID that represents a Mesh present on GPU memory, from the CPU.
 ///
 /// It is used to link objects or "renderables" to a mesh that is present on
@@ -22,7 +26,7 @@ pub struct Metadata {
     pub(crate) length: u32,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Default, Clone, Debug)]
 pub struct Meshadata {
     metadata: Vec<Metadata>,
     head: u32,
@@ -30,7 +34,10 @@ pub struct Meshadata {
 
 impl Meshadata {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            metadata: Vec::with_capacity(MESH_COUNT),
+            head: 0,
+        }
     }
 
     pub fn clear(&mut self) {

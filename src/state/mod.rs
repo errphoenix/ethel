@@ -2,9 +2,9 @@ use std::time::{Duration, Instant};
 
 use crate::{
     FrameStorageBuffers, LayoutEntityData, mesh,
-    render::command::GpuCommandQueue,
+    render::command::{DrawArraysIndirectCommand, GpuCommandQueue},
     state::{
-        column::{IterColumn, ParallelIndexArrayColumn},
+        column::{Column, IterColumn, ParallelIndexArrayColumn},
         cross::{Cross, Producer},
     },
 };
@@ -33,6 +33,26 @@ pub struct State {
 }
 
 impl State {
+    // todo: change to return an entity handle to wrap around raw index
+    // and maybe generation
+    pub fn create_entity(
+        &mut self,
+        // should likely pass a "mesh name" or handle instead instead of raw index
+        mesh_handle: usize,
+        position: impl Into<glam::Vec4>,
+        rotation: impl Into<glam::Quat>,
+    ) -> usize {
+        let position_id = self.positions.put(position.into());
+        let rotation_id = self.rotations.put(rotation.into());
+        let entity_id = self.entities.len();
+        self.entities.push(Entity {
+            mesh: mesh_handle as u32,
+            position: position_id,
+            rotation: rotation_id,
+        });
+        entity_id
+    }
+
     pub fn boundary(&self) -> &Cross<Producer, FrameStorageBuffers> {
         &self.boundary
     }
@@ -42,6 +62,13 @@ impl State {
     }
 
     pub fn upload(&mut self) {
+        self.command_queue.push(DrawArraysIndirectCommand {
+            count: 3,
+            instance_count: 1,
+            first_vertex: 0,
+            base_instance: 0,
+        });
+
         self.boundary.cross(|section, storage| {
             let scene = &storage.scene;
             let index = section.as_index();
@@ -62,6 +89,14 @@ impl State {
 
     pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<crate::DrawCommand> {
         &mut self.command_queue
+    }
+
+    pub fn global_mesh_storage(&self) -> &[mesh::Id] {
+        &self.mesh_ids
+    }
+
+    pub fn global_mesh_storage_mut(&mut self) -> &mut Vec<mesh::Id> {
+        &mut self.mesh_ids
     }
 }
 

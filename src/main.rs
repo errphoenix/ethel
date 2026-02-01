@@ -2,9 +2,10 @@ use std::io::BufReader;
 
 use ethel::{
     FrameStorageBuffers, LayoutEntityData,
+    mesh::{LayoutMeshStorage, MeshStaging, Vertex},
     render::{
         Renderer,
-        buffer::{InitStrategy, TriBuffer, partitioned::PartitionedTriBuffer},
+        buffer::{self, InitStrategy, TriBuffer, partitioned::PartitionedTriBuffer},
         command::GpuCommandQueue,
     },
     shader::ShaderHandle,
@@ -21,6 +22,54 @@ fn main() {
 }
 
 fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
+    loop {
+        let err = unsafe { janus::gl::GetError() };
+        if err == 0 {
+            break;
+        }
+        println!("init gl error: {err}")
+    }
+
+    {
+        let triangle = [
+            Vertex {
+                position: [-1.0, 0.0, 0.0],
+                normal: [-0.33, -0.33, 0.33],
+            },
+            Vertex {
+                position: [1.0, 0.0, 0.0],
+                normal: [0.33, -0.33, 0.33],
+            },
+            Vertex {
+                position: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.5, 0.5],
+            },
+        ];
+
+        let mut stage = MeshStaging::new();
+        let triangle = stage.stage(&triangle);
+
+        let mut mesh_buffer = buffer::immutable::uninit(LayoutMeshStorage::create());
+        let vbs = LayoutMeshStorage::VertexStorage;
+        mesh_buffer.fill_partition(vbs as usize, stage.vertex_storage());
+
+        let metadata = stage.close();
+        let mds = LayoutMeshStorage::Metadata;
+        mesh_buffer.fill_partition(mds as usize, &metadata);
+
+        *renderer.mesh_buffer_mut() = mesh_buffer.finish();
+
+        //todo: move mesh IDs to a global map and initialise entities
+
+        *state.global_mesh_storage_mut() = vec![triangle];
+    }
+
+    {
+        // todo: handle mesh id handles properly
+
+        state.create_entity(0, (0.0, 0.0, -5.0, 1.0), glam::Quat::IDENTITY);
+    }
+
     {
         let command = TriBuffer::new_zeroed(ethel::COMMAND_QUEUE_ALLOC, InitStrategy::Zero);
         let scene = PartitionedTriBuffer::new(LayoutEntityData::create());
