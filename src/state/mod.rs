@@ -11,6 +11,7 @@ use crate::{
 
 pub mod column;
 pub mod cross;
+pub mod table;
 
 #[derive(Debug)]
 struct Entity {

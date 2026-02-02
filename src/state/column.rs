@@ -64,7 +64,7 @@ impl<T> BorrowMut<T> for Entry<T> {
     }
 }
 
-trait SlotColumn: Default {
+pub trait SparseSlot: Default {
     fn slots_map(&self) -> &Vec<u32>;
 
     fn slots_map_mut(&mut self) -> &mut Vec<u32>;
@@ -90,14 +90,14 @@ trait SlotColumn: Default {
     }
 }
 
-pub trait Column<T: Default>: SlotColumn + Default {
+pub trait Column<T: Default>: SparseSlot + Default {
     /// The total amount of initialised slots.
     ///
     /// This includes indirect indices of degenerates (zero), as is it a sparse
     /// collection.
     fn size(&self) -> usize;
 
-    /// The total length of the contiguous data.
+    /// The total length of the contiguous data (SoA's).
     fn len(&self) -> usize;
 
     /// Get the indirect index present at `slot`.
@@ -132,7 +132,7 @@ pub trait Column<T: Default>: SlotColumn + Default {
     ///   elements
     fn free(&mut self, slot: u32);
 
-    /// Add a `value` to the Column.
+    /// Add an element `value` to the inner SoA storage.
     ///
     /// This will automatically handle getting a valid slot for the inserted
     /// value:
@@ -245,7 +245,7 @@ impl<T: Default> IndexArrayColumn<T> {
     }
 }
 
-impl<T: Default> SlotColumn for IndexArrayColumn<T> {
+impl<T: Default> SparseSlot for IndexArrayColumn<T> {
     fn slots_map(&self) -> &Vec<u32> {
         &self.indices
     }
@@ -361,7 +361,7 @@ impl<T: Default> ArrayColumn<T> {
     }
 }
 
-impl<T: Default> SlotColumn for ArrayColumn<T> {
+impl<T: Default> SparseSlot for ArrayColumn<T> {
     fn slots_map(&self) -> &Vec<u32> {
         &self.indices
     }
@@ -487,7 +487,7 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
     }
 }
 
-impl<T: Default> SlotColumn for ParallelIndexArrayColumn<T> {
+impl<T: Default> SparseSlot for ParallelIndexArrayColumn<T> {
     fn slots_map(&self) -> &Vec<u32> {
         &self.indices
     }
