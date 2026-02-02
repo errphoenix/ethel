@@ -84,7 +84,7 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// buffer partitions.
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// layout_buffer! {
 ///     const Test: 3, {
 ///         enum numbers: 32 => {
@@ -126,7 +126,7 @@ impl<const PARTS: usize> Layout<PARTS> {
 /// entries of the enum may be used in [`PartitionedTriBuffer`]'s view_part*
 /// methods:
 ///
-/// ```
+/// ```rust,ignore
 /// layout_buffer! {
 ///     const Test: 3, {
 ///         enum numbers: 32 => {
@@ -210,8 +210,8 @@ macro_rules! layout_buffer {
             }
 
             impl [< Layout$name >] {
-                pub fn create() -> crate::render::buffer::layout::Layout<$len> {
-                    let mut layout = crate::render::buffer::layout::Layout::<$len>::new();
+                pub fn create() -> $crate::render::buffer::layout::Layout<$len> {
+                    let mut layout = $crate::render::buffer::layout::Layout::<$len>::new();
                     $(
                         layout = layout.partition::<$part_ty>($part_len);
                         $(
@@ -221,13 +221,13 @@ macro_rules! layout_buffer {
                     layout
                 }
 
-                pub fn initialise_partitions<const PARTS: usize>(buffer: &crate::render::buffer::partitioned::PartitionedTriBuffer<PARTS>) {
+                pub fn initialise_partitions<const PARTS: usize>(buffer: &$crate::render::buffer::partitioned::PartitionedTriBuffer<PARTS>) {
                     $(
                         #[allow(unused_variables)]
                         {
-                            let mode = crate::render::buffer::InitStrategy::<$part_ty, fn() -> $part_ty>::Zero;
+                            let mode = $crate::render::buffer::InitStrategy::<$part_ty, fn() -> $part_ty>::Zero;
                             $(
-                                let mode = crate::render::buffer::InitStrategy::FillWith(|| $init);
+                                let mode = $crate::render::buffer::InitStrategy::FillWith(|| $init);
                             )?
                             buffer.initialise_partition::<$part_ty, _>($part_idx, mode);
                         }
