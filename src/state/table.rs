@@ -740,6 +740,7 @@ macro_rules! table_spec {
             pub struct [< $name RowTable >] {
                 indices: Vec<u32>,
                 free: Vec<u32>,
+                owners: Vec<u32>,
 
                 pub $row_0: Vec<$rt_0>,
                 pub $($row: Vec<$rt>,)+
@@ -781,7 +782,9 @@ macro_rules! table_spec {
                     if contiguous_slot == 0 {
                         return;
                     }
+
                     self.indices[slot as usize] = 0;
+                    self.owners.swap_remove(contiguous_slot as usize);
 
                     self.$row_0.swap_remove(contiguous_slot as usize);
                     $(
@@ -795,7 +798,9 @@ macro_rules! table_spec {
 
                     let index = self.next_slot_index();
                     let slot = self.$row_0.len();
+
                     self.indices[index as usize] = slot as u32;
+                    self.owners.push(index);
 
                     self.$row_0.push($row_0);
                     $(
