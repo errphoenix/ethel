@@ -3,6 +3,7 @@ pub mod render;
 pub mod shader;
 pub mod state;
 
+use janus::input::InputState;
 pub use state::GpuEntityMapping;
 
 use crate::render::buffer::{PartitionedTriBuffer, TriBuffer};
@@ -10,6 +11,8 @@ use crate::render::buffer::{PartitionedTriBuffer, TriBuffer};
 pub const RENDER_STORAGE_PARTS: usize = 4;
 pub const ENTITY_ALLOCATION: usize = 512;
 pub const COMMAND_QUEUE_ALLOC: usize = 64;
+
+pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::SECTION_COUNT }>;
 
 pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 

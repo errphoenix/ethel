@@ -2,7 +2,7 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use glam::{Mat4, Vec4Swizzles};
 
@@ -209,7 +209,7 @@ impl janus::context::Draw for Renderer {
 
         let t1 = Instant::now();
 
-        println!("render thread time: {}", (t1 - t0).as_nanos());
+        //println!("render thread time: {}", (t1 - t0).as_nanos());
 
         #[cfg(debug_assertions)]
         {

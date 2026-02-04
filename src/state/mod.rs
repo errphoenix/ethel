@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+use janus::input::InputState;
+
 use crate::{
     FrameStorageBuffers, LayoutEntityData, mesh,
     render::command::{DrawArraysIndirectCommand, GpuCommandQueue},
@@ -22,6 +24,8 @@ struct Entity {
 
 #[derive(Debug, Default)]
 pub struct State {
+    input: crate::InputSystem,
+
     mesh_ids: Vec<mesh::Id>,
 
     positions: ParallelIndexArrayColumn<glam::Vec4>,
@@ -113,6 +117,14 @@ impl State {
     pub fn global_mesh_storage_mut(&mut self) -> &mut Vec<mesh::Id> {
         &mut self.mesh_ids
     }
+
+    pub fn input(&self) -> &crate::InputSystem {
+        &self.input
+    }
+
+    pub fn input_mut(&mut self) -> &mut crate::InputSystem {
+        &mut self.input
+    }
 }
 
 #[repr(C)]
@@ -126,6 +138,21 @@ pub struct GpuEntityMapping {
 
 impl janus::context::Update for State {
     fn update(&mut self, delta: janus::context::DeltaTime) {
+        self.input.poll_key_events();
+
+        if self
+            .input()
+            .keys()
+            .mouse_down(janus::input::MouseButton::Left)
+        {
+            println!(
+                "{}",
+                self.input()
+                    .keys()
+                    .mouse_frames_held(janus::input::MouseButton::Left)
+            );
+        }
+
         let t0 = Instant::now();
         self.rotations.iter_mut().for_each(|rot| {
             *rot = rot.mul_quat(glam::Quat::from_axis_angle(
@@ -137,7 +164,7 @@ impl janus::context::Update for State {
         self.upload();
 
         let t1 = Instant::now();
-        println!("logic thread time: {}", (t1 - t0).as_nanos());
+        //println!("logic thread time: {}", (t1 - t0).as_nanos());
     }
 
     fn step_duration(&self) -> std::time::Duration {
@@ -147,5 +174,9 @@ impl janus::context::Update for State {
 
     fn set_step_duration(&mut self, _step: std::time::Duration) {
         //todo
+    }
+
+    fn new_frame(&mut self) {
+        self.input.sync();
     }
 }

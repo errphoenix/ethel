@@ -11,17 +11,30 @@ use ethel::{
     shader::ShaderHandle,
     state::{State, cross},
 };
-use janus::window::DisplayParameters;
+use janus::{input::InputState, window::DisplayParameters};
 
 fn main() {
     tracing_subscriber::FmtSubscriber::builder().init();
 
     let display_params = DisplayParameters::windowed("ethel", 1920, 1080);
-    let ctx = janus::context::Context::new(setup, display_params);
+    let (input_state, input_dispatch) = janus::input::stream();
+
+    let ctx = janus::context::Context::new(
+        |state: &mut State, renderer: &mut Renderer| setup(input_state, state, renderer),
+        input_dispatch,
+        display_params,
+    );
+
     janus::run(ctx);
 }
 
-fn setup(state: &mut State, renderer: &mut Renderer) -> anyhow::Result<()> {
+fn setup(
+    input_state: ethel::InputSystem,
+    state: &mut State,
+    renderer: &mut Renderer,
+) -> Result<(), &'static str> {
+    *state.input_mut() = input_state;
+
     {
         let triangle = [
             Vertex {
