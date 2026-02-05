@@ -11,7 +11,7 @@ use ethel::{
     shader::ShaderHandle,
     state::{State, cross},
 };
-use janus::{input::InputState, window::DisplayParameters};
+use janus::window::DisplayParameters;
 
 fn main() {
     tracing_subscriber::FmtSubscriber::builder().init();
@@ -38,16 +38,16 @@ fn setup(
     {
         let triangle = [
             Vertex {
-                position: [-1.0, 0.0, 0.0],
-                normal: [-0.33, -0.33, 0.33],
+                position: [1.0, 0.0, 0.0, 1.0],
+                normal: [0.33, -0.33, 0.33, 1.0],
             },
             Vertex {
-                position: [1.0, 0.0, 0.0],
-                normal: [0.33, -0.33, 0.33],
+                position: [0.0, 1.0, 0.0, 1.0],
+                normal: [0.0, 0.5, 0.5, 1.0],
             },
             Vertex {
-                position: [0.0, 1.0, 0.0],
-                normal: [0.0, 0.5, 0.5],
+                position: [-1.0, 0.0, 0.0, 1.0],
+                normal: [-0.33, -0.33, 0.33, 1.0],
             },
         ];
 

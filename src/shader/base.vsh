@@ -6,8 +6,8 @@ struct Metadata {
 };
 
 struct Vertex {
-    float position[3];
-    float normal[3];
+    vec4 position;
+    vec4 normal;
 };
 
 layout(std430, binding = 10) readonly buffer VertexStorage
@@ -80,19 +80,11 @@ void main() {
     uint index = offset + gl_VertexID;
 
     Vertex vertex = vertex_storage[index];
-    vec3 local = vec3(
-        vertex.position[0],
-        vertex.position[1],
-        vertex.position[2]
-    );
-    vec3 normal = vec3(
-        vertex.normal[0],
-        vertex.normal[1],
-        vertex.normal[2]
-    );
+    vec3 local = vertex.position.xyz;
+    vec3 normal = vertex.normal.xyz;
 
-    //todo build matrix from translation + rotation and apply
-    vec4 world = vec4(local, 1.0);
+    //todo: apply rotation quaternion
+    vec4 world = vec4(local + position, 1.0);
 
     fs_world = world.xyz;
     fs_normal = normal;

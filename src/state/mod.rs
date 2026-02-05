@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use janus::input::InputState;
+use tracing::{Level, event};
 
 use crate::{
     FrameStorageBuffers, LayoutEntityData, mesh,
@@ -15,17 +15,25 @@ pub mod column;
 pub mod cross;
 pub mod table;
 
-#[derive(Debug)]
-struct Entity {
+/// An entity is simply a series of handles in one or more columns or tables.
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Entity {
+    // the direct index in the mesh_ids vector
     mesh: u32,
+
+    // the indirect index in the positions column
     position: u32,
+    // the indirect index in the rotations column
     rotation: u32,
+    _pad: u32,
 }
 
 #[derive(Debug, Default)]
 pub struct State {
     input: crate::InputSystem,
 
+    // immutable mesh IDs of GPU-side mesh data, loaded during init
     mesh_ids: Vec<mesh::Id>,
 
     positions: ParallelIndexArrayColumn<glam::Vec4>,
@@ -50,11 +58,14 @@ impl State {
         let position_id = self.positions.put(position.into());
         let rotation_id = self.rotations.put(rotation.into());
         let entity_id = self.entities.len();
+
         self.entities.push(Entity {
             mesh: mesh_handle as u32,
             position: position_id,
             rotation: rotation_id,
+            _pad: 0,
         });
+
         entity_id
     }
 
@@ -67,37 +78,64 @@ impl State {
     }
 
     pub fn upload(&mut self) {
-        self.command_queue.push(DrawArraysIndirectCommand {
-            count: 3,
-            instance_count: 1,
-            first_vertex: 0,
-            base_instance: 0,
+        self.entities.iter().for_each(|_| {
+            self.command_queue.push(DrawArraysIndirectCommand {
+                count: 3,
+                instance_count: 1,
+                first_vertex: 0,
+                base_instance: 0,
+            });
         });
 
         self.boundary.cross(|section, storage| {
-            let scene = &storage.scene;
             let index = section.as_index();
 
-            let i_positions = self.positions.handles();
-            let i_rotations = self.rotations.handles();
-            let positions = self.positions.contiguous();
-            let rotations = self.rotations.contiguous();
+            {
+                let scene = &storage.scene;
 
-            unsafe {
-                scene.blit_part(
-                    index,
-                    LayoutEntityData::ImapPositions as usize,
-                    i_positions,
-                    0,
-                );
-                scene.blit_part(
-                    index,
-                    LayoutEntityData::ImapRotations as usize,
-                    i_rotations,
-                    0,
-                );
-                scene.blit_part(index, LayoutEntityData::PodPositions as usize, positions, 0);
-                scene.blit_part(index, LayoutEntityData::PodRotations as usize, rotations, 0);
+                let entity_map = &self.entities;
+                let mesh_map = &self.mesh_ids;
+                let i_positions = self.positions.handles();
+                let i_rotations = self.rotations.handles();
+                let positions = self.positions.contiguous();
+                let rotations = self.rotations.contiguous();
+
+                unsafe {
+                    scene.blit_part(
+                        index,
+                        LayoutEntityData::EntityIndexMap as usize,
+                        entity_map,
+                        0,
+                    );
+                    scene.blit_part(index, LayoutEntityData::MeshData as usize, mesh_map, 0);
+
+                    scene.blit_part(
+                        index,
+                        LayoutEntityData::ImapPositions as usize,
+                        i_positions,
+                        0,
+                    );
+                    scene.blit_part(
+                        index,
+                        LayoutEntityData::ImapRotations as usize,
+                        i_rotations,
+                        0,
+                    );
+                    scene.blit_part(index, LayoutEntityData::PodPositions as usize, positions, 0);
+                    scene.blit_part(index, LayoutEntityData::PodRotations as usize, rotations, 0);
+                }
+            }
+
+            {
+                let command = &storage.command;
+                let mut data = command.view_section_mut(index);
+                if let Err(overflow) = self.command_queue().upload(&mut data) {
+                    event!(
+                        name: "render.command.upload.overflow",
+                        Level::WARN,
+                        "render command queue overflow during upload: {overflow} commands will not be processed"
+                    )
+                }
             }
         });
     }
@@ -125,15 +163,6 @@ impl State {
     pub fn input_mut(&mut self) -> &mut crate::InputSystem {
         &mut self.input
     }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct GpuEntityMapping {
-    mesh_id_index: u32,
-    position_index: u32,
-    rotation_index: u32,
-    _pad: u32,
 }
 
 impl janus::context::Update for State {
