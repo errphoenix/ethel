@@ -30,8 +30,15 @@ impl<const PARTS: usize> Layout<PARTS> {
         assert!(head < PARTS, "layout only permits {PARTS} partitions");
         let length = size_of::<T>() * count;
 
-        let alignment = unsafe { janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT } as usize;
-        let offset = (self.last + alignment - 1) & !(alignment - 1);
+        let partition_align = {
+            let ssbo_align =
+                unsafe { janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT } as usize;
+            let type_align = align_of::<T>();
+            let base_alignment = if type_align > 8 { 16 } else { type_align };
+            ssbo_align.max(base_alignment)
+        };
+        let offset = (self.last + partition_align - 1) & !(partition_align - 1);
+
         self.offsets[head] = offset;
         self.lengths[head] = length;
 

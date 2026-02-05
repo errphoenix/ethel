@@ -91,7 +91,7 @@ where
 
             for i in 0..3 {
                 janus::gl::NamedBufferStorage(gl_obj[i], total_size, std::ptr::null(), flags);
-                ptr[i] = janus::gl::MapNamedBuffer(gl_obj[i], janus::gl::READ_WRITE) as *mut T;
+                ptr[i] = janus::gl::MapNamedBufferRange(gl_obj[i], 0, total_size, flags) as *mut T;
             }
         }
 

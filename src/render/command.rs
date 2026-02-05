@@ -21,7 +21,7 @@ pub struct DrawElementsIndirectCommand {
     base_instance: u32,
 }
 
-pub trait DrawCmd {
+pub trait DrawCmd: std::fmt::Debug {
     fn call(draw_count: i32);
 }
 
@@ -108,7 +108,7 @@ impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
         let upload_size = remaining.min(self.fixed_buffer_len);
 
         let mut i = 0;
-        for j in head..upload_size {
+        for j in head..(head + upload_size) {
             buffer[i] = self.queue[j];
             i += 1;
         }
@@ -136,12 +136,15 @@ impl<'buf, C: DrawCmd + Clone + Copy> GpuCommandDispatch<'buf, C> {
     }
 
     pub fn dispatch(&self) {
-        let length = self.command_buffer.len();
+        // todo: pass count, somehow; maybe read from shared buffer
+        // would require making the command tri buffer a partitioned tri buffer
+
+        let len = self.command_buffer.len() as i32;
         let gl_obj = self.command_buffer.source();
 
         unsafe {
-            janus::gl::BindBuffer(janus::gl::DISPATCH_INDIRECT_BUFFER, gl_obj);
+            janus::gl::BindBuffer(janus::gl::DRAW_INDIRECT_BUFFER, gl_obj);
         }
-        C::call(length as i32);
+        C::call(len);
     }
 }
