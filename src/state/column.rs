@@ -193,7 +193,7 @@ where
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct IndexArrayColumn<T: Default> {
     /// These indices are guaranteed to be consistent and are never moved
     /// around to maintain cache locality.
@@ -214,6 +214,12 @@ pub struct IndexArrayColumn<T: Default> {
     free: Vec<u32>,
 }
 
+impl<T: Default> Default for IndexArrayColumn<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Default> IndexArrayColumn<T> {
     /// Create a blank new Column with a size of `1`.
     ///
@@ -222,7 +228,7 @@ impl<T: Default> IndexArrayColumn<T> {
         Self {
             indices: vec![0],
             contiguous: vec![Entry::default()],
-            ..Default::default()
+            free: Vec::new(),
         }
     }
 
@@ -240,7 +246,7 @@ impl<T: Default> IndexArrayColumn<T> {
         Self {
             indices: stable_indices,
             contiguous,
-            ..Default::default()
+            free: Vec::new(),
         }
     }
 }
@@ -310,7 +316,7 @@ impl<'iter, T: Default + 'iter> IterColumn<'iter, T, Entry<T>> for IndexArrayCol
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ArrayColumn<T: Default> {
     /// These indices are guaranteed to be consistent and are never moved
     /// around to maintain cache locality.
@@ -330,6 +336,12 @@ pub struct ArrayColumn<T: Default> {
     free: Vec<u32>,
 }
 
+impl<T: Default> Default for ArrayColumn<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Default> ArrayColumn<T> {
     /// Create a blank new Column with a size of `1`.
     ///
@@ -338,7 +350,7 @@ impl<T: Default> ArrayColumn<T> {
         Self {
             indices: vec![0],
             contiguous: vec![T::default()],
-            ..Default::default()
+            free: Vec::new(),
         }
     }
 
@@ -356,7 +368,7 @@ impl<T: Default> ArrayColumn<T> {
         Self {
             indices: stable_indices,
             contiguous,
-            ..Default::default()
+            free: Vec::new(),
         }
     }
 }
@@ -424,7 +436,7 @@ impl<'iter, T: Default + 'iter> IterColumn<'iter, T, T> for ArrayColumn<T> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ParallelIndexArrayColumn<T: Default> {
     /// These indices are guaranteed to be consistent and are never moved
     /// around to maintain cache locality.
@@ -448,6 +460,12 @@ pub struct ParallelIndexArrayColumn<T: Default> {
     owners: Vec<u32>,
 }
 
+impl<T: Default> Default for ParallelIndexArrayColumn<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Default> ParallelIndexArrayColumn<T> {
     /// Create a blank new Column with a size of `1`.
     ///
@@ -457,7 +475,7 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
             indices: vec![0],
             contiguous: vec![T::default()],
             owners: vec![0],
-            ..Default::default()
+            free: Vec::new(),
         }
     }
 
@@ -478,7 +496,7 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
             indices: stable_indices,
             contiguous,
             owners,
-            ..Default::default()
+            free: Vec::new(),
         }
     }
 

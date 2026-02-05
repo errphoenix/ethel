@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    ops::{Add, AddAssign},
+    time::{Duration, Instant},
+};
 
 use tracing::{Level, event};
 
@@ -169,8 +172,9 @@ impl State {
 
 impl janus::context::Update for State {
     fn update(&mut self, delta: janus::context::DeltaTime) {
-        self.input.poll_key_events();
+        let t0 = Instant::now();
 
+        self.input.poll_key_events();
         if self
             .input()
             .keys()

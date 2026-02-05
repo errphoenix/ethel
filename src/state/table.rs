@@ -736,7 +736,7 @@ macro_rules! table_spec {
                     $($rt,)+
                 );
 
-            #[derive(Default, Debug)]
+            #[derive(Debug)]
             pub struct [< $name RowTable >] {
                 indices: Vec<u32>,
                 free: Vec<u32>,
@@ -744,6 +744,12 @@ macro_rules! table_spec {
 
                 pub $row_0: Vec<$rt_0>,
                 pub $($row: Vec<$rt>,)+
+            }
+
+            impl Default for [< $name RowTable >] {
+                fn default() -> Self {
+                    Self::new()
+                }
             }
 
             impl $crate::state::column::SparseSlot for [< $name RowTable >] {
