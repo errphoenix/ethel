@@ -115,6 +115,10 @@ impl Resolution {
 /// Render state for the Janus rendering Context
 #[derive(Debug, Default)]
 pub struct Renderer {
+    // only used for rendering as sometimes opengl may refuse to draw anything
+    // without a vao bound during draw calls
+    render_vao: u32,
+
     mesh_buffer: ImmutableBuffer<2>,
     pub(crate) metadata: Meshadata,
 
@@ -181,6 +185,13 @@ const FOV: f32 = 80.0;
 
 impl janus::context::Draw for Renderer {
     fn draw(&mut self, delta: janus::context::DeltaTime) {
+        if self.render_vao == 0 {
+            unsafe {
+                janus::gl::GenVertexArrays(1, &mut self.render_vao);
+                janus::gl::BindVertexArray(self.render_vao);
+            }
+        }
+
         let t0 = Instant::now();
         unsafe {
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT);
@@ -228,6 +239,14 @@ impl janus::context::Draw for Renderer {
                     "gl error: {err}"
                 );
             }
+        }
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        unsafe {
+            janus::gl::DeleteVertexArrays(1, &self.render_vao);
         }
     }
 }
