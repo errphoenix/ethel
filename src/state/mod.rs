@@ -133,11 +133,13 @@ impl State {
                     event!(
                         name: "render.command.upload.overflow",
                         Level::WARN,
-                        "render command queue overflow during upload: {overflow} commands will not be processed"
-                    )
+                        "render command queue overflow during upload: {overflow} commands could not be uploaded and will be discarded"
+                    );
                 }
             }
         });
+
+        self.command_queue_mut().clear();
     }
 
     pub fn command_queue(&self) -> &GpuCommandQueue<crate::DrawCommand> {

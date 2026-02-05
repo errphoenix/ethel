@@ -10,7 +10,7 @@ use crate::{
     state::Entity,
 };
 
-pub const RENDER_STORAGE_PARTS: usize = 4;
+pub const RENDER_STORAGE_PARTS: usize = 6;
 pub const ENTITY_ALLOCATION: usize = 512;
 pub const COMMAND_QUEUE_ALLOC: usize = 64;
 

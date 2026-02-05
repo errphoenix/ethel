@@ -25,7 +25,7 @@ impl SyncBarrier {
         let mut bits = 0u8;
         for i in 0..3 {
             if let Some(fence) = self.fences[i].take() {
-                let fence_query = unsafe { janus::gl::ClientWaitSync(fence, 0, 0) };
+                let fence_query = unsafe { janus::gl::ClientWaitSync(fence, 0, 1) };
                 if fence_query == janus::gl::CONDITION_SATISFIED
                     || fence_query == janus::gl::ALREADY_SIGNALED
                 {

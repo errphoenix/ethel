@@ -127,6 +127,12 @@ impl<Storage> Cross<Consumer, Storage> {
         let section = self.boundary.current_section();
         self.boundary.sync(barrier);
         op(section, self.boundary.storage());
+
+        {
+            let fence = unsafe { janus::gl::FenceSync(janus::gl::SYNC_GPU_COMMANDS_COMPLETE, 0) };
+            barrier.set(section.as_index(), fence);
+        }
+
         self.boundary.sync(barrier);
     }
 }
