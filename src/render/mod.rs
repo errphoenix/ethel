@@ -36,6 +36,7 @@ pub(crate) fn projection_perspective(width: f32, height: f32, fov_degrees: f32) 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct Resolution {
+    dirty: bool,
     pub width: f32,
     pub height: f32,
 }
@@ -82,6 +83,10 @@ impl ViewPoint {
 }
 
 impl Resolution {
+    pub fn is_changed(&self) -> bool {
+        self.dirty
+    }
+
     pub fn width(&self) -> f32 {
         self.width
     }
@@ -94,6 +99,7 @@ impl Resolution {
         Resolution {
             width: self.width / 2f32,
             height: self.height / 2f32,
+            dirty: true,
         }
     }
 
@@ -101,6 +107,7 @@ impl Resolution {
         Resolution {
             width: self.width * 2f32,
             height: self.height * 2f32,
+            dirty: true,
         }
     }
 
@@ -108,6 +115,7 @@ impl Resolution {
         Resolution {
             width: self.width / 4f32,
             height: self.height / 4f32,
+            dirty: true,
         }
     }
 }
@@ -142,10 +150,6 @@ impl Renderer {
 
     pub fn resolution(&self) -> Resolution {
         self.resolution
-    }
-
-    pub fn set_resolution(&mut self, resolution: Resolution) {
-        self.resolution = resolution;
     }
 
     pub fn view(&self) -> &ViewPoint {
@@ -188,14 +192,24 @@ impl janus::context::Draw for Renderer {
         if self.render_vao == 0 {
             unsafe {
                 janus::gl::GenVertexArrays(1, &mut self.render_vao);
-                janus::gl::BindVertexArray(self.render_vao);
+            }
+        }
+        if self.resolution.is_changed() {
+            self.resolution.dirty = false;
+            let w = self.resolution.width as i32;
+            let h = self.resolution.height as i32;
+            println!("setting viewport to {w}, {h}");
+            unsafe {
+                janus::gl::Viewport(0, 0, w, h);
             }
         }
 
-        let t0 = Instant::now();
         unsafe {
+            janus::gl::ClearColor(1.0, 0.0, 0.0, 1.0);
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT);
         }
+
+        let t0 = Instant::now();
 
         {
             let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
@@ -240,6 +254,12 @@ impl janus::context::Draw for Renderer {
                 );
             }
         }
+    }
+
+    fn set_resolution(&mut self, (w, h): (f32, f32)) {
+        self.resolution.dirty = true;
+        self.resolution.width = w;
+        self.resolution.height = h;
     }
 }
 

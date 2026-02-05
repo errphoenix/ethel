@@ -153,10 +153,10 @@ impl<Storage> Cross<Producer, Storage> {
         F: Fn(StorageSection, &Storage),
     {
         let section = self.boundary.current_section().next();
-        if !self.boundary.sync_cache().has_lock(section) {
-            op(section, self.boundary.storage());
-            self.boundary.advance_section();
-        }
+
+        while self.boundary.sync_cache().has_lock(section) {}
+        op(section, self.boundary.storage());
+        self.boundary.advance_section();
     }
 }
 
