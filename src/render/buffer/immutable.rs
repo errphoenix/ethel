@@ -29,13 +29,20 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
                 gl_obj,
                 total_length,
                 std::ptr::null(),
-                janus::gl::MAP_WRITE_BIT,
+                janus::gl::MAP_WRITE_BIT | janus::gl::MAP_READ_BIT,
+            );
+            janus::gl::ClearNamedBufferData(
+                gl_obj,
+                janus::gl::R32UI,
+                janus::gl::RED_INTEGER,
+                janus::gl::UNSIGNED_INT,
+                0 as *const _,
             );
             janus::gl::MapNamedBufferRange(
                 gl_obj,
                 0,
                 total_length,
-                janus::gl::MAP_WRITE_BIT | janus::gl::MAP_INVALIDATE_BUFFER_BIT,
+                janus::gl::MAP_WRITE_BIT | janus::gl::MAP_READ_BIT,
             )
         } as *mut u8;
 
@@ -135,6 +142,15 @@ impl<const PARTS: usize> ImmutableBuffer<PARTS> {
             if let Some(binding) = self.layout.ssbo_of(part) {
                 let offset = self.layout.offset_at(part) as isize;
                 let length = self.layout.length_at(part) as isize;
+
+                #[cfg(debug_assertions)]
+                {
+                    let ssbo_align =
+                        unsafe { janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT } as isize;
+                    assert_eq!(offset % ssbo_align, 0);
+                    assert_eq!(length % ssbo_align, 0);
+                }
+
                 unsafe {
                     janus::gl::BindBufferRange(
                         janus::gl::SHADER_STORAGE_BUFFER,

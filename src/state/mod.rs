@@ -195,7 +195,11 @@ impl janus::context::Update for State {
         self.upload();
 
         let t1 = Instant::now();
-        //println!("logic thread time: {}", (t1 - t0).as_nanos());
+        println!(
+            "logic thread time: {} nanos / FPS: {}",
+            (t1 - t0).as_nanos(),
+            (1_000_000_000 / (t1 - t0).as_nanos())
+        );
     }
 
     fn step_duration(&self) -> std::time::Duration {

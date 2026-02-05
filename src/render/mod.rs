@@ -2,18 +2,14 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use glam::{Mat4, Vec4Swizzles};
 
 use crate::{
-    FrameStorageBuffers, RENDER_STORAGE_PARTS,
+    FrameStorageBuffers,
     mesh::Meshadata,
-    render::{
-        buffer::{ImmutableBuffer, partitioned::PartitionedTriBuffer},
-        command::{DrawArraysIndirectCommand, GpuCommandDispatch, GpuCommandQueue},
-        sync::SyncBarrier,
-    },
+    render::{buffer::ImmutableBuffer, command::GpuCommandDispatch, sync::SyncBarrier},
     shader::ShaderHandle,
     state::cross::{Consumer, Cross},
 };
@@ -192,20 +188,21 @@ impl janus::context::Draw for Renderer {
         if self.render_vao == 0 {
             unsafe {
                 janus::gl::GenVertexArrays(1, &mut self.render_vao);
+                janus::gl::BindVertexArray(self.render_vao);
             }
         }
         if self.resolution.is_changed() {
             self.resolution.dirty = false;
             let w = self.resolution.width as i32;
             let h = self.resolution.height as i32;
-            println!("setting viewport to {w}, {h}");
+
             unsafe {
                 janus::gl::Viewport(0, 0, w, h);
             }
         }
 
         unsafe {
-            janus::gl::ClearColor(1.0, 0.0, 0.0, 1.0);
+            janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT);
         }
 
@@ -234,7 +231,11 @@ impl janus::context::Draw for Renderer {
 
         let t1 = Instant::now();
 
-        //println!("render thread time: {}", (t1 - t0).as_nanos());
+        println!(
+            "render thread time: {} nanos / FPS: {}",
+            (t1 - t0).as_nanos(),
+            (1_000_000_000 / (t1 - t0).as_nanos())
+        );
 
         #[cfg(debug_assertions)]
         {

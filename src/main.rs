@@ -4,7 +4,7 @@ use ethel::{
     FrameStorageBuffers, LayoutEntityData,
     mesh::{LayoutMeshStorage, MeshStaging, Vertex},
     render::{
-        Renderer, Resolution,
+        Renderer,
         buffer::{self, InitStrategy, TriBuffer, partitioned::PartitionedTriBuffer},
         command::GpuCommandQueue,
     },
@@ -16,7 +16,7 @@ use janus::window::DisplayParameters;
 fn main() {
     tracing_subscriber::FmtSubscriber::builder().init();
 
-    let display_params = DisplayParameters::windowed("ethel", 1920, 1080);
+    let display_params = DisplayParameters::fullscreen("ethel");
     let (input_state, input_dispatch) = janus::input::stream();
 
     let ctx = janus::context::Context::new(
@@ -100,16 +100,6 @@ fn setup(
 
     {
         *state.command_queue_mut() = GpuCommandQueue::new(ethel::COMMAND_QUEUE_ALLOC);
-    }
-
-    renderer.set_resolution(Resolution {
-        width: 1280f32,
-        height: 720f32,
-    });
-
-    unsafe {
-        janus::gl::Viewport(0, 0, 1280, 720);
-        janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     }
     Ok(())
 }

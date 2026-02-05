@@ -58,6 +58,8 @@ pub(crate) use assert_tb_section;
 pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
+
+    // per each section
     capacity: usize,
 
     _marker: std::marker::PhantomData<T>,
@@ -136,6 +138,13 @@ where
     /// If `section` is not a value within the range (0, 2).
     pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize) {
         assert_tb_section!(section);
+
+        #[cfg(debug_assertions)]
+        {
+            let ssbo_align =
+                unsafe { janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT } as usize;
+            assert_eq!(self.capacity % ssbo_align, 0)
+        }
 
         unsafe {
             janus::gl::BindBufferBase(
