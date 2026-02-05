@@ -76,6 +76,7 @@ impl Deref for Meshadata {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
 pub struct Vertex {
     pub position: [f32; 4],
