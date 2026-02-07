@@ -11,8 +11,8 @@ use crate::{
 };
 
 pub const RENDER_STORAGE_PARTS: usize = 6;
-pub const ENTITY_ALLOCATION: usize = 512;
-pub const COMMAND_QUEUE_ALLOC: usize = 64;
+pub const ENTITY_ALLOCATION: usize = 1024;
+pub const COMMAND_QUEUE_ALLOC: usize = 1024;
 
 pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::SECTION_COUNT }>;
 

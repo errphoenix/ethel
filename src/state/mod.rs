@@ -1,7 +1,4 @@
-use std::{
-    ops::{Add, AddAssign},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use tracing::{Level, event};
 
@@ -188,7 +185,6 @@ impl janus::context::Update for State {
             );
         }
 
-        let t0 = Instant::now();
         self.rotations.iter_mut().for_each(|rot| {
             *rot = rot.mul_quat(glam::Quat::from_axis_angle(
                 glam::Vec3::Y,
