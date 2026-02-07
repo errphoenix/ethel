@@ -65,6 +65,17 @@ uniform mat4 u_view;
 out vec3 fs_world;
 out vec3 fs_normal;
 
+vec4 mulQuat(vec4 q0, vec4 q1);
+
+vec3 rotateQuat(vec3 p, vec4 q) {
+    vec4 q_conj = vec4(-q.x, -q.y, -q.z, q.w);
+    vec4 p4 = vec4(p, 1.0);
+
+    vec4 r = mulQuat(q, p4);
+    r = mulQuat(r, q_conj);
+    return r.xyz;
+}
+
 void main() {
     Entity mapping = entities[gl_DrawID];
     uint mesh_id_index = mapping.mesh_index;
@@ -80,14 +91,23 @@ void main() {
     uint index = offset + gl_VertexID;
 
     Vertex vertex = vertex_storage[index];
-    vec3 local = vertex.position.xyz;
+    vec3 model = vertex.position.xyz;
     vec3 normal = vertex.normal.xyz;
 
-    //todo: apply rotation quaternion
+    vec3 local = rotateQuat(model, rotation);
     vec4 world = vec4(local + position, 1.0);
 
     fs_world = world.xyz;
     fs_normal = normal;
     
     gl_Position = u_projection * u_view * world;
+}
+
+vec4 mulQuat(vec4 q0, vec4 q1) {
+    vec4 r;
+    r.x = (q0.w * q1.x) + (q0.x * q1.w) + (q0.y * q1.z) - (q0.z * q1.y);
+    r.y = (q0.w * q1.y) - (q0.x * q1.z) + (q0.y * q1.w) + (q0.z * q1.x);
+    r.z = (q0.w * q1.z) + (q0.x * q1.y) - (q0.y * q1.x) + (q0.z * q1.w);
+    r.w = (q0.w * q1.w) - (q0.x * q1.x) - (q0.y * q1.y) - (q0.z * q1.z);
+    return r;
 }

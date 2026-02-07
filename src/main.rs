@@ -35,6 +35,7 @@ fn setup(
 ) -> Result<(), &'static str> {
     *state.input_mut() = input_state;
 
+    // Test mesh data
     {
         let triangle = [
             Vertex {
@@ -69,6 +70,7 @@ fn setup(
         *state.global_mesh_storage_mut() = vec![triangle];
     }
 
+    // Test scene
     {
         // todo: handle mesh id handles properly
 
@@ -80,7 +82,12 @@ fn setup(
         state.create_entity(0, (-5.0, 2.0, 0.0, 1.0), glam::Quat::IDENTITY);
         state.create_entity(0, (0.0, 2.0, -1.0, 1.0), glam::Quat::IDENTITY);
     }
-
+    // Camera sync-mirror
+    {
+        let camera_mirror = state.viewpoint_mirror().clone();
+        *renderer.viewpoint_mirror_mut() = camera_mirror;
+    }
+    // Triple buffered cross-thread synchronisation boundary
     {
         let command = TriBuffer::new_zeroed(ethel::COMMAND_QUEUE_ALLOC, InitStrategy::Zero);
         let scene = PartitionedTriBuffer::new(LayoutEntityData::create());
@@ -91,13 +98,14 @@ fn setup(
         *state.boundary_mut() = producer;
         *renderer.boundary_mut() = consumer;
     }
+    // Shaders
     {
         let mut vsh = BufReader::new(include_bytes!("shader/base.vsh").as_slice());
         let mut fsh = BufReader::new(include_bytes!("shader/base.fsh").as_slice());
         let shader = ShaderHandle::new(&mut vsh, &mut fsh);
         renderer.set_shader_handle(shader);
     }
-
+    // Draw commands queue
     {
         *state.command_queue_mut() = GpuCommandQueue::new(ethel::COMMAND_QUEUE_ALLOC);
     }

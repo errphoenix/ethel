@@ -179,12 +179,22 @@ impl Renderer {
     pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, FrameStorageBuffers> {
         &mut self.boundary
     }
+
+    pub fn viewpoint_mirror(&self) -> &Mirror<ViewPoint> {
+        &self.view
+    }
+
+    pub fn viewpoint_mirror_mut(&mut self) -> &mut Mirror<ViewPoint> {
+        &mut self.view
+    }
 }
 
 const FOV: f32 = 80.0;
 
 impl janus::context::Draw for Renderer {
-    fn draw(&mut self, delta: janus::context::DeltaTime) {
+    fn draw(&mut self, _delta: janus::context::DeltaTime) {
+        let t0 = Instant::now();
+
         if self.render_vao == 0 {
             unsafe {
                 janus::gl::GenVertexArrays(1, &mut self.render_vao);
@@ -239,6 +249,7 @@ impl janus::context::Draw for Renderer {
 
         #[cfg(debug_assertions)]
         {
+            #[allow(unused_assignments)]
             let mut err = 0;
             loop {
                 use tracing::Level;
