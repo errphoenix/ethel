@@ -1,10 +1,14 @@
 use std::time::{Duration, Instant};
 
+use janus::sync::Mirror;
 use tracing::{Level, event};
 
 use crate::{
     FrameStorageBuffers, LayoutEntityData, mesh,
-    render::command::{DrawArraysIndirectCommand, GpuCommandQueue},
+    render::{
+        ViewPoint,
+        command::{DrawArraysIndirectCommand, GpuCommandQueue},
+    },
     state::{
         column::{Column, IterColumn, ParallelIndexArrayColumn},
         cross::{Cross, Producer},
@@ -36,6 +40,7 @@ pub struct State {
     // immutable mesh IDs of GPU-side mesh data, loaded during init
     mesh_ids: Vec<mesh::Id>,
 
+    view: Mirror<ViewPoint>,
     positions: ParallelIndexArrayColumn<glam::Vec4>,
     rotations: ParallelIndexArrayColumn<glam::Quat>,
 
@@ -165,6 +170,14 @@ impl State {
     pub fn input_mut(&mut self) -> &mut crate::InputSystem {
         &mut self.input
     }
+
+    pub fn viewpoint_mirror(&self) -> &Mirror<ViewPoint> {
+        &self.view
+    }
+
+    pub fn viewpoint_mirror_mut(&mut self) -> &mut Mirror<ViewPoint> {
+        &mut self.view
+    }
 }
 
 impl janus::context::Update for State {
@@ -172,23 +185,24 @@ impl janus::context::Update for State {
         let t0 = Instant::now();
 
         self.input.poll_key_events();
-        if self
-            .input()
-            .keys()
-            .mouse_down(janus::input::MouseButton::Left)
         {
-            println!(
-                "{}",
-                self.input()
-                    .keys()
-                    .mouse_frames_held(janus::input::MouseButton::Left)
-            );
+            let _ = self.view.sync();
+
+            let (dx, dy) = self.input.cursor().delta_f32();
+            let (dx, dy) = (dx.to_radians(), dy.to_radians());
+
+            self.view.publish_with(|vp| {
+                let x_rot = glam::Affine3A::from_rotation_x(dy);
+                let y_rot = glam::Affine3A::from_rotation_y(dx);
+                **vp = (**vp) * y_rot; // global
+                **vp = x_rot * (**vp); // local
+            });
         }
 
         self.rotations.iter_mut().for_each(|rot| {
             *rot = rot.mul_quat(glam::Quat::from_axis_angle(
                 glam::Vec3::Y,
-                delta.as_f32() * 10f32,
+                delta.as_f32() * 0.5f32,
             ));
         });
 

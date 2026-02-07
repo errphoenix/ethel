@@ -4,7 +4,8 @@ pub mod sync;
 
 use std::time::Instant;
 
-use glam::{Mat4, Vec4Swizzles};
+use glam::{Mat4, Vec3Swizzles, Vec4Swizzles};
+use janus::sync::Mirror;
 
 use crate::{
     FrameStorageBuffers,
@@ -39,7 +40,31 @@ pub struct Resolution {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ViewPoint {
-    transform: glam::Mat4,
+    transform: glam::Affine3A,
+}
+
+impl std::ops::Deref for ViewPoint {
+    type Target = glam::Affine3A;
+
+    fn deref(&self) -> &Self::Target {
+        &self.transform
+    }
+}
+
+impl std::ops::DerefMut for ViewPoint {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.transform
+    }
+}
+
+impl std::ops::Mul<glam::Quat> for ViewPoint {
+    type Output = ViewPoint;
+
+    fn mul(self, rhs: glam::Quat) -> Self::Output {
+        ViewPoint {
+            transform: self.transform * glam::Affine3A::from_quat(rhs),
+        }
+    }
 }
 
 impl ViewPoint {
@@ -49,11 +74,11 @@ impl ViewPoint {
 
     pub fn from_position(pos: glam::Vec3) -> Self {
         Self {
-            transform: glam::Mat4::from_translation(-pos),
+            transform: glam::Affine3A::from_translation(-pos),
         }
     }
 
-    pub fn replace_transform(&mut self, transform: glam::Mat4) -> glam::Mat4 {
+    pub fn replace_transform(&mut self, transform: glam::Affine3A) -> glam::Affine3A {
         std::mem::replace(&mut self.transform, transform)
     }
 
@@ -61,20 +86,20 @@ impl ViewPoint {
         self.transform.to_scale_rotation_translation()
     }
 
-    pub fn translation(&self) -> glam::Vec3 {
-        self.transform.w_axis.xyz()
+    pub fn translation(&self) -> glam::Vec3A {
+        self.transform.translation
     }
 
-    pub fn translation_mut(&mut self) -> &mut glam::Vec4 {
-        &mut self.transform.w_axis
-    }
-
-    pub fn transform(&self) -> &glam::Mat4 {
+    pub fn transform(&self) -> &glam::Affine3A {
         &self.transform
     }
 
-    pub fn transform_mut(&mut self) -> &mut glam::Mat4 {
+    pub fn transform_mut(&mut self) -> &mut glam::Affine3A {
         &mut self.transform
+    }
+
+    pub fn into_mat4(self) -> glam::Mat4 {
+        glam::Mat4::from(self.transform)
     }
 }
 
@@ -127,7 +152,7 @@ pub struct Renderer {
     pub(crate) metadata: Meshadata,
 
     resolution: Resolution,
-    pub(crate) view: ViewPoint,
+    view: Mirror<ViewPoint>,
 
     shader: ShaderHandle,
 
@@ -150,10 +175,6 @@ impl Renderer {
 
     pub fn view(&self) -> &ViewPoint {
         &self.view
-    }
-
-    pub fn view_mut(&mut self) -> &mut ViewPoint {
-        &mut self.view
     }
 
     pub fn metadata(&self) -> &Meshadata {
@@ -213,17 +234,17 @@ impl janus::context::Draw for Renderer {
 
         unsafe {
             janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT);
+            janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
         }
 
-        let t0 = Instant::now();
-
         {
-            let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
-            let view_transform = self.view.transform;
             self.shader.bind();
-            self.shader.uniform_mat4_glam("u_view", view_transform);
+            let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
             self.shader.uniform_mat4_glam("u_projection", proj);
+
+            let _ = self.view.sync();
+            let view_mat = self.view.into_mat4();
+            self.shader.uniform_mat4_glam("u_view", view_mat);
         }
 
         //todo
