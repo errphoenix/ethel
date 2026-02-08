@@ -72,8 +72,8 @@ impl<T> TriBuffer<T>
 where
     T: Sized + Clone + Copy,
 {
-    pub fn new_zeroed(capacity: usize, init: InitStrategy<T, fn() -> T>) -> Self {
-        Self::new(capacity, init)
+    pub fn zeroed(capacity: usize) -> Self {
+        Self::new(capacity, InitStrategy::<T, fn() -> T>::Zero)
     }
 
     pub fn new<F: Fn() -> T>(capacity: usize, init: InitStrategy<T, F>) -> Self {

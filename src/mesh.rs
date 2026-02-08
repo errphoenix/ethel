@@ -1,7 +1,5 @@
 use std::ops::Deref;
 
-use crate::layout_buffer;
-
 /// The ID that represents a Mesh present on GPU memory, from the CPU.
 ///
 /// It is used to link objects or "renderables" to a mesh that is present on
@@ -26,6 +24,9 @@ pub struct Metadata {
     pub(crate) length: u32,
 }
 
+const INITIAL_MESH_ALLOC: usize = 16;
+const INITIAL_VERTEX_ALLOC: usize = INITIAL_MESH_ALLOC * 8;
+
 #[derive(Default, Clone, Debug)]
 pub struct Meshadata {
     metadata: Vec<Metadata>,
@@ -35,7 +36,7 @@ pub struct Meshadata {
 impl Meshadata {
     pub fn new() -> Self {
         Self {
-            metadata: Vec::with_capacity(MESH_COUNT),
+            metadata: Vec::with_capacity(INITIAL_MESH_ALLOC),
             head: 0,
         }
     }
@@ -83,23 +84,31 @@ pub struct Vertex {
     pub normal: [f32; 4],
 }
 
-pub const VERTEX_STORAGE_ALLOCATION: usize = 512;
-pub const MESH_COUNT: usize = 128;
+pub(crate) const BUFFER_VERTEX_STORAGE_INDEX: usize = 0;
+pub(crate) const BUFFER_MESH_META_INDEX: usize = 1;
 
-layout_buffer! {
-    const MeshStorage: 2, {
-        enum vertex_storage: VERTEX_STORAGE_ALLOCATION => {
-            type Vertex;
-            bind 0;
-            shader 10;
-        };
+#[macro_export]
+macro_rules! layout_mesh_buffer {
+    (count: $mc:expr; vertices: $vc:expr) => {
+        layout_mesh_buffer!(MeshStorage; count: $mc; vertices: $vc);
+    };
+    ($name:ident; count: $mc:expr; vertices: $vc:expr) => {
+        layout_buffer! {
+            const $name: 2, {
+                enum vertex_storage: $vc => {
+                    type $crate::mesh::Vertex;
+                    bind 0;
+                    shader 10;
+                };
 
-        enum metadata: MESH_COUNT => {
-            type Metadata;
-            bind 1;
-            shader 11;
-        };
-    }
+                enum metadata: $mc => {
+                    type $crate::mesh::Metadata;
+                    bind 1;
+                    shader 11;
+                };
+            }
+        }
+    };
 }
 
 #[derive(Debug)]
@@ -112,7 +121,7 @@ impl MeshStaging {
     pub fn new() -> Self {
         Self {
             metadata: Meshadata::new(),
-            vertex_storage: Vec::with_capacity(VERTEX_STORAGE_ALLOCATION),
+            vertex_storage: Vec::with_capacity(INITIAL_VERTEX_ALLOC),
         }
     }
 

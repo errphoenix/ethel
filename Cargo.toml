@@ -6,11 +6,8 @@ edition = "2024"
 [dependencies]
 glam = "0.30.10"
 janus = { path = "../janus", features = ["expose_gl", "render", "input"] }
-log = "0.4.29"
 paste = "1.0.15"
-rapier3d = "0.32.0"
 tracing = "0.1.44"
-tracing-subscriber = "0.3.22"
 
 [dev-dependencies]
 criterion = "0.8.1"

@@ -2,15 +2,12 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
-use std::time::Instant;
-
 use janus::sync::Mirror;
 
 use crate::{
-    FrameStorageBuffers,
+    RenderHandler,
     mesh::Meshadata,
-    render::{buffer::ImmutableBuffer, command::GpuCommandDispatch, sync::SyncBarrier},
-    shader::ShaderHandle,
+    render::{buffer::ImmutableBuffer, sync::SyncBarrier},
     state::{
         camera::ViewPoint,
         cross::{Consumer, Cross},
@@ -25,11 +22,11 @@ const ORTHO_NEAR: f32 = 0.0;
 const ORTHO_FAR: f32 = 2.0;
 const PERSP_NEAR: f32 = 0.1;
 
-pub(crate) fn projection_orthographic(width: f32, height: f32) -> glam::Mat4 {
+pub fn projection_orthographic(width: f32, height: f32) -> glam::Mat4 {
     glam::Mat4::orthographic_rh_gl(0.0, width, height, 0.0, ORTHO_NEAR, ORTHO_FAR)
 }
 
-pub(crate) fn projection_perspective(width: f32, height: f32, fov_degrees: f32) -> glam::Mat4 {
+pub fn projection_perspective(width: f32, height: f32, fov_degrees: f32) -> glam::Mat4 {
     glam::Mat4::perspective_infinite_reverse_rh(
         fov_degrees.to_radians(),
         width / height,
@@ -84,24 +81,24 @@ impl Resolution {
 
 /// Render state for the Janus rendering Context
 #[derive(Debug, Default)]
-pub struct Renderer {
+pub struct Renderer<D: Sized, T: RenderHandler<D>> {
     // only used for rendering as sometimes opengl may refuse to draw anything
     // without a vao bound during draw calls
     render_vao: u32,
 
     mesh_buffer: ImmutableBuffer<2>,
-    pub(crate) metadata: Meshadata,
+    metadata: Meshadata,
 
     resolution: Resolution,
     view: Mirror<ViewPoint>,
 
-    shader: ShaderHandle,
+    pub(crate) handler: T,
 
     sync_barrier: SyncBarrier,
-    boundary: Cross<Consumer, FrameStorageBuffers>,
+    boundary: Cross<Consumer, D>,
 }
 
-impl Renderer {
+impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
     pub fn mesh_buffer(&self) -> &ImmutableBuffer<2> {
         &self.mesh_buffer
     }
@@ -126,19 +123,11 @@ impl Renderer {
         &mut self.metadata
     }
 
-    pub fn shader_handle(&self) -> &ShaderHandle {
-        &self.shader
-    }
-
-    pub fn set_shader_handle(&mut self, shader: ShaderHandle) {
-        self.shader = shader;
-    }
-
-    pub fn boundary(&self) -> &Cross<Consumer, FrameStorageBuffers> {
+    pub fn boundary(&self) -> &Cross<Consumer, D> {
         &self.boundary
     }
 
-    pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, FrameStorageBuffers> {
+    pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, D> {
         &mut self.boundary
     }
 
@@ -151,12 +140,8 @@ impl Renderer {
     }
 }
 
-const FOV: f32 = 80.0;
-
-impl janus::context::Draw for Renderer {
-    fn draw(&mut self, _delta: janus::context::DeltaTime) {
-        let t0 = Instant::now();
-
+impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
+    fn draw(&mut self, dt: janus::context::DeltaTime) {
         if self.render_vao == 0 {
             unsafe {
                 janus::gl::GenVertexArrays(1, &mut self.render_vao);
@@ -173,41 +158,12 @@ impl janus::context::Draw for Renderer {
             }
         }
 
-        unsafe {
-            janus::gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            janus::gl::Clear(janus::gl::COLOR_BUFFER_BIT | janus::gl::DEPTH_BUFFER_BIT);
-        }
-
-        {
-            self.shader.bind();
-            let proj = projection_perspective(self.resolution.width, self.resolution.height, FOV);
-            self.shader.uniform_mat4_glam("u_projection", proj);
-
-            let _ = self.view.sync();
-            let view_mat = self.view.into_mat4();
-            self.shader.uniform_mat4_glam("u_view", view_mat);
-        }
-
-        //todo
-
+        self.handler.pre_frame(self.resolution, &mut self.view, dt);
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
                 self.mesh_buffer.bind_shader_storage();
-
-                let scene = &storage.scene;
-                scene.bind_shader_storage(section.as_index());
-
-                let cmd = storage.command.view_section(section.as_index());
-                GpuCommandDispatch::from_view(cmd).dispatch();
+                self.handler.render_frame(&storage, section);
             });
-
-        let t1 = Instant::now();
-
-        println!(
-            "render thread time: {} nanos / FPS: {}",
-            (t1 - t0).as_nanos(),
-            (1_000_000_000 / (t1 - t0).as_nanos())
-        );
 
         #[cfg(debug_assertions)]
         {
@@ -237,7 +193,7 @@ impl janus::context::Draw for Renderer {
     }
 }
 
-impl Drop for Renderer {
+impl<D: Sized, T: RenderHandler<D>> Drop for Renderer<D, T> {
     fn drop(&mut self) {
         unsafe {
             janus::gl::DeleteVertexArrays(1, &self.render_vao);

@@ -1,15 +1,11 @@
-use std::time::{Duration, Instant};
-
 use janus::sync::Mirror;
-use tracing::{Level, event};
 
 use crate::{
-    FrameStorageBuffers, LayoutEntityData, mesh,
-    render::command::{DrawArraysIndirectCommand, GpuCommandQueue},
+    StateHandler,
+    render::command::GpuCommandQueue,
     state::{
         camera::ViewPoint,
         cross::{Cross, Producer},
-        data::{Column, ParallelIndexArrayColumn, column::IterColumn},
     },
 };
 
@@ -17,150 +13,38 @@ pub mod camera;
 pub mod cross;
 pub mod data;
 
-/// An entity is simply a series of handles in one or more columns or tables.
-#[repr(C, align(16))]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Entity {
-    // the direct index in the mesh_ids vector
-    mesh: u32,
-
-    // the indirect index in the positions column
-    position: u32,
-    // the indirect index in the rotations column
-    rotation: u32,
-    _pad: u32,
-}
-
 #[derive(Debug, Default)]
-pub struct State {
+pub struct State<D: Sized, T: StateHandler<D>> {
     input: crate::InputSystem,
 
-    // immutable mesh IDs of GPU-side mesh data, loaded during init
-    mesh_ids: Vec<mesh::Id>,
-
-    camera: camera::Orbital,
     view: Mirror<ViewPoint>,
+    handler: T,
 
-    positions: ParallelIndexArrayColumn<glam::Vec4>,
-    rotations: ParallelIndexArrayColumn<glam::Quat>,
-
-    entities: Vec<Entity>,
-
-    boundary: Cross<Producer, FrameStorageBuffers>,
-    command_queue: GpuCommandQueue<crate::DrawCommand>,
+    boundary: Cross<Producer, D>,
+    cmd_queue: GpuCommandQueue<crate::DrawCommand>,
 }
 
-impl State {
-    // todo: change to return an entity handle to wrap around raw index
-    // and maybe generation
-    pub fn create_entity(
-        &mut self,
-        // should likely pass a "mesh name" or handle instead instead of raw index
-        mesh_handle: usize,
-        position: impl Into<glam::Vec4>,
-        rotation: impl Into<glam::Quat>,
-    ) -> usize {
-        let position_id = self.positions.put(position.into());
-        let rotation_id = self.rotations.put(rotation.into());
-        let entity_id = self.entities.len();
+pub(crate) const DEFAULT_STEP: std::time::Duration = std::time::Duration::from_millis(8);
 
-        self.entities.push(Entity {
-            mesh: mesh_handle as u32,
-            position: position_id,
-            rotation: rotation_id,
-            _pad: 0,
-        });
-
-        entity_id
-    }
-
-    pub fn boundary(&self) -> &Cross<Producer, FrameStorageBuffers> {
+impl<D: Sized, T: StateHandler<D>> State<D, T> {
+    pub fn boundary(&self) -> &Cross<Producer, D> {
         &self.boundary
     }
 
-    pub fn boundary_mut(&mut self) -> &mut Cross<Producer, FrameStorageBuffers> {
+    pub fn boundary_mut(&mut self) -> &mut Cross<Producer, D> {
         &mut self.boundary
     }
 
     pub fn upload(&mut self) {
-        self.entities.iter().for_each(|_| {
-            self.command_queue.push(DrawArraysIndirectCommand {
-                count: 3,
-                instance_count: 1,
-                first_vertex: 0,
-                base_instance: 0,
-            });
-        });
-
-        self.boundary.cross(|section, storage| {
-            let index = section.as_index();
-
-            {
-                let scene = &storage.scene;
-
-                let entity_map = &self.entities;
-                let mesh_map = &self.mesh_ids;
-                let i_positions = self.positions.handles();
-                let i_rotations = self.rotations.handles();
-                let positions = self.positions.contiguous();
-                let rotations = self.rotations.contiguous();
-
-                unsafe {
-                    scene.blit_part(
-                        index,
-                        LayoutEntityData::EntityIndexMap as usize,
-                        entity_map,
-                        0,
-                    );
-                    scene.blit_part(index, LayoutEntityData::MeshData as usize, mesh_map, 0);
-
-                    scene.blit_part(
-                        index,
-                        LayoutEntityData::ImapPositions as usize,
-                        i_positions,
-                        0,
-                    );
-                    scene.blit_part(
-                        index,
-                        LayoutEntityData::ImapRotations as usize,
-                        i_rotations,
-                        0,
-                    );
-                    scene.blit_part(index, LayoutEntityData::PodPositions as usize, positions, 0);
-                    scene.blit_part(index, LayoutEntityData::PodRotations as usize, rotations, 0);
-                }
-            }
-
-            {
-                let command = &storage.command;
-                let mut data = command.view_section_mut(index);
-                if let Err(overflow) = self.command_queue().upload(&mut data) {
-                    event!(
-                        name: "render.command.upload.overflow",
-                        Level::WARN,
-                        "render command queue overflow during upload: {overflow} commands could not be uploaded and will be discarded"
-                    );
-                }
-            }
-        });
-
-        self.command_queue_mut().clear();
+        self.handler.upload_gpu(&self.boundary, &mut self.cmd_queue);
     }
 
     pub fn command_queue(&self) -> &GpuCommandQueue<crate::DrawCommand> {
-        &self.command_queue
+        &self.cmd_queue
     }
 
     pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<crate::DrawCommand> {
-        &mut self.command_queue
-    }
-
-    pub fn global_mesh_storage(&self) -> &[mesh::Id] {
-        &self.mesh_ids
-    }
-
-    pub fn global_mesh_storage_mut(&mut self) -> &mut Vec<mesh::Id> {
-        &mut self.mesh_ids
+        &mut self.cmd_queue
     }
 
     pub fn input(&self) -> &crate::InputSystem {
@@ -180,53 +64,22 @@ impl State {
     }
 }
 
-impl janus::context::Update for State {
+impl<D: Sized, T: StateHandler<D>> janus::context::Update for State<D, T> {
+    #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
-        let t0 = Instant::now();
-
         self.input.poll_key_events();
-        {
-            let _ = self.view.sync();
-
-            let (dx, dy) = self.input.cursor().delta_f32();
-            let (dx, dy) = (dx.to_radians(), dy.to_radians());
-            self.camera.update(dx, dy);
-
-            let dw = *self.input.mouse_wheel();
-            *self.camera.distance_mut() -= dw;
-
-            self.view.publish_with(|vp| {
-                *vp = *self.camera.viewpoint();
-            });
-        }
-
-        self.rotations.iter_mut().for_each(|rot| {
-            *rot = rot.mul_quat(glam::Quat::from_axis_angle(
-                glam::Vec3::Y,
-                delta.as_f32() * 0.5f32,
-            ));
-        });
-
+        self.handler.step(&self.input, &mut self.view, delta);
         self.upload();
-
-        let t1 = Instant::now();
-        println!(
-            "logic thread time: {} nanos / FPS: {}",
-            (t1 - t0).as_nanos(),
-            (1_000_000_000 / (t1 - t0).as_nanos())
-        );
     }
 
+    #[inline]
     fn step_duration(&self) -> std::time::Duration {
-        //todo
-        Duration::from_millis(6)
+        self.handler.step_duration()
     }
 
-    fn set_step_duration(&mut self, _step: std::time::Duration) {
-        //todo
-    }
-
+    #[inline]
     fn new_frame(&mut self) {
         self.input.sync();
+        self.handler.on_new_frame();
     }
 }
