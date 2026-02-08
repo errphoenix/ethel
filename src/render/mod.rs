@@ -4,7 +4,6 @@ pub mod sync;
 
 use std::time::Instant;
 
-use glam::{Mat4, Vec3Swizzles, Vec4Swizzles};
 use janus::sync::Mirror;
 
 use crate::{
@@ -12,7 +11,10 @@ use crate::{
     mesh::Meshadata,
     render::{buffer::ImmutableBuffer, command::GpuCommandDispatch, sync::SyncBarrier},
     shader::ShaderHandle,
-    state::cross::{Consumer, Cross},
+    state::{
+        camera::ViewPoint,
+        cross::{Consumer, Cross},
+    },
 };
 
 pub trait GlPropertyEnum {
@@ -23,12 +25,16 @@ const ORTHO_NEAR: f32 = 0.0;
 const ORTHO_FAR: f32 = 2.0;
 const PERSP_NEAR: f32 = 0.1;
 
-pub(crate) fn projection_orthographic(width: f32, height: f32) -> Mat4 {
-    Mat4::orthographic_rh_gl(0.0, width, height, 0.0, ORTHO_NEAR, ORTHO_FAR)
+pub(crate) fn projection_orthographic(width: f32, height: f32) -> glam::Mat4 {
+    glam::Mat4::orthographic_rh_gl(0.0, width, height, 0.0, ORTHO_NEAR, ORTHO_FAR)
 }
 
-pub(crate) fn projection_perspective(width: f32, height: f32, fov_degrees: f32) -> Mat4 {
-    Mat4::perspective_infinite_reverse_rh(fov_degrees.to_radians(), width / height, PERSP_NEAR)
+pub(crate) fn projection_perspective(width: f32, height: f32, fov_degrees: f32) -> glam::Mat4 {
+    glam::Mat4::perspective_infinite_reverse_rh(
+        fov_degrees.to_radians(),
+        width / height,
+        PERSP_NEAR,
+    )
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
@@ -36,71 +42,6 @@ pub struct Resolution {
     dirty: bool,
     pub width: f32,
     pub height: f32,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ViewPoint {
-    transform: glam::Affine3A,
-}
-
-impl std::ops::Deref for ViewPoint {
-    type Target = glam::Affine3A;
-
-    fn deref(&self) -> &Self::Target {
-        &self.transform
-    }
-}
-
-impl std::ops::DerefMut for ViewPoint {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.transform
-    }
-}
-
-impl std::ops::Mul<glam::Quat> for ViewPoint {
-    type Output = ViewPoint;
-
-    fn mul(self, rhs: glam::Quat) -> Self::Output {
-        ViewPoint {
-            transform: self.transform * glam::Affine3A::from_quat(rhs),
-        }
-    }
-}
-
-impl ViewPoint {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn from_position(pos: glam::Vec3) -> Self {
-        Self {
-            transform: glam::Affine3A::from_translation(-pos),
-        }
-    }
-
-    pub fn replace_transform(&mut self, transform: glam::Affine3A) -> glam::Affine3A {
-        std::mem::replace(&mut self.transform, transform)
-    }
-
-    pub fn to_scale_rotation_translation(&self) -> (glam::Vec3, glam::Quat, glam::Vec3) {
-        self.transform.to_scale_rotation_translation()
-    }
-
-    pub fn translation(&self) -> glam::Vec3A {
-        self.transform.translation
-    }
-
-    pub fn transform(&self) -> &glam::Affine3A {
-        &self.transform
-    }
-
-    pub fn transform_mut(&mut self) -> &mut glam::Affine3A {
-        &mut self.transform
-    }
-
-    pub fn into_mat4(self) -> glam::Mat4 {
-        glam::Mat4::from(self.transform)
-    }
 }
 
 impl Resolution {

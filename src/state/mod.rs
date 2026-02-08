@@ -1,20 +1,23 @@
-use std::time::{Duration, Instant};
+use std::{
+    f32,
+    time::{Duration, Instant},
+};
 
+use glam::Quat;
 use janus::sync::Mirror;
 use tracing::{Level, event};
 
 use crate::{
     FrameStorageBuffers, LayoutEntityData, mesh,
-    render::{
-        ViewPoint,
-        command::{DrawArraysIndirectCommand, GpuCommandQueue},
-    },
+    render::command::{DrawArraysIndirectCommand, GpuCommandQueue},
     state::{
+        camera::ViewPoint,
         column::{Column, IterColumn, ParallelIndexArrayColumn},
         cross::{Cross, Producer},
     },
 };
 
+pub mod camera;
 pub mod column;
 pub mod cross;
 pub mod table;
@@ -40,7 +43,9 @@ pub struct State {
     // immutable mesh IDs of GPU-side mesh data, loaded during init
     mesh_ids: Vec<mesh::Id>,
 
+    camera: camera::Orbital,
     view: Mirror<ViewPoint>,
+
     positions: ParallelIndexArrayColumn<glam::Vec4>,
     rotations: ParallelIndexArrayColumn<glam::Quat>,
 
@@ -190,12 +195,13 @@ impl janus::context::Update for State {
 
             let (dx, dy) = self.input.cursor().delta_f32();
             let (dx, dy) = (dx.to_radians(), dy.to_radians());
+            self.camera.update(dx, dy);
+
+            let dw = *self.input.mouse_wheel();
+            *self.camera.distance_mut() -= dw;
 
             self.view.publish_with(|vp| {
-                let x_rot = glam::Affine3A::from_rotation_x(dy);
-                let y_rot = glam::Affine3A::from_rotation_y(dx);
-                **vp = (**vp) * y_rot; // global
-                **vp = x_rot * (**vp); // local
+                *vp = *self.camera.viewpoint();
             });
         }
 
