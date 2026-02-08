@@ -273,7 +273,7 @@ impl Orbital {
     pub fn update(&mut self, d_yaw: f32, d_pitch: f32) {
         let (yaw, pitch) = self.viewpoint.yaw_pitch();
         let yaw = self.limits.clamp_yaw(yaw - d_yaw);
-        let pitch = self.limits.clamp_pitch(pitch + d_pitch);
+        let pitch = self.limits.clamp_pitch(pitch - d_pitch);
 
         self.viewpoint.orientation = glam::Quat::from_euler(glam::EulerRot::YXZ, yaw, pitch, 0.0);
         self.viewpoint.position = self.anchor - (self.viewpoint.forward() * *self.orbit_distance);
