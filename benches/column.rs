@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use ethel::state::column::{Column, IndexArrayColumn, IterColumn, ParallelIndexArrayColumn};
+use ethel::state::data::{Column, IndexArrayColumn, ParallelIndexArrayColumn, column::IterColumn};
 
 criterion_group!(col_benches, col_iteration);
 criterion_main!(col_benches);
