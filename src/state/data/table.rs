@@ -3,6 +3,8 @@ use std::{
     slice::{Iter, IterMut},
 };
 
+use crate::state::data::Column;
+
 #[derive(Clone, Copy, Debug)]
 pub struct SoloView<'row, Def, A>
 where
@@ -720,7 +722,7 @@ where
     }
 }
 
-pub trait Table<Def: Sized + Default>: super::column::Column<Def> {}
+pub trait Table<Def: Sized + Default>: Column<Def> {}
 
 #[macro_export]
 macro_rules! table_spec {
@@ -742,8 +744,10 @@ macro_rules! table_spec {
                 free: Vec<u32>,
                 owners: Vec<u32>,
 
-                pub $row_0: Vec<$rt_0>,
-                pub $($row: Vec<$rt>,)+
+                $row_0: Vec<$rt_0>,
+                $(
+                    $row: Vec<$rt>,
+                )+
             }
 
             impl Default for [< $name RowTable >] {
@@ -752,7 +756,7 @@ macro_rules! table_spec {
                 }
             }
 
-            impl $crate::state::column::SparseSlot for [< $name RowTable >] {
+            impl $crate::state::data::SparseSlot for [< $name RowTable >] {
                 fn slots_map(&self) -> &Vec<u32> {
                     &self.indices
                 }
@@ -770,7 +774,7 @@ macro_rules! table_spec {
                 }
             }
 
-            impl $crate::state::column::Column < [< $name TableDef >]> for [< $name RowTable >] {
+            impl $crate::state::data::Column < [< $name TableDef >]> for [< $name RowTable >] {
                 fn len(&self) -> usize {
                     self.$row_0.len()
                 }
@@ -800,7 +804,7 @@ macro_rules! table_spec {
                 }
 
                 fn put(&mut self, ($row_0, $($row, )+): [< $name TableDef >]) -> u32 {
-                    use $crate::state::column::SparseSlot;
+                    use $crate::state::data::SparseSlot;
 
                     let index = self.next_slot_index();
                     let slot = self.$row_0.len();
@@ -820,6 +824,7 @@ macro_rules! table_spec {
                 pub fn new() -> Self {
                     Self {
                         indices: vec![0],
+                        owners: vec![0],
                         free: Vec::new(),
 
                         $row_0: vec![Default::default()],
@@ -829,9 +834,11 @@ macro_rules! table_spec {
 
                 pub fn with_capacity(capacity: usize) -> Self {
                     let mut indices = Vec::with_capacity(capacity);
+                    let mut owners = Vec::with_capacity(capacity);
                     let mut $row_0 = Vec::with_capacity(capacity);
 
                     indices.push(0);
+                    owners.push(0);
                     $row_0.push(Default::default());
 
                     $(
@@ -841,6 +848,7 @@ macro_rules! table_spec {
 
                     Self {
                         indices,
+                        owners,
                         free: Vec::new(),
 
                         $row_0,
@@ -849,18 +857,18 @@ macro_rules! table_spec {
                 }
 
                 pub fn split(&self) -> (
-                    $crate::state::table::SoloView<'_, [< $name TableDef >], $rt_0>,
+                    $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>,
                     $(
-                        $crate::state::table::SoloView<'_, [< $name TableDef >], $rt>,
+                        $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt>,
                     )+
                 ) {
                     (
-                        $crate::state::table::SoloView {
+                        $crate::state::data::table::SoloView {
                             alpha: &self.$row_0,
                             _definition: std::marker::PhantomData,
                         },
                         $(
-                            $crate::state::table::SoloView {
+                            $crate::state::data::table::SoloView {
                             alpha: &self.$row,
                                 _definition: std::marker::PhantomData,
                             },
@@ -869,18 +877,18 @@ macro_rules! table_spec {
                 }
 
                 pub fn split_mut(&mut self) -> (
-                    $crate::state::table::SoloViewMut<'_, [< $name TableDef >], $rt_0>,
+                    $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt_0>,
                     $(
-                        $crate::state::table::SoloViewMut<'_, [< $name TableDef >], $rt>,
+                        $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt>,
                     )+
                 ) {
                     (
-                        $crate::state::table::SoloViewMut {
+                        $crate::state::data::table::SoloViewMut {
                             alpha: &mut self.$row_0,
                             _definition: std::marker::PhantomData,
                         },
                         $(
-                            $crate::state::table::SoloViewMut {
+                            $crate::state::data::table::SoloViewMut {
                             alpha: &mut self.$row,
                                 _definition: std::marker::PhantomData,
                             },
@@ -896,15 +904,15 @@ macro_rules! table_spec {
                     &mut self.$row_0
                 }
 
-                pub fn [< $row_0 _view >](&self) -> $crate::state::table::SoloView<'_, [< $name TableDef >], $rt_0> {
-                    $crate::state::table::SoloView {
+                pub fn [< $row_0 _view >](&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0> {
+                    $crate::state::data::table::SoloView {
                         alpha: &self.$row_0,
                         _definition: std::marker::PhantomData,
                     }
                 }
 
-                pub fn [< $row_0 _mut_view >](&mut self) -> $crate::state::table::SoloViewMut<'_, [< $name TableDef >], $rt_0> {
-                    $crate::state::table::SoloViewMut {
+                pub fn [< $row_0 _mut_view >](&mut self) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt_0> {
+                    $crate::state::data::table::SoloViewMut {
                         alpha: &mut self.$row_0,
                         _definition: std::marker::PhantomData,
                     }
@@ -919,15 +927,15 @@ macro_rules! table_spec {
                         &mut self.$row
                     }
 
-                    pub fn [< $row _view >](&self) -> $crate::state::table::SoloView<'_, [< $name TableDef >], $rt> {
-                        $crate::state::table::SoloView {
+                    pub fn [< $row _view >](&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt> {
+                        $crate::state::data::table::SoloView {
                             alpha: &self.$row,
                             _definition: std::marker::PhantomData,
                         }
                     }
 
-                    pub fn [< $row _mut_view >](&mut self) -> $crate::state::table::SoloViewMut<'_, [< $name TableDef >], $rt> {
-                        $crate::state::table::SoloViewMut {
+                    pub fn [< $row _mut_view >](&mut self) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt> {
+                        $crate::state::data::table::SoloViewMut {
                             alpha: &mut self.$row,
                             _definition: std::marker::PhantomData,
                         }
@@ -936,4 +944,19 @@ macro_rules! table_spec {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    #[allow(unused)]
+    #[test]
+    fn macro_table() {
+        table_spec! {
+            struct Test {
+                names: String;
+                health: f32;
+                positions: (f32, f32);
+            }
+        };
+    }
 }

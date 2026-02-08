@@ -1,9 +1,5 @@
-use std::{
-    f32,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
-use glam::Quat;
 use janus::sync::Mirror;
 use tracing::{Level, event};
 
@@ -12,15 +8,14 @@ use crate::{
     render::command::{DrawArraysIndirectCommand, GpuCommandQueue},
     state::{
         camera::ViewPoint,
-        column::{Column, IterColumn, ParallelIndexArrayColumn},
         cross::{Cross, Producer},
+        data::{Column, ParallelIndexArrayColumn, column::IterColumn},
     },
 };
 
 pub mod camera;
-pub mod column;
 pub mod cross;
-pub mod table;
+pub mod data;
 
 /// An entity is simply a series of handles in one or more columns or tables.
 #[repr(C, align(16))]
