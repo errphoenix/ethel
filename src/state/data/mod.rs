@@ -54,12 +54,15 @@ pub trait Column<T: Default>: SparseSlot + Default {
     /// The returned indirect index is not a stable index and will change
     /// depending on the internal memory layout of the Column.
     ///
-    /// # Panics
-    /// If the given `slot` is not present in the slots map; i.e. it is out of
-    /// bounds.
+    /// # Safety
+    /// Caller must ensure that the given `slot` is always a valid index within
+    /// the bounds of the table.
+    /// Otherwise, the function will produce undefined behaviour.
     #[inline]
-    fn get_indirect_unchecked(&self, slot: u32) -> u32 {
-        self.slots_map()[slot as usize]
+    unsafe fn get_indirect_unchecked(&self, slot: u32) -> u32 {
+        // SAFETY: the caller must ensure that `slot` is always a valid index
+        //         within bounds
+        unsafe { *self.slots_map().get_unchecked(slot as usize) }
     }
 
     /// Mark the indexing slot at `slot` as free.
