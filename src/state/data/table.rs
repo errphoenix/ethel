@@ -865,6 +865,10 @@ macro_rules! table_spec {
                     }
                 }
 
+                pub fn handles(&self) -> &[u32] {
+                    &self.owners
+                }
+
                 pub fn split(&self) -> (
                     $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>,
                     $(
