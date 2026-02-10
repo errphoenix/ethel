@@ -142,12 +142,12 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&self) -> &'row [A] {
+    pub const fn alpha(&self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn join<B: Sized>(self, other: SoloView<'row, Def, B>) -> DualView<'row, Def, A, B> {
+    pub const fn join<B: Sized>(self, other: SoloView<'row, Def, B>) -> DualView<'row, Def, A, B> {
         DualView {
             alpha: self.alpha,
             beta: other.alpha,
@@ -168,17 +168,20 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&self) -> &'row [A] {
+    pub const fn alpha(&self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta(&self) -> &'row [B] {
+    pub const fn beta(&self) -> &'row [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn join<Y: Sized>(self, other: SoloView<'row, Def, Y>) -> TrioView<'row, Def, A, B, Y> {
+    pub const fn join<Y: Sized>(
+        self,
+        other: SoloView<'row, Def, Y>,
+    ) -> TrioView<'row, Def, A, B, Y> {
         TrioView {
             alpha: self.alpha,
             beta: self.beta,
@@ -188,7 +191,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_left(self) -> SoloView<'row, Def, B> {
+    pub const fn pop_left(self) -> SoloView<'row, Def, B> {
         SoloView {
             alpha: self.beta,
             _definition: std::marker::PhantomData,
@@ -196,7 +199,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_right(self) -> SoloView<'row, Def, A> {
+    pub const fn pop_right(self) -> SoloView<'row, Def, A> {
         SoloView {
             alpha: self.alpha,
             _definition: std::marker::PhantomData,
@@ -217,22 +220,25 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&self) -> &'row [A] {
+    pub const fn alpha(&self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta(&self) -> &'row [B] {
+    pub const fn beta(&self) -> &'row [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn gamma(&self) -> &'row [Y] {
+    pub const fn gamma(&self) -> &'row [Y] {
         self.gamma
     }
 
     #[inline(always)]
-    pub fn join<D: Sized>(self, other: SoloView<'row, Def, D>) -> QuatView<'row, Def, A, B, Y, D> {
+    pub const fn join<D: Sized>(
+        self,
+        other: SoloView<'row, Def, D>,
+    ) -> QuatView<'row, Def, A, B, Y, D> {
         QuatView {
             alpha: self.alpha,
             beta: self.beta,
@@ -243,7 +249,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_left(self) -> DualView<'row, Def, B, Y> {
+    pub const fn pop_left(self) -> DualView<'row, Def, B, Y> {
         DualView {
             alpha: self.beta,
             beta: self.gamma,
@@ -252,7 +258,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_right(self) -> DualView<'row, Def, A, B> {
+    pub const fn pop_right(self) -> DualView<'row, Def, A, B> {
         DualView {
             alpha: self.alpha,
             beta: self.beta,
@@ -278,27 +284,27 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&self) -> &'row [A] {
+    pub const fn alpha(&self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta(&self) -> &'row [B] {
+    pub const fn beta(&self) -> &'row [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn gamma(&self) -> &'row [Y] {
+    pub const fn gamma(&self) -> &'row [Y] {
         self.gamma
     }
 
     #[inline(always)]
-    pub fn delta(&self) -> &'row [D] {
+    pub const fn delta(&self) -> &'row [D] {
         self.delta
     }
 
     #[inline(always)]
-    pub fn pop_left(self) -> TrioView<'row, Def, B, Y, D> {
+    pub const fn pop_left(self) -> TrioView<'row, Def, B, Y, D> {
         TrioView {
             alpha: self.beta,
             beta: self.gamma,
@@ -308,7 +314,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_right(self) -> TrioView<'row, Def, A, B, Y> {
+    pub const fn pop_right(self) -> TrioView<'row, Def, A, B, Y> {
         TrioView {
             alpha: self.alpha,
             beta: self.beta,
@@ -462,17 +468,20 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&'row self) -> &'row [A] {
+    pub const fn alpha(&'row self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn alpha_mut(&'row mut self) -> &'row mut [A] {
+    pub const fn alpha_mut(&'row mut self) -> &'row mut [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn join<B: Sized>(self, other: SoloViewMut<'row, Def, B>) -> DualViewMut<'row, Def, A, B> {
+    pub const fn join<B: Sized>(
+        self,
+        other: SoloViewMut<'row, Def, B>,
+    ) -> DualViewMut<'row, Def, A, B> {
         DualViewMut {
             alpha: self.alpha,
             beta: other.alpha,
@@ -498,27 +507,27 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&'row self) -> &'row [A] {
+    pub const fn alpha(&'row self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta(&'row self) -> &'row [B] {
+    pub const fn beta(&'row self) -> &'row [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn alpha_mut(&'row mut self) -> &'row mut [A] {
+    pub const fn alpha_mut(&'row mut self) -> &'row mut [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta_mut(&'row mut self) -> &'row mut [B] {
+    pub const fn beta_mut(&'row mut self) -> &'row mut [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn join<Y: Sized>(
+    pub const fn join<Y: Sized>(
         self,
         other: SoloViewMut<'row, Def, Y>,
     ) -> TrioViewMut<'row, Def, A, B, Y> {
@@ -531,7 +540,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_left(self) -> SoloViewMut<'row, Def, B> {
+    pub const fn pop_left(self) -> SoloViewMut<'row, Def, B> {
         SoloViewMut {
             alpha: self.beta,
             _definition: std::marker::PhantomData,
@@ -539,7 +548,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_right(self) -> SoloViewMut<'row, Def, A> {
+    pub const fn pop_right(self) -> SoloViewMut<'row, Def, A> {
         SoloViewMut {
             alpha: self.alpha,
             _definition: std::marker::PhantomData,
@@ -573,37 +582,37 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&'row self) -> &'row [A] {
+    pub const fn alpha(&'row self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta(&'row self) -> &'row [B] {
+    pub const fn beta(&'row self) -> &'row [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn gamma(&'row self) -> &'row [Y] {
+    pub const fn gamma(&'row self) -> &'row [Y] {
         self.gamma
     }
 
     #[inline(always)]
-    pub fn alpha_mut(&'row mut self) -> &'row mut [A] {
+    pub const fn alpha_mut(&'row mut self) -> &'row mut [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta_mut(&'row mut self) -> &'row mut [B] {
+    pub const fn beta_mut(&'row mut self) -> &'row mut [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn gamma_mut(&'row mut self) -> &'row mut [Y] {
+    pub const fn gamma_mut(&'row mut self) -> &'row mut [Y] {
         self.gamma
     }
 
     #[inline(always)]
-    pub fn join<D: Sized>(
+    pub const fn join<D: Sized>(
         self,
         other: SoloViewMut<'row, Def, D>,
     ) -> QuatViewMut<'row, Def, A, B, Y, D> {
@@ -617,7 +626,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_left(self) -> DualViewMut<'row, Def, B, Y> {
+    pub const fn pop_left(self) -> DualViewMut<'row, Def, B, Y> {
         DualViewMut {
             alpha: self.beta,
             beta: self.gamma,
@@ -626,7 +635,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_right(self) -> DualViewMut<'row, Def, A, B> {
+    pub const fn pop_right(self) -> DualViewMut<'row, Def, A, B> {
         DualViewMut {
             alpha: self.alpha,
             beta: self.beta,
@@ -662,47 +671,47 @@ where
     }
 
     #[inline(always)]
-    pub fn alpha(&'row self) -> &'row [A] {
+    pub const fn alpha(&'row self) -> &'row [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta(&'row self) -> &'row [B] {
+    pub const fn beta(&'row self) -> &'row [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn gamma(&'row self) -> &'row [Y] {
+    pub const fn gamma(&'row self) -> &'row [Y] {
         self.gamma
     }
 
     #[inline(always)]
-    pub fn delta(&'row self) -> &'row [D] {
+    pub const fn delta(&'row self) -> &'row [D] {
         self.delta
     }
 
     #[inline(always)]
-    pub fn alpha_mut(&'row mut self) -> &'row mut [A] {
+    pub const fn alpha_mut(&'row mut self) -> &'row mut [A] {
         self.alpha
     }
 
     #[inline(always)]
-    pub fn beta_mut(&'row mut self) -> &'row mut [B] {
+    pub const fn beta_mut(&'row mut self) -> &'row mut [B] {
         self.beta
     }
 
     #[inline(always)]
-    pub fn gamma_mut(&'row mut self) -> &'row mut [Y] {
+    pub const fn gamma_mut(&'row mut self) -> &'row mut [Y] {
         self.gamma
     }
 
     #[inline(always)]
-    pub fn delta_mut(&'row mut self) -> &'row mut [D] {
+    pub const fn delta_mut(&'row mut self) -> &'row mut [D] {
         self.delta
     }
 
     #[inline(always)]
-    pub fn pop_left(self) -> TrioViewMut<'row, Def, B, Y, D> {
+    pub const fn pop_left(self) -> TrioViewMut<'row, Def, B, Y, D> {
         TrioViewMut {
             alpha: self.beta,
             beta: self.gamma,
@@ -712,7 +721,7 @@ where
     }
 
     #[inline(always)]
-    pub fn pop_right(self) -> TrioViewMut<'row, Def, A, B, Y> {
+    pub const fn pop_right(self) -> TrioViewMut<'row, Def, A, B, Y> {
         TrioViewMut {
             alpha: self.alpha,
             beta: self.beta,
