@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-glam = "0.30.10"
+glam = "=0.31.0"
 janus = { path = "../janus", features = ["expose_gl", "render", "input"] }
 paste = "1.0.15"
 tracing = "0.1.44"
