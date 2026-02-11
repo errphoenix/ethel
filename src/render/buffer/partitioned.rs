@@ -502,6 +502,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         if pad_len == 0 {
             // SAFETY: invariants correspond to those of this function.
             unsafe { self.blit_part(section, partition, data, offset) };
+            return;
         }
 
         assert_tb_section!(section);
