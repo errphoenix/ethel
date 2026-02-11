@@ -420,9 +420,17 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         let avail = partition_len - offset;
         let offset = self.layout.offset_at(partition) + offset;
+        let data_bytes = data.len() * size_of::<T>();
 
-        let data_len = avail.min(data.len());
+        // safe length of data, in bytes
+        let data_len = avail.min(data_bytes);
 
+        // SAFETY: we assert the section and partition are valid within this
+        // buffer's layout. The buffer's layout, in turn, guarantees valid
+        // base offsets and base lengths.
+        // The caller guarantees the pointer to `data` must always be valid.
+        // Additionally, the caller must also ensure that the size of `T`
+        // corresponds to the same size of the type present on the GPU buffers.
         unsafe {
             let dst = self.ptr.add(base_offset + offset) as *mut T;
             std::ptr::copy_nonoverlapping(src, dst, data_len);
