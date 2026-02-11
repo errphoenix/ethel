@@ -516,8 +516,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
             "attempted to blit at offset {offset} with partition length {partition_len}"
         );
 
-        let offset = self.layout.offset_at(partition) + offset;
         let avail = partition_len - offset;
+        let offset = self.layout.offset_at(partition) + offset;
 
         let data_bytes_padded = size_of::<T>() + pad_len;
         let avail_count = avail / data_bytes_padded;
