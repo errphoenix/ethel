@@ -137,12 +137,12 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
                 }
             }
             InitStrategy::FillWith(func) => {
-                let ptr = self.ptr as *mut T;
                 let len = len / size_of::<T>();
 
                 for i in 0..3 {
+                    let section_offset = self.layout.len() * i;
                     unsafe {
-                        let ptr = ptr.add(self.layout.len() * i);
+                        let ptr = self.ptr.add(section_offset) as *mut T;
                         for i in 0..len {
                             std::ptr::write(ptr.add(i), func());
                         }
