@@ -35,6 +35,7 @@ pub trait StateHandler<FrameData: Sized> {
     fn step(
         &mut self,
         input: &mut crate::InputSystem,
+        screen: &mut Mirror<ScreenSpace>,
         view_point: &mut Mirror<ViewPoint>,
         delta: janus::context::DeltaTime,
     );
@@ -133,9 +134,10 @@ where
         *state.command_queue_mut() = GpuCommandQueue::new(Sh::COMMAND_QUEUE_LENGTH);
 
         (self.gl_state_init)();
-        let resolution = renderer.screen_space().resolution();
-        renderer.handler.init_resources(resolution);
 
+        let screen = renderer.screen_space_mirror().clone();
+        renderer.handler.init_resources(screen.resolution());
+        *state.screen_space_mirror_mut() = screen;
         Ok(())
     }
 }

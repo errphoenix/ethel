@@ -2,6 +2,8 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
+use glam::Vec4Swizzles;
+
 use crate::{
     RenderHandler,
     mesh::Meshadata,
@@ -124,6 +126,34 @@ impl ScreenSpace {
 
     pub fn projection_mut(&mut self) -> &mut glam::Mat4 {
         &mut self.projection
+    }
+
+    #[inline]
+    pub const fn to_ndc(&self, screen: (f32, f32)) -> glam::Vec3 {
+        let x = (2.0 * screen.0) / self.resolution.width - 1.0;
+        let y = 1.0 - (2.0 * screen.1) / self.resolution.height;
+        glam::vec3(x, y, 1.0)
+    }
+
+    #[inline]
+    pub const fn to_clip_space(&self, screen: (f32, f32)) -> glam::Vec4 {
+        let ndc = self.to_ndc(screen);
+        glam::vec4(ndc.x, ndc.y, -1.0, 1.0)
+    }
+
+    #[inline]
+    pub fn to_eye_space(&self, screen: (f32, f32)) -> glam::Vec4 {
+        let clip = self.to_clip_space(screen);
+        let inv_proj = self.projection.inverse();
+        let eye_ray = inv_proj * clip;
+        glam::vec4(eye_ray.x, eye_ray.y, -1.0, 0.0)
+    }
+
+    #[inline]
+    pub fn to_world_space(&self, screen: (f32, f32), inverse_view: glam::Mat4) -> glam::Vec3 {
+        let eye = self.to_eye_space(screen);
+        let eye_world = (inverse_view * eye).xyz();
+        eye_world.normalize()
     }
 }
 

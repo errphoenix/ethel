@@ -2,7 +2,7 @@ use janus::sync::Mirror;
 
 use crate::{
     StateHandler,
-    render::command::GpuCommandQueue,
+    render::{ScreenSpace, command::GpuCommandQueue},
     state::{
         camera::ViewPoint,
         cross::{Cross, Producer},
@@ -17,6 +17,7 @@ pub mod data;
 pub struct State<D: Sized, T: StateHandler<D>> {
     input: crate::InputSystem,
 
+    screen: Mirror<ScreenSpace>,
     view: Mirror<ViewPoint>,
     handler: T,
 
@@ -62,13 +63,26 @@ impl<D: Sized, T: StateHandler<D>> State<D, T> {
     pub fn viewpoint_mirror_mut(&mut self) -> &mut Mirror<ViewPoint> {
         &mut self.view
     }
+
+    pub fn screen_space(&self) -> &ScreenSpace {
+        &self.screen
+    }
+
+    pub fn screen_space_mirror(&self) -> &Mirror<ScreenSpace> {
+        &self.screen
+    }
+
+    pub fn screen_space_mirror_mut(&mut self) -> &mut Mirror<ScreenSpace> {
+        &mut self.screen
+    }
 }
 
 impl<D: Sized, T: StateHandler<D>> janus::context::Update for State<D, T> {
     #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
         self.input.poll_key_events();
-        self.handler.step(&mut self.input, &mut self.view, delta);
+        self.handler
+            .step(&mut self.input, &mut self.screen, &mut self.view, delta);
         self.upload();
     }
 
