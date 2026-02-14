@@ -2,8 +2,6 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
-use janus::sync::Mirror;
-
 use crate::{
     RenderHandler,
     mesh::Meshadata,
@@ -79,6 +77,56 @@ impl Resolution {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ScreenSpace {
+    resolution: Resolution,
+    projection: glam::Mat4,
+    fov: f32,
+}
+
+impl Default for ScreenSpace {
+    fn default() -> Self {
+        Self::new(Resolution::default(), Self::DEFAULT_FOV_DEG)
+    }
+}
+
+impl ScreenSpace {
+    pub const DEFAULT_FOV_DEG: f32 = 90.0;
+
+    pub fn new(resolution: Resolution, fov_deg: f32) -> Self {
+        let proj_mat = projection_perspective(resolution.width, resolution.height(), fov_deg);
+        Self {
+            resolution,
+            fov: fov_deg,
+            projection: proj_mat,
+        }
+    }
+
+    pub fn fov(&self) -> f32 {
+        self.fov
+    }
+
+    pub fn fov_mut(&mut self) -> &mut f32 {
+        &mut self.fov
+    }
+
+    pub fn resolution(&self) -> Resolution {
+        self.resolution
+    }
+
+    pub fn resolution_mut(&mut self) -> &mut Resolution {
+        &mut self.resolution
+    }
+
+    pub fn projection(&self) -> &glam::Mat4 {
+        &self.projection
+    }
+
+    pub fn projection_mut(&mut self) -> &mut glam::Mat4 {
+        &mut self.projection
+    }
+}
+
 /// Render state for the Janus rendering Context
 #[derive(Debug, Default)]
 pub struct Renderer<D: Sized, T: RenderHandler<D>> {
@@ -89,8 +137,8 @@ pub struct Renderer<D: Sized, T: RenderHandler<D>> {
     mesh_buffer: ImmutableBuffer<2>,
     metadata: Meshadata,
 
-    resolution: Resolution,
-    view: Mirror<ViewPoint>,
+    screen: janus::sync::Mirror<ScreenSpace>,
+    view: janus::sync::Mirror<ViewPoint>,
 
     pub(crate) handler: T,
 
@@ -107,12 +155,16 @@ impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
         &mut self.mesh_buffer
     }
 
-    pub fn resolution(&self) -> Resolution {
-        self.resolution
+    pub fn screen_space(&self) -> &ScreenSpace {
+        &self.screen
     }
 
-    pub fn view(&self) -> &ViewPoint {
-        &self.view
+    pub fn screen_space_mirror(&self) -> &janus::sync::Mirror<ScreenSpace> {
+        &self.screen
+    }
+
+    pub fn screen_space_mirror_mut(&mut self) -> &mut janus::sync::Mirror<ScreenSpace> {
+        &mut self.screen
     }
 
     pub fn metadata(&self) -> &Meshadata {
@@ -131,11 +183,15 @@ impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
         &mut self.boundary
     }
 
-    pub fn viewpoint_mirror(&self) -> &Mirror<ViewPoint> {
+    pub fn view(&self) -> &ViewPoint {
         &self.view
     }
 
-    pub fn viewpoint_mirror_mut(&mut self) -> &mut Mirror<ViewPoint> {
+    pub fn viewpoint_mirror(&self) -> &janus::sync::Mirror<ViewPoint> {
+        &self.view
+    }
+
+    pub fn viewpoint_mirror_mut(&mut self) -> &mut janus::sync::Mirror<ViewPoint> {
         &mut self.view
     }
 }
@@ -148,17 +204,30 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
                 janus::gl::BindVertexArray(self.render_vao);
             }
         }
-        if self.resolution.is_changed() {
-            self.resolution.dirty = false;
-            let w = self.resolution.width as i32;
-            let h = self.resolution.height as i32;
+        {
+            if self.screen.check_sync_status() {
+                self.screen.sync().unwrap();
+                let resolution = self.screen.resolution;
+                if resolution.is_changed() {
+                    self.screen.publish_with(|screen| {
+                        let fov = screen.fov();
+                        let w = resolution.width;
+                        let h = resolution.height;
 
-            unsafe {
-                janus::gl::Viewport(0, 0, w, h);
+                        screen.projection = projection_perspective(w, h, fov);
+                        screen.resolution.dirty = true;
+                    });
+
+                    let w = resolution.width as i32;
+                    let h = resolution.height as i32;
+                    unsafe {
+                        janus::gl::Viewport(0, 0, w, h);
+                    }
+                }
             }
         }
 
-        self.handler.pre_frame(self.resolution, &mut self.view, dt);
+        self.handler.pre_frame(&mut self.screen, &mut self.view, dt);
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
                 self.mesh_buffer.bind_shader_storage();
@@ -187,9 +256,13 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
     }
 
     fn set_resolution(&mut self, (w, h): (f32, f32)) {
-        self.resolution.dirty = true;
-        self.resolution.width = w;
-        self.resolution.height = h;
+        self.screen.publish_with(|screen| {
+            screen.resolution = Resolution {
+                dirty: true,
+                width: w,
+                height: h,
+            }
+        });
     }
 }
 

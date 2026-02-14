@@ -8,7 +8,7 @@ use janus::{input::InputState, sync::Mirror};
 use crate::{
     mesh::MeshStaging,
     render::{
-        Renderer, Resolution,
+        Renderer, Resolution, ScreenSpace,
         buffer::{self, Layout, StorageSection},
         command::GpuCommandQueue,
     },
@@ -51,8 +51,8 @@ pub trait RenderHandler<FrameData: Sized> {
 
     fn pre_frame(
         &mut self,
-        resolution: Resolution,
-        view_point: &mut Mirror<ViewPoint>,
+        screen: &mut Mirror<ScreenSpace>,
+        view: &mut Mirror<ViewPoint>,
         delta: janus::context::DeltaTime,
     );
 
@@ -130,12 +130,11 @@ where
         let (producer, consumer) = cross::create(frame_data);
         *state.boundary_mut() = producer;
         *renderer.boundary_mut() = consumer;
-
         *state.command_queue_mut() = GpuCommandQueue::new(Sh::COMMAND_QUEUE_LENGTH);
 
         (self.gl_state_init)();
-
-        renderer.handler.init_resources(renderer.resolution());
+        let resolution = renderer.screen_space().resolution();
+        renderer.handler.init_resources(resolution);
 
         Ok(())
     }
