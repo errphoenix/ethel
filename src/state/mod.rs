@@ -68,7 +68,7 @@ impl<D: Sized, T: StateHandler<D>> janus::context::Update for State<D, T> {
     #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
         self.input.poll_key_events();
-        self.handler.step(&self.input, &mut self.view, delta);
+        self.handler.step(&mut self.input, &mut self.view, delta);
         self.upload();
     }
 

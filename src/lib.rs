@@ -34,7 +34,7 @@ pub trait StateHandler<FrameData: Sized> {
 
     fn step(
         &mut self,
-        input: &crate::InputSystem,
+        input: &mut crate::InputSystem,
         view_point: &mut Mirror<ViewPoint>,
         delta: janus::context::DeltaTime,
     );
