@@ -802,6 +802,19 @@ macro_rules! table_spec {
                         return;
                     }
 
+                    // sometimes swap_remove causes an out-of-bounds panic
+                    // needs some investigation to resolve the issue
+                    #[cfg(debug_assertions)]
+                    {
+                        if contiguous_slot as usize >= self.owners.len() {
+                            eprintln!(r#"Attempted to free invalid slot {slot}:
+this points to the index {contiguous_slot}, but we only have {} elements.
+This is a DEBUG assertion due to this being a debug build; otherwise, this would've been a crash!"#,
+self.owners.len());
+                            return;
+                        }
+                    }
+
                     self.indices[slot as usize] = 0;
                     self.owners.swap_remove(contiguous_slot as usize);
 
