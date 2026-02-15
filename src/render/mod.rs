@@ -245,7 +245,7 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
                         let h = resolution.height;
 
                         screen.projection = projection_perspective(w, h, fov);
-                        screen.resolution.dirty = true;
+                        screen.resolution.dirty = false;
                     });
 
                     let w = resolution.width as i32;
