@@ -138,7 +138,7 @@ impl ViewPoint {
 
     #[inline(always)]
     pub fn into_mat4(self) -> glam::Mat4 {
-        glam::Mat4::from_rotation_translation(self.orientation, self.position).inverse()
+        glam::Mat4::from_rotation_translation(self.orientation, self.position)
     }
 }
 
