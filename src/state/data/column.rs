@@ -458,7 +458,13 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
         if contiguous_slot == 0 {
             return;
         }
+
         self.indices[slot as usize] = 0;
+        let last_owner = *self
+            .owners
+            .last()
+            .expect("contiguous vectors are never empty");
+        self.indices[last_owner as usize] = contiguous_slot;
 
         self.owners.swap_remove(contiguous_slot as usize);
         self.contiguous.swap_remove(contiguous_slot as usize);
@@ -512,5 +518,35 @@ impl<T: Default> IntoIterator for ParallelIndexArrayColumn<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.contiguous.into_iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn free_last_after_random_free() {
+        let mut column = ParallelIndexArrayColumn::<u32>::new();
+
+        for i in 0..50 {
+            column.put(i as u32);
+        }
+        let last = column.put(100);
+
+        // free random
+        {
+            column.free(37);
+            column.free(14);
+            column.free(32);
+            column.free(45);
+            column.free(24);
+            column.free(3);
+            column.free(7);
+            column.free(35);
+        }
+
+        // free last
+        column.free(last);
     }
 }

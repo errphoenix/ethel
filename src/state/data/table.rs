@@ -802,22 +802,14 @@ macro_rules! table_spec {
                         return;
                     }
 
-                    // sometimes swap_remove causes an out-of-bounds panic
-                    // needs some investigation to resolve the issue
-                    #[cfg(debug_assertions)]
-                    {
-                        if contiguous_slot as usize >= self.owners.len() {
-                            eprintln!(r#"Attempted to free invalid slot {slot}:
-this points to the index {contiguous_slot}, but we only have {} elements.
-This is a DEBUG assertion due to this being a debug build; otherwise, this would've been a crash!"#,
-self.owners.len());
-                            return;
-                        }
-                    }
-
                     self.indices[slot as usize] = 0;
-                    self.owners.swap_remove(contiguous_slot as usize);
+                    let last_owner = *self
+                        .owners
+                        .last()
+                        .expect("contiguous vectors are never empty");
+                    self.indices[last_owner as usize] = contiguous_slot;
 
+                    self.owners.swap_remove(contiguous_slot as usize);
                     self.$row_0.swap_remove(contiguous_slot as usize);
                     $(
                         self.$row.swap_remove(contiguous_slot as usize);
@@ -984,5 +976,39 @@ mod tests {
                 positions: (f32, f32);
             }
         };
+    }
+
+    #[test]
+    fn free_last_after_random_free() {
+        use crate::state::data::Column;
+
+        table_spec! {
+            struct Test {
+                a: u32;
+                b: u32;
+            }
+        };
+
+        let mut table = TestRowTable::new();
+
+        for i in 0..50 {
+            table.put((i as u32, i as u32 + 50));
+        }
+        let last = table.put((200, 400));
+
+        // free random
+        {
+            table.free(37);
+            table.free(14);
+            table.free(32);
+            table.free(45);
+            table.free(24);
+            table.free(3);
+            table.free(7);
+            table.free(35);
+        }
+
+        // free last
+        table.free(last);
     }
 }
