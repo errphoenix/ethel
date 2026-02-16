@@ -302,4 +302,12 @@ impl Orbital {
     pub fn rotation_limits_mut(&mut self) -> &mut RotationLimits {
         &mut self.limits
     }
+
+    pub fn anchor(&self) -> glam::Vec3 {
+        self.anchor
+    }
+
+    pub fn set_anchor(&mut self, anchor: glam::Vec3) {
+        self.anchor = anchor;
+    }
 }
