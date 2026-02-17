@@ -134,4 +134,82 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
             self.put(cell, element);
         });
     }
+
+    /// Get the nearest populated cell from a `cell` and its contents.
+    ///
+    /// # Returns
+    /// * [`Ok`] containing the nearest populated cell and a reference to its
+    ///   contents.
+    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
+    ///   present other than, maybe, the one in `cell`.
+    pub fn nearest_cell(&self, cell: Cell) -> Result<(Cell, &T), ()> {
+        for x in -1..1 {
+            for y in -1..1 {
+                for z in -1..1 {
+                    let other = Cell {
+                        x: cell.x + x,
+                        y: cell.y + y,
+                        z: cell.z + z,
+                    };
+                    if other == cell {
+                        continue;
+                    }
+                    if let Some(element) = self.map.get(&cell) {
+                        return Ok((other, element));
+                    }
+                }
+            }
+        }
+
+        Err(())
+    }
+
+    /// Get the nearest populated cell from a `point` and its contents.
+    ///
+    /// # Returns
+    /// * [`Ok`] containing the nearest populated cell and a reference to its
+    ///   contents.
+    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
+    ///   present other than, maybe, the one in the cell corresponding to
+    ///   `point`.
+    pub fn nearest_cell_point(&self, point: glam::Vec3) -> Result<(Cell, &T), ()> {
+        self.nearest_cell(self.cell_at(point))
+    }
+
+    /// Get the nearest populated cell from a `cell` and its contents.
+    ///
+    /// # Returns
+    /// * [`Ok`] containing the nearest populated cell and an exclusive
+    ///   reference to its contents.
+    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
+    ///   present other than, maybe, the one in `cell`.
+    pub fn nearest_cell_mut(&mut self, cell: Cell) -> Result<(Cell, &mut T), ()> {
+        if let Ok((cell, _)) = self.nearest_cell(cell) {
+            let e = self.map.get_mut(&cell).expect("nearest cell is populated");
+            return Ok((cell, e));
+        }
+        Err(())
+    }
+
+    /// Get the nearest populated cell from a `point` and its contents.
+    ///
+    /// # Returns
+    /// * [`Ok`] containing the nearest populated cell and an exclusive
+    ///   reference to its contents.
+    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
+    ///   present other than, maybe, the one in the cell corresponding to
+    ///   `point`.
+    pub fn nearest_cell_point_mut(&mut self, point: glam::Vec3) -> Result<(Cell, &mut T), ()> {
+        self.nearest_cell_mut(self.cell_at(point))
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
 }
