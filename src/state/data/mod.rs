@@ -1,4 +1,5 @@
 pub mod column;
+pub mod hash;
 pub mod table;
 
 pub use column::{ArrayColumn, IndexArrayColumn, ParallelIndexArrayColumn};
