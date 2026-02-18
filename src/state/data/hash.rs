@@ -45,6 +45,15 @@ impl SpatialResolution {
             z: base_z + rem_z as i32,
         }
     }
+
+    #[inline]
+    pub fn approx_point(&self, cell: Cell) -> glam::Vec3 {
+        glam::vec3(
+            cell.x as f32 / self.0 as f32,
+            cell.z as f32 / self.0 as f32,
+            cell.z as f32 / self.0 as f32,
+        )
+    }
 }
 
 pub struct FxSpatialHash<T: Clone + Copy> {
@@ -115,6 +124,11 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     #[inline]
     pub fn cell_at(&self, point: glam::Vec3) -> Cell {
         self.resolution.encode_point(point)
+    }
+
+    #[inline]
+    pub fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
+        self.resolution.approx_point(cell)
     }
 
     pub fn dump_soa(&mut self, positions: &[glam::Vec3], elements: &[T]) {
