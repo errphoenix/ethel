@@ -150,7 +150,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         cell: Cell,
         count: u32,
         max_range: u32,
-        out: &mut [Cell],
+        out: &mut Vec<Cell>,
     ) -> Result<(), u32> {
         let mut rem = count;
 
@@ -167,10 +167,12 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                         if other == cell {
                             continue;
                         }
-                        if self.map.get(&cell).is_some() {
-                            let i = (count - rem) as usize;
-                            out[i] = cell;
+                        if self.map.get(&other).is_some() {
+                            out.push(other);
                             rem -= 1;
+                        }
+                        if rem == 0 {
+                            return Ok(());
                         }
                     }
                 }
@@ -202,7 +204,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                         if other == cell {
                             continue;
                         }
-                        if let Some(element) = self.map.get(&cell) {
+                        if let Some(element) = self.map.get(&other) {
                             return Ok((other, element));
                         }
                     }
