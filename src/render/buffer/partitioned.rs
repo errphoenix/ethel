@@ -433,7 +433,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         // corresponds to the same size of the type present on the GPU buffers.
         unsafe {
             let dst = self.ptr.add(base_offset + offset) as *mut T;
-            std::ptr::copy_nonoverlapping(src, dst, data_len);
+            std::ptr::copy_nonoverlapping(src, dst, data_len / size_of::<T>());
         }
     }
 
