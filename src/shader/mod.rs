@@ -86,6 +86,20 @@ impl ShaderHandle {
         }
     }
 
+    pub fn uniform_vec3_array(&self, uniform: &str, vec3: [f32; 3]) {
+        let location = self.uniform_location(uniform);
+        unsafe {
+            gl::Uniform3f(*location, vec3[0], vec3[1], vec3[2]);
+        }
+    }
+
+    pub fn uniform_vec3_glam(&self, uniform: &str, vec3: glam::Vec3) {
+        let location = self.uniform_location(uniform);
+        unsafe {
+            gl::Uniform3f(*location, vec3[0], vec3.y, vec3.z);
+        }
+    }
+
     pub fn bind(&self) {
         unsafe {
             gl::UseProgram(self.gl_obj);
