@@ -150,7 +150,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     }
 
     /// Get a specific amount `count` of populated cells nearest to `cell`
-    /// within `max_range`.
+    /// within `max_range_*`.
     ///
     /// The found cells will be written to `out` starting from index 0 to
     /// index `count`.
@@ -163,31 +163,34 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         &self,
         cell: Cell,
         count: u32,
-        max_range: u32,
+        max_range_x: u32,
+        max_range_y: u32,
+        max_range_z: u32,
         out: &mut Vec<Cell>,
     ) -> Result<(), u32> {
         let mut rem = count;
 
-        for i in 1..=max_range {
-            let i = i as i32;
-            for x in -i..i {
-                for y in -i..i {
-                    for z in -i..i {
-                        let other = Cell {
-                            x: cell.x + x,
-                            y: cell.y + y,
-                            z: cell.z + z,
-                        };
-                        if other == cell {
-                            continue;
-                        }
-                        if self.map.get(&other).is_some() {
-                            out.push(other);
-                            rem -= 1;
-                        }
-                        if rem == 0 {
-                            return Ok(());
-                        }
+        let ix = max_range_x as i32;
+        let iy = max_range_y as i32;
+        let iz = max_range_z as i32;
+
+        for x in -ix..=ix {
+            for y in -iy..=iy {
+                for z in -iz..=iz {
+                    let other = Cell {
+                        x: cell.x + x,
+                        y: cell.y + y,
+                        z: cell.z + z,
+                    };
+                    if other == cell {
+                        continue;
+                    }
+                    if self.map.get(&other).is_some() {
+                        out.push(other);
+                        rem -= 1;
+                    }
+                    if rem == 0 {
+                        return Ok(());
                     }
                 }
             }
@@ -197,30 +200,37 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     }
 
     /// Get the nearest populated cell from a `cell` and its contents within
-    /// `max_range`.
+    /// `max_range_*`.
     ///
     /// # Returns
     /// * [`Ok`] containing the nearest populated cell and a reference to its
     ///   contents.
     /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
     ///   present other than, maybe, the one in `cell`.
-    pub fn nearest_cell(&self, cell: Cell, max_range: u32) -> Result<(Cell, &T), ()> {
-        for i in 1..=max_range {
-            let i = i as i32;
-            for x in -i..i {
-                for y in -i..i {
-                    for z in -i..i {
-                        let other = Cell {
-                            x: cell.x + x,
-                            y: cell.y + y,
-                            z: cell.z + z,
-                        };
-                        if other == cell {
-                            continue;
-                        }
-                        if let Some(element) = self.map.get(&other) {
-                            return Ok((other, element));
-                        }
+    pub fn nearest_cell(
+        &self,
+        cell: Cell,
+        max_range_x: u32,
+        max_range_y: u32,
+        max_range_z: u32,
+    ) -> Result<(Cell, &T), ()> {
+        let ix = max_range_x as i32;
+        let iy = max_range_y as i32;
+        let iz = max_range_z as i32;
+
+        for x in -ix..=ix {
+            for y in -iy..=iy {
+                for z in -iz..=iz {
+                    let other = Cell {
+                        x: cell.x + x,
+                        y: cell.y + y,
+                        z: cell.z + z,
+                    };
+                    if other == cell {
+                        continue;
+                    }
+                    if let Some(element) = self.map.get(&other) {
+                        return Ok((other, element));
                     }
                 }
             }
@@ -230,7 +240,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     }
 
     /// Get the nearest populated cell from a `point` and its contents within
-    /// `max_range`.
+    /// `max_range_*`.
     ///
     /// # Returns
     /// * [`Ok`] containing the nearest populated cell and a reference to its
@@ -238,19 +248,32 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
     ///   present other than, maybe, the one in the cell corresponding to
     ///   `point`.
-    pub fn nearest_cell_point(&self, point: glam::Vec3, max_range: u32) -> Result<(Cell, &T), ()> {
-        self.nearest_cell(self.cell_at(point), max_range)
+    pub fn nearest_cell_point(
+        &self,
+        point: glam::Vec3,
+        max_range_x: u32,
+        max_range_y: u32,
+        max_range_z: u32,
+    ) -> Result<(Cell, &T), ()> {
+        self.nearest_cell(self.cell_at(point), max_range_x, max_range_y, max_range_z)
     }
 
-    /// Get the nearest populated cell from a `cell` and its contents within `max_range`.
+    /// Get the nearest populated cell from a `cell` and its contents
+    /// within `max_range_*`.
     ///
     /// # Returns
     /// * [`Ok`] containing the nearest populated cell and an exclusive
     ///   reference to its contents.
     /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
     ///   present other than, maybe, the one in `cell`.
-    pub fn nearest_cell_mut(&mut self, cell: Cell, max_range: u32) -> Result<(Cell, &mut T), ()> {
-        if let Ok((cell, _)) = self.nearest_cell(cell, max_range) {
+    pub fn nearest_cell_mut(
+        &mut self,
+        cell: Cell,
+        max_range_x: u32,
+        max_range_y: u32,
+        max_range_z: u32,
+    ) -> Result<(Cell, &mut T), ()> {
+        if let Ok((cell, _)) = self.nearest_cell(cell, max_range_x, max_range_y, max_range_z) {
             let e = self.map.get_mut(&cell).expect("nearest cell is populated");
             return Ok((cell, e));
         }
@@ -258,7 +281,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     }
 
     /// Get the nearest populated cell from a `point` and its contents within
-    /// `max_range`.
+    /// `max_range_*`.
     ///
     /// # Returns
     /// * [`Ok`] containing the nearest populated cell and an exclusive
@@ -269,9 +292,11 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     pub fn nearest_cell_point_mut(
         &mut self,
         point: glam::Vec3,
-        max_range: u32,
+        max_range_x: u32,
+        max_range_y: u32,
+        max_range_z: u32,
     ) -> Result<(Cell, &mut T), ()> {
-        self.nearest_cell_mut(self.cell_at(point), max_range)
+        self.nearest_cell_mut(self.cell_at(point), max_range_x, max_range_y, max_range_z)
     }
 
     #[inline]
