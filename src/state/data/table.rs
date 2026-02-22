@@ -870,10 +870,20 @@ macro_rules! table_spec {
                     }
                 }
 
+                /// Returns the "reverse map" for owner indices.
+                ///
+                /// Each handle corresponds in parallel to an element in all
+                /// rows. The value of this handle is the indirect index of
+                /// that element across all rows of the same index.
                 pub fn handles(&self) -> &[u32] {
                     &self.owners
                 }
 
+                /// Returns the "reverse map" for owner indices.
+                ///
+                /// Each handle corresponds in parallel to an element in all
+                /// rows. The value of this handle is the indirect index of
+                /// that element across all rows of the same index.
                 pub fn handles_view(&self) -> crate::state::data::table::SoloView<'_, [< $name TableDef >], u32> {
                     $crate::state::data::table::SoloView {
                         alpha: &self.owners,
@@ -881,6 +891,10 @@ macro_rules! table_spec {
                     }
                 }
 
+                /// Returns all singular rows.
+                ///
+                /// These are, in order:
+                /// todo: generate names
                 pub fn split(&self) -> (
                     $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>,
                     $(
@@ -914,7 +928,59 @@ macro_rules! table_spec {
                         },
                         $(
                             $crate::state::data::table::SoloViewMut {
-                            alpha: &mut self.$row,
+                                alpha: &mut self.$row,
+                                _definition: std::marker::PhantomData,
+                            },
+                        )+
+                    )
+                }
+
+                pub fn split_range<Range>(&self, range: Range) -> (
+                    $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>,
+                    $(
+                        $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt>,
+                    )+
+                )
+                    where Range: Clone + Copy +
+                        std::slice::SliceIndex<[$rt_0], Output = [$rt_0]>
+                        $(
+                            + std::slice::SliceIndex<[$rt], Output = [$rt]>
+                        )+
+                {
+                    (
+                        $crate::state::data::table::SoloView {
+                            alpha: &self.$row_0[range],
+                            _definition: std::marker::PhantomData,
+                        },
+                        $(
+                            $crate::state::data::table::SoloView {
+                                alpha: &self.$row[range],
+                                _definition: std::marker::PhantomData,
+                            },
+                        )+
+                    )
+                }
+
+                pub fn split_mut_range<Range>(&mut self, range: Range) -> (
+                    $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt_0>,
+                    $(
+                        $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt>,
+                    )+
+                )
+                    where Range: Clone + Copy +
+                        std::slice::SliceIndex<[$rt_0], Output = [$rt_0]>
+                        $(
+                            + std::slice::SliceIndex<[$rt], Output = [$rt]>
+                        )+
+                {
+                    (
+                        $crate::state::data::table::SoloViewMut {
+                            alpha: &mut self.$row_0[range],
+                            _definition: std::marker::PhantomData,
+                        },
+                        $(
+                            $crate::state::data::table::SoloViewMut {
+                                alpha: &mut self.$row[range],
                                 _definition: std::marker::PhantomData,
                             },
                         )+
@@ -943,6 +1009,24 @@ macro_rules! table_spec {
                     }
                 }
 
+                pub fn [< $row_0 _view_range >]<Range>(&self, range: Range) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>
+                    where Range: std::slice::SliceIndex<[$rt_0], Output = [$rt_0]>
+                {
+                    $crate::state::data::table::SoloView {
+                        alpha: &self.$row_0[range],
+                        _definition: std::marker::PhantomData,
+                    }
+                }
+
+                pub fn [< $row_0 _mut_view_range >]<Range>(&mut self, range: Range) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt_0>
+                    where Range: std::slice::SliceIndex<[$rt_0], Output = [$rt_0]>
+                {
+                    $crate::state::data::table::SoloViewMut {
+                        alpha: &mut self.$row_0[range],
+                        _definition: std::marker::PhantomData,
+                    }
+                }
+
                 $(
                     pub fn [< $row _slice >](&self) -> &[$rt] {
                         &self.$row
@@ -962,6 +1046,25 @@ macro_rules! table_spec {
                     pub fn [< $row _mut_view >](&mut self) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt> {
                         $crate::state::data::table::SoloViewMut {
                             alpha: &mut self.$row,
+                            _definition: std::marker::PhantomData,
+                        }
+                    }
+
+
+                    pub fn [< $row _view_range >]<Range>(&self, range: Range) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt>
+                        where Range: std::slice::SliceIndex<[$rt], Output = [$rt]>
+                    {
+                        $crate::state::data::table::SoloView {
+                            alpha: &self.$row[range],
+                            _definition: std::marker::PhantomData,
+                        }
+                    }
+
+                    pub fn [< $row _mut_view_range >]<Range>(&mut self, range: Range) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt>
+                        where Range: std::slice::SliceIndex<[$rt], Output = [$rt]>
+                    {
+                        $crate::state::data::table::SoloViewMut {
+                            alpha: &mut self.$row[range],
                             _definition: std::marker::PhantomData,
                         }
                     }
