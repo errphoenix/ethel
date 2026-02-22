@@ -884,17 +884,13 @@ macro_rules! table_spec {
                 /// Each handle corresponds in parallel to an element in all
                 /// rows. The value of this handle is the indirect index of
                 /// that element across all rows of the same index.
-                pub fn handles_view(&self) -> crate::state::data::table::SoloView<'_, [< $name TableDef >], u32> {
+                pub fn handles_view(&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], u32> {
                     $crate::state::data::table::SoloView {
                         alpha: &self.owners,
                         _definition: std::marker::PhantomData,
                     }
                 }
 
-                /// Returns all singular rows.
-                ///
-                /// These are, in order:
-                /// todo: generate names
                 pub fn split(&self) -> (
                     $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>,
                     $(
