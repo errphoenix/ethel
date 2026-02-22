@@ -874,6 +874,13 @@ macro_rules! table_spec {
                     &self.owners
                 }
 
+                pub fn handles_view(&self) -> crate::state::data::table::SoloView<'_, [< $name TableDef >], u32> {
+                    $crate::state::data::table::SoloView {
+                        alpha: &self.owners,
+                        _definition: std::marker::PhantomData,
+                    }
+                }
+
                 pub fn split(&self) -> (
                     $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0>,
                     $(
