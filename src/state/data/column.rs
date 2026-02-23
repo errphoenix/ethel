@@ -131,6 +131,14 @@ pub struct IndexArrayColumn<T: Default> {
     free: Vec<u32>,
 }
 
+impl<T: Default> IndexArrayColumn<T> {
+    pub fn clear(&mut self) {
+        self.indices.resize(1, 0);
+        self.contiguous.resize_with(1, || Entry::default());
+        self.free.clear();
+    }
+}
+
 impl<T: Default> Default for IndexArrayColumn<T> {
     fn default() -> Self {
         Self::new()
@@ -375,6 +383,15 @@ pub struct ParallelIndexArrayColumn<T: Default> {
     /// The owner indices of each `T` element. This is parallel to the
     /// `contiguous` vec.
     owners: Vec<u32>,
+}
+
+impl<T: Default> ParallelIndexArrayColumn<T> {
+    pub fn clear(&mut self) {
+        self.indices.resize(1, 0);
+        self.owners.resize(1, 0);
+        self.contiguous.resize_with(1, || T::default());
+        self.free.clear();
+    }
 }
 
 impl<T: Default> Default for ParallelIndexArrayColumn<T> {
