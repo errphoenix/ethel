@@ -437,6 +437,10 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
     pub fn handles(&self) -> &[u32] {
         &self.owners
     }
+
+    pub fn handles_mut(&mut self) -> &mut [u32] {
+        &mut self.owners
+    }
 }
 
 impl<T: Default> SparseSlot for ParallelIndexArrayColumn<T> {
