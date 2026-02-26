@@ -7,6 +7,70 @@ pub struct Cell {
     pub z: i32,
 }
 
+impl Cell {
+    pub const X: Cell = Cell::new(1, 0, 0);
+    pub const Y: Cell = Cell::new(0, 1, 0);
+    pub const Z: Cell = Cell::new(0, 0, 1);
+    pub const XY: Cell = Cell::new(1, 1, 0);
+    pub const YZ: Cell = Cell::new(0, 1, 1);
+    pub const ZX: Cell = Cell::new(1, 0, 1);
+    pub const NEG_XY: Cell = Cell::new(-1, 1, 0);
+    pub const NEG_YZ: Cell = Cell::new(0, -1, 1);
+    pub const NEG_ZX: Cell = Cell::new(1, 0, -1);
+
+    pub const fn new(x: i32, y: i32, z: i32) -> Self {
+        Self { x, y, z }
+    }
+}
+
+impl std::ops::Neg for Cell {
+    type Output = Cell;
+
+    fn neg(self) -> Self::Output {
+        Self::Output {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}
+
+impl std::ops::Add for Cell {
+    type Output = Cell;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+
+impl std::ops::Sub for Cell {
+    type Output = Cell;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
+impl std::ops::Mul<i32> for Cell {
+    type Output = Cell;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        Self::Output {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SpatialResolution(u32);
 
@@ -149,8 +213,24 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         });
     }
 
+    fn cell_query_check(
+        &self,
+        count: &mut u32,
+        src_cell: Cell,
+        offset_cell: Cell,
+        out: &mut Vec<Cell>,
+    ) -> bool {
+        let o_cell = src_cell + offset_cell;
+
+        if o_cell != src_cell && self.map.get(&o_cell).is_some() {
+            out.push(o_cell);
+            *count -= 1;
+        }
+        *count < 1
+    }
+
     /// Get a specific amount `count` of populated cells nearest to `cell`
-    /// within `max_range_*`.
+    /// within `max_range`.
     ///
     /// The found cells will be written to `out` starting from index 0 to
     /// index `count`.
@@ -163,40 +243,56 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         &self,
         cell: Cell,
         count: u32,
-        max_range_x: u32,
-        max_range_y: u32,
-        max_range_z: u32,
+        max_range: u32,
         out: &mut Vec<Cell>,
     ) -> Result<(), u32> {
         let mut rem = count;
+        let mut end = false;
 
-        let ix = max_range_x as i32;
-        let iy = max_range_y as i32;
-        let iz = max_range_z as i32;
-
-        for x in -ix..=ix {
-            for y in -iy..=iy {
-                for z in -iz..=iz {
-                    let other = Cell {
-                        x: cell.x + x,
-                        y: cell.y + y,
-                        z: cell.z + z,
-                    };
-                    if other == cell {
-                        continue;
-                    }
-                    if self.map.get(&other).is_some() {
-                        out.push(other);
-                        rem -= 1;
-                    }
-                    if rem == 0 {
-                        return Ok(());
-                    }
+        for i in 1..=max_range as i32 {
+            // x axis
+            for y in -i..=i {
+                for z in -i..=i {
+                    let offset = Cell::new(i as i32, y, z);
+                    let neg_offset = Cell::new(-i as i32, y, z);
+                    self.cell_query_check(&mut rem, cell, offset, out);
+                    end = self.cell_query_check(&mut rem, cell, neg_offset, out);
                 }
+            }
+            if end {
+                return Ok(());
+            }
+
+            // y axis
+            // skip first and last X cells to avoid duplicates
+            for x in (-i + 1)..i {
+                for z in -i..=i {
+                    let offset = Cell::new(x, i as i32, z);
+                    let neg_offset = Cell::new(x, -i as i32, z);
+                    self.cell_query_check(&mut rem, cell, offset, out);
+                    end = self.cell_query_check(&mut rem, cell, neg_offset, out);
+                }
+            }
+            if end {
+                return Ok(());
+            }
+
+            // z axis
+            // skip first and last XY cells to avoid duplicates
+            for x in (-i + 1)..i {
+                for y in (-i + 1)..i {
+                    let offset = Cell::new(x, y, i as i32);
+                    let neg_offset = Cell::new(x, y, -i as i32);
+                    self.cell_query_check(&mut rem, cell, offset, out);
+                    end = self.cell_query_check(&mut rem, cell, neg_offset, out);
+                }
+            }
+            if end {
+                return Ok(());
             }
         }
 
-        if rem == 0 { Ok(()) } else { Err(rem) }
+        Err(rem)
     }
 
     /// Get the nearest populated cell from a `cell` and its contents within
