@@ -94,9 +94,9 @@ impl SpatialResolution {
 
     #[inline]
     pub fn encode_point(&self, point: glam::Vec3) -> Cell {
-        let cx = (point.x / self.0 as f32).floor();
-        let cy = (point.y / self.0 as f32).floor();
-        let cz = (point.z / self.0 as f32).floor();
+        let cx = (point.x * self.0 as f32).floor();
+        let cy = (point.y * self.0 as f32).floor();
+        let cz = (point.z * self.0 as f32).floor();
 
         Cell {
             x: cx as i32,
