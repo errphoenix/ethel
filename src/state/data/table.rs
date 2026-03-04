@@ -21,9 +21,9 @@ where
     Def: Sized,
     A: Sized,
 {
-    alpha: &'row [A],
-    beta: &'row [B],
-    _definition: std::marker::PhantomData<Def>,
+    pub alpha: &'row [A],
+    pub beta: &'row [B],
+    pub _definition: std::marker::PhantomData<Def>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -32,10 +32,10 @@ where
     Def: Sized,
     A: Sized,
 {
-    alpha: &'row [A],
-    beta: &'row [B],
-    gamma: &'row [Y],
-    _definition: std::marker::PhantomData<Def>,
+    pub alpha: &'row [A],
+    pub beta: &'row [B],
+    pub gamma: &'row [Y],
+    pub _definition: std::marker::PhantomData<Def>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -44,11 +44,11 @@ where
     Def: Sized,
     A: Sized,
 {
-    alpha: &'row [A],
-    beta: &'row [B],
-    gamma: &'row [Y],
-    delta: &'row [D],
-    _definition: std::marker::PhantomData<Def>,
+    pub alpha: &'row [A],
+    pub beta: &'row [B],
+    pub gamma: &'row [Y],
+    pub delta: &'row [D],
+    pub _definition: std::marker::PhantomData<Def>,
 }
 
 impl<'row, Def, A> IntoIterator for SoloView<'row, Def, A>
@@ -340,9 +340,9 @@ where
     Def: Sized,
     A: Sized,
 {
-    alpha: &'row mut [A],
-    beta: &'row mut [B],
-    _definition: std::marker::PhantomData<Def>,
+    pub alpha: &'row mut [A],
+    pub beta: &'row mut [B],
+    pub _definition: std::marker::PhantomData<Def>,
 }
 
 #[derive(Debug)]
@@ -351,10 +351,10 @@ where
     Def: Sized,
     A: Sized,
 {
-    alpha: &'row mut [A],
-    beta: &'row mut [B],
-    gamma: &'row mut [Y],
-    _definition: std::marker::PhantomData<Def>,
+    pub alpha: &'row mut [A],
+    pub beta: &'row mut [B],
+    pub gamma: &'row mut [Y],
+    pub _definition: std::marker::PhantomData<Def>,
 }
 
 #[derive(Debug)]
@@ -363,11 +363,11 @@ where
     Def: Sized,
     A: Sized,
 {
-    alpha: &'row mut [A],
-    beta: &'row mut [B],
-    gamma: &'row mut [Y],
-    delta: &'row mut [D],
-    _definition: std::marker::PhantomData<Def>,
+    pub alpha: &'row mut [A],
+    pub beta: &'row mut [B],
+    pub gamma: &'row mut [Y],
+    pub delta: &'row mut [D],
+    pub _definition: std::marker::PhantomData<Def>,
 }
 
 impl<'row, Def, A> IntoIterator for SoloViewMut<'row, Def, A>
