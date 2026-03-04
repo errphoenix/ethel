@@ -21,6 +21,14 @@ impl Cell {
     pub const fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
     }
+
+    pub const fn abs(self) -> Self {
+        Self {
+            x: self.x.abs(),
+            y: self.y.abs(),
+            z: self.z.abs(),
+        }
+    }
 }
 
 impl std::ops::Neg for Cell {
@@ -214,10 +222,11 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         src_cell: Cell,
         offset_cell: Cell,
         out: &mut Vec<Cell>,
+        ignore_self: bool,
     ) -> bool {
         let o_cell = src_cell + offset_cell;
 
-        if o_cell != src_cell && self.map.get(&o_cell).is_some() {
+        if (!ignore_self || o_cell != src_cell) && self.map.get(&o_cell).is_some() {
             out.push(o_cell);
             *count -= 1;
         }
@@ -230,6 +239,8 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     /// The found cells will be written to `out` starting from index 0 to
     /// index `count`.
     ///
+    /// If `ignore_self` is `true`, the given starting `cell` will be ignored.
+    ///
     /// # Returns
     /// * [`Ok`] if all `count` cells were found and written to `out`.
     /// * Otherwise, [`Err`] containing the remaining amount of cells that
@@ -240,6 +251,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         count: u32,
         max_range: u32,
         out: &mut Vec<Cell>,
+        ignore_self: bool,
     ) -> Result<(), u32> {
         let mut rem = count;
         let mut end = false;
@@ -250,12 +262,9 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                 for z in -i..=i {
                     let offset = Cell::new(i as i32, y, z);
                     let neg_offset = Cell::new(-i as i32, y, z);
-                    self.cell_query_check(&mut rem, cell, offset, out);
-                    end = self.cell_query_check(&mut rem, cell, neg_offset, out);
+                    self.cell_query_check(&mut rem, cell, offset, out, ignore_self);
+                    self.cell_query_check(&mut rem, cell, neg_offset, out, ignore_self);
                 }
-            }
-            if end {
-                return Ok(());
             }
 
             // y axis
@@ -264,12 +273,9 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                 for z in -i..=i {
                     let offset = Cell::new(x, i as i32, z);
                     let neg_offset = Cell::new(x, -i as i32, z);
-                    self.cell_query_check(&mut rem, cell, offset, out);
-                    end = self.cell_query_check(&mut rem, cell, neg_offset, out);
+                    self.cell_query_check(&mut rem, cell, offset, out, ignore_self);
+                    self.cell_query_check(&mut rem, cell, neg_offset, out, ignore_self);
                 }
-            }
-            if end {
-                return Ok(());
             }
 
             // z axis
@@ -278,11 +284,12 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                 for y in (-i + 1)..i {
                     let offset = Cell::new(x, y, i as i32);
                     let neg_offset = Cell::new(x, y, -i as i32);
-                    self.cell_query_check(&mut rem, cell, offset, out);
-                    end = self.cell_query_check(&mut rem, cell, neg_offset, out);
+                    self.cell_query_check(&mut rem, cell, offset, out, ignore_self);
+                    end = self.cell_query_check(&mut rem, cell, neg_offset, out, ignore_self);
                 }
             }
             if end {
+                out.sort_by_key(|&cell| cell.x * cell.x + cell.y * cell.y + cell.z * cell.z);
                 return Ok(());
             }
         }
