@@ -226,7 +226,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     ) -> bool {
         let o_cell = src_cell + offset_cell;
 
-        if (!ignore_self || o_cell != src_cell) && self.map.get(&o_cell).is_some() {
+        if self.map.get(&o_cell).is_some() && (!ignore_self || o_cell != src_cell) {
             out.push(o_cell);
             *count -= 1;
         }
@@ -258,8 +258,17 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
 
         for i in 1..=max_range as i32 {
             // x axis
+            let adj = Cell::new(i, 0, 0);
+            let neg_adj = Cell::new(-i, 0, 0);
+            self.cell_query_check(&mut rem, cell, adj, out, ignore_self);
+            self.cell_query_check(&mut rem, cell, neg_adj, out, ignore_self);
+
             for y in -i..=i {
                 for z in -i..=i {
+                    if y == 0 && z == 0 {
+                        continue;
+                    }
+
                     let offset = Cell::new(i as i32, y, z);
                     let neg_offset = Cell::new(-i as i32, y, z);
                     self.cell_query_check(&mut rem, cell, offset, out, ignore_self);
@@ -268,9 +277,18 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
             }
 
             // y axis
+            let adj = Cell::new(0, i, 0);
+            let neg_adj = Cell::new(0, -i, 0);
+            self.cell_query_check(&mut rem, cell, adj, out, ignore_self);
+            self.cell_query_check(&mut rem, cell, neg_adj, out, ignore_self);
+
             // skip first and last X cells to avoid duplicates
             for x in (-i + 1)..i {
                 for z in -i..=i {
+                    if x == 0 && z == 0 {
+                        continue;
+                    }
+
                     let offset = Cell::new(x, i as i32, z);
                     let neg_offset = Cell::new(x, -i as i32, z);
                     self.cell_query_check(&mut rem, cell, offset, out, ignore_self);
@@ -279,9 +297,18 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
             }
 
             // z axis
+            let adj = Cell::new(0, 0, i);
+            let neg_adj = Cell::new(0, 0, -i);
+            self.cell_query_check(&mut rem, cell, adj, out, ignore_self);
+            self.cell_query_check(&mut rem, cell, neg_adj, out, ignore_self);
+
             // skip first and last XY cells to avoid duplicates
             for x in (-i + 1)..i {
                 for y in (-i + 1)..i {
+                    if x == 0 && y == 0 {
+                        continue;
+                    }
+
                     let offset = Cell::new(x, y, i as i32);
                     let neg_offset = Cell::new(x, y, -i as i32);
                     self.cell_query_check(&mut rem, cell, offset, out, ignore_self);
