@@ -123,6 +123,7 @@ impl SpatialResolution {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FxSpatialHash<T: Clone + Copy> {
     map: HashMap<Cell, T>,
 
