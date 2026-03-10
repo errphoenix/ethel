@@ -1,3 +1,5 @@
+use std::collections::hash_map::{Keys, Values};
+
 use rustc_hash::FxHashMap as HashMap;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -153,6 +155,14 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
             resolution,
             map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
+    }
+
+    pub fn cells(&self) -> Keys<'_, Cell, T> {
+        self.map.keys()
+    }
+
+    pub fn elements(&self) -> Values<'_, Cell, T> {
+        self.map.values()
     }
 
     /// Add an `element` to the spatial hash to a specific `cell`.
