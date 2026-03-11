@@ -119,7 +119,7 @@ impl SpatialResolution {
     pub fn approx_point(&self, cell: Cell) -> glam::Vec3 {
         glam::vec3(
             cell.x as f32 / self.0 as f32,
-            cell.z as f32 / self.0 as f32,
+            cell.y as f32 / self.0 as f32,
             cell.z as f32 / self.0 as f32,
         )
     }
@@ -239,7 +239,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
 
         if self.map.get(&o_cell).is_some() && (!ignore_self || o_cell != src_cell) {
             out.push(o_cell);
-            *count -= 1;
+            *count = count.saturating_sub(1);
         }
         *count < 1
     }
@@ -305,106 +305,6 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         }
 
         Err(rem)
-    }
-
-    /// Get the nearest populated cell from a `cell` and its contents within
-    /// `max_range_*`.
-    ///
-    /// # Returns
-    /// * [`Ok`] containing the nearest populated cell and a reference to its
-    ///   contents.
-    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
-    ///   present other than, maybe, the one in `cell`.
-    pub fn nearest_cell(
-        &self,
-        cell: Cell,
-        max_range_x: u32,
-        max_range_y: u32,
-        max_range_z: u32,
-    ) -> Result<(Cell, &T), ()> {
-        let ix = max_range_x as i32;
-        let iy = max_range_y as i32;
-        let iz = max_range_z as i32;
-
-        for x in -ix..=ix {
-            for y in -iy..=iy {
-                for z in -iz..=iz {
-                    let other = Cell {
-                        x: cell.x + x,
-                        y: cell.y + y,
-                        z: cell.z + z,
-                    };
-                    if other == cell {
-                        continue;
-                    }
-                    if let Some(element) = self.map.get(&other) {
-                        return Ok((other, element));
-                    }
-                }
-            }
-        }
-
-        Err(())
-    }
-
-    /// Get the nearest populated cell from a `point` and its contents within
-    /// `max_range_*`.
-    ///
-    /// # Returns
-    /// * [`Ok`] containing the nearest populated cell and a reference to its
-    ///   contents.
-    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
-    ///   present other than, maybe, the one in the cell corresponding to
-    ///   `point`.
-    pub fn nearest_cell_point(
-        &self,
-        point: glam::Vec3,
-        max_range_x: u32,
-        max_range_y: u32,
-        max_range_z: u32,
-    ) -> Result<(Cell, &T), ()> {
-        self.nearest_cell(self.cell_at(point), max_range_x, max_range_y, max_range_z)
-    }
-
-    /// Get the nearest populated cell from a `cell` and its contents
-    /// within `max_range_*`.
-    ///
-    /// # Returns
-    /// * [`Ok`] containing the nearest populated cell and an exclusive
-    ///   reference to its contents.
-    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
-    ///   present other than, maybe, the one in `cell`.
-    pub fn nearest_cell_mut(
-        &mut self,
-        cell: Cell,
-        max_range_x: u32,
-        max_range_y: u32,
-        max_range_z: u32,
-    ) -> Result<(Cell, &mut T), ()> {
-        if let Ok((cell, _)) = self.nearest_cell(cell, max_range_x, max_range_y, max_range_z) {
-            let e = self.map.get_mut(&cell).expect("nearest cell is populated");
-            return Ok((cell, e));
-        }
-        Err(())
-    }
-
-    /// Get the nearest populated cell from a `point` and its contents within
-    /// `max_range_*`.
-    ///
-    /// # Returns
-    /// * [`Ok`] containing the nearest populated cell and an exclusive
-    ///   reference to its contents.
-    /// * [`Err`] if there is no nearby populated cell; i.e. there no elements
-    ///   present other than, maybe, the one in the cell corresponding to
-    ///   `point`.
-    pub fn nearest_cell_point_mut(
-        &mut self,
-        point: glam::Vec3,
-        max_range_x: u32,
-        max_range_y: u32,
-        max_range_z: u32,
-    ) -> Result<(Cell, &mut T), ()> {
-        self.nearest_cell_mut(self.cell_at(point), max_range_x, max_range_y, max_range_z)
     }
 
     #[inline]
