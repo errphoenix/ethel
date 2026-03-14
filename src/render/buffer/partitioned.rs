@@ -156,11 +156,49 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         &self.layout
     }
 
+    /// Binds a single partition of buffered data of `section` to the GPU's SSBOs.
+    ///
+    /// The data will be bound to the SSBO specified by the given index
+    /// `ssbo_index` if provided. Otherwise, the SSBO binding index will
+    /// correspond to the one specified in this buffer's [`layout`](Layout).
+    ///
+    /// # Panic
+    /// * If `section` is not a value within the range (0, 2).
+    /// * If `partition` does not correspond to a valid partition index.
+    /// * If `ssbo_index` is not provided and this buffer's [`layout`](Layout)
+    ///   does not specify an SSBO index for `partition`.
+    pub fn bind_shader_storage_single(
+        &self,
+        section: usize,
+        partition: usize,
+        ssbo_index: Option<u32>,
+    ) {
+        assert_tb_section!(section);
+        assert_partition!(PARTS, partition);
+
+        let base_offset = (self.layout.len() * section) as isize;
+        let binding = ssbo_index
+            .or_else(|| self.layout.ssbo_of(partition))
+            .expect("unspecified ssbo binding index");
+
+        let offset = self.layout.offset_at(partition) as isize;
+        let length = self.layout.length_at(partition) as isize;
+        unsafe {
+            janus::gl::BindBufferRange(
+                janus::gl::SHADER_STORAGE_BUFFER,
+                binding,
+                self.gl_obj,
+                base_offset + offset,
+                length,
+            );
+        }
+    }
+
     /// Binds all the buffered data of `section` to the GPU's SSBOs.
     ///
-    /// Each part is bound to a different SSBO.
-    /// The SSBOs binding indices correspond to the order of each part
-    /// specified in the buffer's [`layout`](Layout).
+    /// Each partition is bound to a different SSBO.
+    /// The SSBOs binding indices correspond to the one specified in this
+    /// buffer's [`layout`](Layout).
     ///
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
