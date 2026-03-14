@@ -208,6 +208,96 @@ where
             std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
         }
     }
+
+    /// Copy the given `data` into a `section` of the triple buffer at a given
+    /// `offset` with a padding of `pad_lan` at the end of each
+    /// element.
+    ///
+    /// This function is intended for operations where the CPU and GPU data
+    /// representations differ due to memory alignment requirements.
+    ///
+    /// Note that this operation is likely slower than the standard
+    /// [`blit_section`].
+    ///
+    /// It is, in most cases, not recommended and [`blit_section`] should be
+    /// preferred if possible.
+    ///
+    /// # Motivation
+    /// Imagine you want to pass a position vector to the GPU: this is a
+    /// 3-dimensional vector on the CPU, but it must be a vec4 on the GPU due
+    /// to OpenGL's SSBO alignment requirements.
+    ///
+    /// In most cases, to avoid this issue, you would likely settle for an
+    /// intermediary buffer on the CPU where this conversion happens or you
+    /// could simply just store all positions as a 4-dimensional vector on the
+    /// CPU (maybe intelligently packing relevant data on the W component) if
+    /// it is not performance critical.
+    ///
+    /// In some cases, though, like visualising physics data, using a
+    /// 4-dimensional is not an option as it would pollute the CPU cache with
+    /// an unused float in a very performance critical scenario.
+    ///
+    /// This is the reason this function exists: it will pad out each element
+    /// of `data` with the given `pad_len` in bytes to satisfy SSBO alignment
+    /// requirements, without the need of intermediary buffers on the CPU.
+    ///
+    /// # Safety
+    /// The caller must always ensure that the size of `T + pad_len`
+    /// corresponds to the required alignment for this buffer on the GPU: an
+    /// incorrect value will produce undefined behaviour, crashes, or VRAM
+    /// corruption.
+    ///
+    /// # Panics
+    /// * If `section` is not a value within the range (0, 2).
+    /// * If `offset` is greater than the length of the section.
+    ///
+    /// [`blit_section`]: TriBuffer::blit_section
+    pub unsafe fn blit_section_padded(
+        &self,
+        section: usize,
+        data: &[T],
+        offset: usize,
+        pad_len: usize,
+    ) {
+        if pad_len == 0 {
+            // SAFETY: invariants correspond to those of this function.
+            return self.blit_section(section, data, offset);
+        }
+
+        assert_tb_section!(section);
+        assert!(
+            self.capacity > offset,
+            "attempted to blit at offset {offset} with section length {}",
+            self.capacity
+        );
+
+        let src = data.as_ptr();
+        let avail = self.capacity - offset;
+        let len = avail.min(data.len());
+
+        let data_bytes_padded = size_of::<T>() + pad_len;
+        let avail_count = avail / data_bytes_padded;
+        let data_count = data.len();
+
+        // safe total length of data, element count
+        let data_len = avail_count.min(data_count);
+
+        // SAFETY: we assert the section and partition are valid within this
+        // buffer's layout. The buffer's layout, in turn, guarantees valid
+        // base offsets and base lengths.
+        // The caller guarantees the pointer to `data` must always be valid.
+        // Additionally, the caller must also ensure that that the length of
+        // T + `pad_len` correspond to the size of the type on the GPU.
+        unsafe {
+            let mut dst = self.ptr[section].add(offset);
+            for i in 0..data_len {
+                std::ptr::write_unaligned(dst as *mut T, data[i]);
+                dst = dst.add(size_of::<T>());
+                dst.write_bytes(0, pad_len);
+                dst = dst.add(pad_len);
+            }
+        }
+    }
 }
 
 impl<T> Drop for TriBuffer<T>
