@@ -300,6 +300,17 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                 }
             }
             if end {
+                let point = glam::vec3(cell.x as f32, cell.y as f32, cell.z as f32);
+                out.sort_by(|&a, &b| {
+                    let a = glam::vec3(a.x as f32, a.y as f32, a.z as f32);
+                    let b = glam::vec3(b.x as f32, b.y as f32, b.z as f32);
+                    let dst_a = point.distance_squared(a);
+                    let dst_b = point.distance_squared(b);
+                    dst_a
+                        .partial_cmp(&dst_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
                 return Ok(());
             }
         }
