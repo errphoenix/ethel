@@ -241,28 +241,25 @@ where
     /// of `data` with the given `pad_len` in bytes to satisfy SSBO alignment
     /// requirements, without the need of intermediary buffers on the CPU.
     ///
-    /// # Safety
-    /// The caller must always ensure that the size of `T + pad_len`
-    /// corresponds to the required alignment for this buffer on the GPU: an
-    /// incorrect value will produce undefined behaviour, crashes, or VRAM
-    /// corruption.
-    ///
     /// # Panics
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
+    /// * If the size of the given type `S` + `pad_len` does not match the size
+    ///   of the buffer type `T`.
+    /// * If `pad_len` is 0.
     ///
     /// [`blit_section`]: TriBuffer::blit_section
-    pub unsafe fn blit_section_padded(
+    pub fn blit_section_padded<S: Clone + Copy + Default>(
         &self,
         section: usize,
-        data: &[T],
+        data: &[S],
         offset: usize,
         pad_len: usize,
     ) {
-        if pad_len == 0 {
-            // SAFETY: invariants correspond to those of this function.
-            return self.blit_section(section, data, offset);
-        }
+        assert_ne!(
+            pad_len, 0,
+            "cannot blit with padding: invalid padding value of 0"
+        );
 
         assert_tb_section!(section);
         assert!(
@@ -271,11 +268,16 @@ where
             self.capacity
         );
 
-        let src = data.as_ptr();
         let avail = self.capacity - offset;
-        let len = avail.min(data.len());
+        let data_bytes_padded = size_of::<S>() + pad_len;
+        assert_eq!(
+            data_bytes_padded,
+            size_of::<T>(),
+            "cannot blit with padding: expected type size of {} bytes (T), but got: {} bytes (S) + {pad_len} bytes (padding) = {data_bytes_padded} bytes",
+            size_of::<T>(),
+            size_of::<S>(),
+        );
 
-        let data_bytes_padded = size_of::<T>() + pad_len;
         let avail_count = avail / data_bytes_padded;
         let data_count = data.len();
 
@@ -291,8 +293,8 @@ where
         unsafe {
             let mut dst = self.ptr[section].add(offset);
             for i in 0..data_len {
-                std::ptr::write_unaligned(dst as *mut T, data[i]);
-                dst = dst.add(size_of::<T>());
+                std::ptr::write_unaligned(dst as *mut S, data[i]);
+                dst = dst.add(size_of::<S>());
                 dst.write_bytes(0, pad_len);
                 dst = dst.add(pad_len);
             }
