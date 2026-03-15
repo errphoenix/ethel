@@ -59,7 +59,7 @@ pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
 
-    // per each section
+    /// Capacity per each section. This is number of elements.
     capacity: usize,
 
     _marker: std::marker::PhantomData<T>,
@@ -268,7 +268,7 @@ where
             self.capacity
         );
 
-        let avail = self.capacity - offset;
+        let avail = self.capacity * size_of::<T>() - offset;
         let data_bytes_padded = size_of::<S>() + pad_len;
         assert_eq!(
             data_bytes_padded,
@@ -291,7 +291,7 @@ where
         // Additionally, the caller must also ensure that that the length of
         // T + `pad_len` correspond to the size of the type on the GPU.
         unsafe {
-            let mut dst = self.ptr[section].add(offset);
+            let mut dst = (self.ptr[section] as *mut u8).add(offset);
             for i in 0..data_len {
                 std::ptr::write_unaligned(dst as *mut S, data[i]);
                 dst = dst.add(size_of::<S>());
