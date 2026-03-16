@@ -66,12 +66,12 @@ pub trait Column<T: Default>: SparseSlot + Default {
         unsafe { *self.slots_map().get_unchecked(slot as usize) }
     }
 
-    /// Mark the indexing slot at `slot` as free.
+    /// Mark the indexing `slot` as free.
     ///
-    /// The `slot` must be a stable indirect index (slot).
+    /// The `slot` must be a stable indirect index.
     ///
     /// # Panics
-    /// * If `slot` is out of bounds
+    /// * If `slot` is out of bounds in the sparse index array
     /// * If `slot == 0`, since it is a reserved slot to mark degenerate
     ///   elements
     fn free(&mut self, slot: u32);
