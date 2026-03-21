@@ -12,7 +12,7 @@ pub struct IndirectIndex(pub(crate) u32);
 pub struct DirectIndex(pub(crate) u32);
 
 impl IndirectIndex {
-    pub(crate) fn from_index(index: usize) -> Self {
+    pub fn from_index(index: usize) -> Self {
         Self(index as u32)
     }
 
@@ -30,7 +30,7 @@ impl IndirectIndex {
 }
 
 impl DirectIndex {
-    pub(crate) fn from_index(index: usize) -> Self {
+    pub fn from_index(index: usize) -> Self {
         Self(index as u32)
     }
 
