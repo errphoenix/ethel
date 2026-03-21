@@ -11,7 +11,7 @@ fn col_iteration(cr: &mut Criterion) {
         let col = {
             let mut col = IndexArrayColumn::with_capacity(COUNT);
             (1..=COUNT).for_each(|i| {
-                col.put(Data::new(i));
+                col.insert(Data::new(i));
             });
             col
         };
@@ -29,7 +29,7 @@ fn col_iteration(cr: &mut Criterion) {
         let col = {
             let mut col = IndexArrayColumn::with_capacity(COUNT);
             (1..=COUNT).for_each(|i| {
-                col.put(Data::new(i));
+                col.insert(Data::new(i));
             });
             col
         };
@@ -47,7 +47,7 @@ fn col_iteration(cr: &mut Criterion) {
         let col = {
             let mut col = ParallelIndexArrayColumn::with_capacity(COUNT);
             (1..=COUNT).for_each(|i| {
-                col.put(Data::new(i));
+                col.insert(Data::new(i));
             });
             col
         };
@@ -65,7 +65,7 @@ fn col_iteration(cr: &mut Criterion) {
         let col = {
             let mut col = ParallelIndexArrayColumn::with_capacity(COUNT);
             (1..=COUNT).for_each(|i| {
-                col.put(Data::new(i));
+                col.insert(Data::new(i));
             });
             col
         };

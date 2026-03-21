@@ -220,7 +220,7 @@ impl<T: Default> Column<T> for IndexArrayColumn<T> {
         self.free.push(slot);
     }
 
-    fn put(&mut self, value: T) -> IndirectIndex {
+    fn insert(&mut self, value: T) -> IndirectIndex {
         let index = self.next_slot_index();
         let head = self.contiguous.len();
         self.indices[index.as_index()] = DirectIndex::from_index(head);
@@ -338,7 +338,7 @@ impl<T: Default> Column<T> for ArrayColumn<T> {
         todo!("maintain index stability during ArrayColumn::free");
     }
 
-    fn put(&mut self, value: T) -> IndirectIndex {
+    fn insert(&mut self, value: T) -> IndirectIndex {
         let index = self.next_slot_index();
         let head = self.contiguous.len();
         self.indices[index.as_index()] = DirectIndex::from_index(head);
@@ -486,7 +486,7 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
         self.free.push(slot);
     }
 
-    fn put(&mut self, value: T) -> IndirectIndex {
+    fn insert(&mut self, value: T) -> IndirectIndex {
         let index = self.next_slot_index();
         let head = self.contiguous.len();
         self.indices[index.as_index()] = DirectIndex::from_index(head);
@@ -545,9 +545,9 @@ mod tests {
         let mut column = ParallelIndexArrayColumn::<u32>::new();
 
         for i in 0..50 {
-            column.put(i as u32);
+            column.insert(i as u32);
         }
-        let last = column.put(100);
+        let last = column.insert(100);
 
         // free random
         {

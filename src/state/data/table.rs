@@ -818,7 +818,7 @@ macro_rules! table_spec {
                     self.free.push(slot);
                 }
 
-                fn put(&mut self, ($row_0, $($row, )+): [< $name TableDef >]) -> $crate::state::data::IndirectIndex {
+                fn insert(&mut self, ($row_0, $($row, )+): [< $name TableDef >]) -> $crate::state::data::IndirectIndex {
                     use $crate::state::data::SparseSlot;
 
                     let index = self.next_slot_index();
@@ -1099,9 +1099,9 @@ mod tests {
         let mut table = TestRowTable::new();
 
         for i in 0..50 {
-            table.put((i as u32, i as u32 + 50));
+            table.insert((i as u32, i as u32 + 50));
         }
-        let last = table.put((200, 400));
+        let last = table.insert((200, 400));
 
         // free random
         {

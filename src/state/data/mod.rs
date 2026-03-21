@@ -107,16 +107,16 @@ pub trait Column<T: Default>: SparseSlot + Default {
     /// The total length of the contiguous data (SoA's).
     fn len(&self) -> usize;
 
-    /// Get the indirect index present at `slot`.
+    /// Solve the given indirect index.
     ///
     /// The returned direct index is not a stable index and will change
     /// depending on the internal memory layout of the Column.
     #[inline]
-    fn get_indirect(&self, slot: IndirectIndex) -> Option<DirectIndex> {
+    fn solve_indirect(&self, slot: IndirectIndex) -> Option<DirectIndex> {
         self.slots_map().get(slot.as_index()).copied()
     }
 
-    /// Get the indirect index present at `slot`.
+    /// Solve the given indirect index.
     ///
     /// The returned direct index is not a stable index and will change
     /// depending on the internal memory layout of the Column.
@@ -126,7 +126,7 @@ pub trait Column<T: Default>: SparseSlot + Default {
     /// the bounds of the table.
     /// Otherwise, the function will produce undefined behaviour.
     #[inline]
-    unsafe fn get_indirect_unchecked(&self, slot: IndirectIndex) -> DirectIndex {
+    unsafe fn solve_indirect_unchecked(&self, slot: IndirectIndex) -> DirectIndex {
         // SAFETY: the caller must ensure that `slot` is always a valid index
         //         within bounds
         unsafe { *self.slots_map().get_unchecked(slot.as_index()) }
@@ -154,5 +154,5 @@ pub trait Column<T: Default>: SparseSlot + Default {
     ///
     /// # Returns
     /// Returns the indirect index of the newly inserted element.
-    fn put(&mut self, value: T) -> IndirectIndex;
+    fn insert(&mut self, value: T) -> IndirectIndex;
 }
