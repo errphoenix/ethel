@@ -749,9 +749,9 @@ macro_rules! table_spec {
 
             #[derive(Debug)]
             pub struct [< $name RowTable >] {
-                indices: Vec<u32>,
-                free: Vec<u32>,
-                owners: Vec<u32>,
+                indices: Vec<$crate::state::data::DirectIndex>,
+                free: Vec<$crate::state::data::IndirectIndex>,
+                owners: Vec<$crate::state::data::IndirectIndex>,
 
                 $row_0: Vec<$rt_0>,
                 $(
@@ -766,19 +766,19 @@ macro_rules! table_spec {
             }
 
             impl $crate::state::data::SparseSlot for [< $name RowTable >] {
-                fn slots_map(&self) -> &Vec<u32> {
+                fn slots_map(&self) -> &Vec<$crate::state::data::DirectIndex> {
                     &self.indices
                 }
 
-                fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+                fn slots_map_mut(&mut self) -> &mut Vec<$crate::state::data::DirectIndex> {
                     &mut self.indices
                 }
 
-                fn free_list(&self) -> &Vec<u32> {
+                fn free_list(&self) -> &Vec<$crate::state::data::IndirectIndex> {
                     &self.free
                 }
 
-                fn free_list_mut(&mut self) -> &mut Vec<u32> {
+                fn free_list_mut(&mut self) -> &mut Vec<$crate::state::data::IndirectIndex> {
                     &mut self.free
                 }
             }
@@ -792,38 +792,39 @@ macro_rules! table_spec {
                     self.indices.len()
                 }
 
-                fn free(&mut self, slot: u32) {
-                    if slot == 0 {
+                fn free(&mut self, slot: $crate::state::data::IndirectIndex) {
+                    if slot.as_int() == 0 {
                         panic!("slot 0 is reserved for degenerate elements and must not be freed");
                     }
 
-                    let contiguous_slot = self.indices[slot as usize];
-                    if contiguous_slot == 0 {
+                    let contiguous_slot = self.indices[slot.as_index()];
+                    if contiguous_slot.as_int() == 0 {
                         return;
                     }
 
-                    self.indices[slot as usize] = 0;
+                    self.indices[slot.as_index()] = $crate::state::data::DirectIndex::default();
                     let last_owner = *self
                         .owners
                         .last()
                         .expect("contiguous vectors are never empty");
-                    self.indices[last_owner as usize] = contiguous_slot;
+                    self.indices[last_owner.as_index()] = contiguous_slot;
 
-                    self.owners.swap_remove(contiguous_slot as usize);
-                    self.$row_0.swap_remove(contiguous_slot as usize);
+                    let contiguous_index = contiguous_slot.as_index();
+                    self.owners.swap_remove(contiguous_index);
+                    self.$row_0.swap_remove(contiguous_index);
                     $(
-                        self.$row.swap_remove(contiguous_slot as usize);
+                        self.$row.swap_remove(contiguous_index);
                     )+
                     self.free.push(slot);
                 }
 
-                fn put(&mut self, ($row_0, $($row, )+): [< $name TableDef >]) -> u32 {
+                fn put(&mut self, ($row_0, $($row, )+): [< $name TableDef >]) -> $crate::state::data::IndirectIndex {
                     use $crate::state::data::SparseSlot;
 
                     let index = self.next_slot_index();
-                    let slot = self.$row_0.len();
+                    let head = self.$row_0.len();
 
-                    self.indices[index as usize] = slot as u32;
+                    self.indices[index.as_index()] = $crate::state::data::DirectIndex::from_index(head);
                     self.owners.push(index);
 
                     self.$row_0.push($row_0);
@@ -837,8 +838,8 @@ macro_rules! table_spec {
             impl [< $name RowTable >] {
                 pub fn new() -> Self {
                     Self {
-                        indices: vec![0],
-                        owners: vec![0],
+                        indices: vec![$crate::state::data::DirectIndex::default()],
+                        owners: vec![$crate::state::data::IndirectIndex::default()],
                         free: Vec::new(),
 
                         $row_0: vec![Default::default()],
@@ -851,8 +852,8 @@ macro_rules! table_spec {
                     let mut owners = Vec::with_capacity(capacity);
                     let mut $row_0 = Vec::with_capacity(capacity);
 
-                    indices.push(0);
-                    owners.push(0);
+                    indices.push($crate::state::data::DirectIndex::default());
+                    owners.push($crate::state::data::IndirectIndex::default());
                     $row_0.push(Default::default());
 
                     $(
@@ -875,7 +876,7 @@ macro_rules! table_spec {
                 /// Each handle corresponds in parallel to an element in all
                 /// rows. The value of this handle is the indirect index of
                 /// that element across all rows of the same index.
-                pub fn handles(&self) -> &[u32] {
+                pub fn handles(&self) -> &[$crate::state::data::IndirectIndex] {
                     &self.owners
                 }
 
@@ -884,7 +885,7 @@ macro_rules! table_spec {
                 /// Each handle corresponds in parallel to an element in all
                 /// rows. The value of this handle is the indirect index of
                 /// that element across all rows of the same index.
-                pub fn handles_view(&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], u32> {
+                pub fn handles_view(&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $crate::state::data::IndirectIndex> {
                     $crate::state::data::table::SoloView {
                         alpha: &self.owners,
                         _definition: std::marker::PhantomData,
@@ -1086,7 +1087,7 @@ mod tests {
 
     #[test]
     fn free_last_after_random_free() {
-        use crate::state::data::Column;
+        use crate::state::data::{Column, IndirectIndex};
 
         table_spec! {
             struct Test {
@@ -1104,14 +1105,14 @@ mod tests {
 
         // free random
         {
-            table.free(37);
-            table.free(14);
-            table.free(32);
-            table.free(45);
-            table.free(24);
-            table.free(3);
-            table.free(7);
-            table.free(35);
+            table.free(IndirectIndex::from_int(37));
+            table.free(IndirectIndex::from_int(14));
+            table.free(IndirectIndex::from_int(32));
+            table.free(IndirectIndex::from_int(45));
+            table.free(IndirectIndex::from_int(24));
+            table.free(IndirectIndex::from_int(3));
+            table.free(IndirectIndex::from_int(7));
+            table.free(IndirectIndex::from_int(35));
         }
 
         // free last

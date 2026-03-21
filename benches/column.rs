@@ -73,7 +73,7 @@ fn col_iteration(cr: &mut Criterion) {
         b.iter(|| {
             let mut sum = 0i128;
             col.iter().zip(col.handles()).for_each(|(e, handle)| {
-                sum += op(e) * *handle as i128;
+                sum += op(e) * handle.as_index() as i128;
                 std::hint::black_box(handle);
             });
             std::hint::black_box(sum)

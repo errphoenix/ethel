@@ -5,27 +5,93 @@ pub mod table;
 pub use column::{ArrayColumn, IndexArrayColumn, ParallelIndexArrayColumn};
 pub use table::Table;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct IndirectIndex(pub(crate) u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct DirectIndex(pub(crate) u32);
+
+impl IndirectIndex {
+    pub(crate) fn from_index(index: usize) -> Self {
+        Self(index as u32)
+    }
+
+    pub(crate) fn from_int(int: u32) -> Self {
+        Self(int)
+    }
+
+    pub fn as_int(self) -> u32 {
+        self.0
+    }
+
+    pub fn as_index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl DirectIndex {
+    pub(crate) fn from_index(index: usize) -> Self {
+        Self(index as u32)
+    }
+
+    pub(crate) fn from_int(int: u32) -> Self {
+        Self(int)
+    }
+
+    pub fn as_int(self) -> u32 {
+        self.0
+    }
+
+    pub fn as_index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Into<u32> for IndirectIndex {
+    fn into(self) -> u32 {
+        self.as_int()
+    }
+}
+
+impl Into<usize> for IndirectIndex {
+    fn into(self) -> usize {
+        self.as_index()
+    }
+}
+
+impl Into<u32> for DirectIndex {
+    fn into(self) -> u32 {
+        self.as_int()
+    }
+}
+
+impl Into<usize> for DirectIndex {
+    fn into(self) -> usize {
+        self.as_index()
+    }
+}
+
 pub trait SparseSlot: Default {
-    fn slots_map(&self) -> &Vec<u32>;
+    fn slots_map(&self) -> &Vec<DirectIndex>;
 
-    fn slots_map_mut(&mut self) -> &mut Vec<u32>;
+    fn slots_map_mut(&mut self) -> &mut Vec<DirectIndex>;
 
-    fn free_list(&self) -> &Vec<u32>;
+    fn free_list(&self) -> &Vec<IndirectIndex>;
 
-    fn free_list_mut(&mut self) -> &mut Vec<u32>;
+    fn free_list_mut(&mut self) -> &mut Vec<IndirectIndex>;
 
-    fn next_slot_index(&mut self) -> u32 {
+    fn next_slot_index(&mut self) -> IndirectIndex {
         if let Some(cached_index) = self.free_list_mut().pop() {
             cached_index
         } else {
-            let new_index = self.slots_map().len() as u32;
+            let new_index = IndirectIndex::from_index(self.slots_map().len());
             // uninitialised index pushed solely to ensure that an available
             // slot exists when requested, it is not tracked.
             // the stability of this data structure depends entirely on
             // replacing this dummy value with a real one before other
             // operations and avoiding "forgetting" this UNTRACKED empty slot.
             // this is done properly by Column::put.
-            self.slots_map_mut().push(0);
+            self.slots_map_mut().push(DirectIndex::default());
             new_index
         }
     }
@@ -43,16 +109,16 @@ pub trait Column<T: Default>: SparseSlot + Default {
 
     /// Get the indirect index present at `slot`.
     ///
-    /// The returned indirect index is not a stable index and will change
+    /// The returned direct index is not a stable index and will change
     /// depending on the internal memory layout of the Column.
     #[inline]
-    fn get_indirect(&self, slot: u32) -> Option<u32> {
-        self.slots_map().get(slot as usize).copied()
+    fn get_indirect(&self, slot: IndirectIndex) -> Option<DirectIndex> {
+        self.slots_map().get(slot.as_index()).copied()
     }
 
     /// Get the indirect index present at `slot`.
     ///
-    /// The returned indirect index is not a stable index and will change
+    /// The returned direct index is not a stable index and will change
     /// depending on the internal memory layout of the Column.
     ///
     /// # Safety
@@ -60,21 +126,19 @@ pub trait Column<T: Default>: SparseSlot + Default {
     /// the bounds of the table.
     /// Otherwise, the function will produce undefined behaviour.
     #[inline]
-    unsafe fn get_indirect_unchecked(&self, slot: u32) -> u32 {
+    unsafe fn get_indirect_unchecked(&self, slot: IndirectIndex) -> DirectIndex {
         // SAFETY: the caller must ensure that `slot` is always a valid index
         //         within bounds
-        unsafe { *self.slots_map().get_unchecked(slot as usize) }
+        unsafe { *self.slots_map().get_unchecked(slot.as_index()) }
     }
 
-    /// Mark the indexing `slot` as free.
-    ///
-    /// The `slot` must be a stable indirect index.
+    /// Mark the given indirect index as free.
     ///
     /// # Panics
     /// * If `slot` is out of bounds in the sparse index array
     /// * If `slot == 0`, since it is a reserved slot to mark degenerate
     ///   elements
-    fn free(&mut self, slot: u32);
+    fn free(&mut self, slot: IndirectIndex);
 
     /// Add an element `value` to the inner SoA storage.
     ///
@@ -90,5 +154,5 @@ pub trait Column<T: Default>: SparseSlot + Default {
     ///
     /// # Returns
     /// Returns the indirect index of the newly inserted element.
-    fn put(&mut self, value: T) -> u32;
+    fn put(&mut self, value: T) -> IndirectIndex;
 }

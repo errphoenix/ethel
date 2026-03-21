@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use crate::state::data::{Column, SparseSlot};
+use crate::state::data::{Column, DirectIndex, IndirectIndex, SparseSlot};
 
 /// A wrapper for an entry of an [`IndexArrayColumn`] over the `T` type.
 ///
@@ -21,11 +21,11 @@ use crate::state::data::{Column, SparseSlot};
 #[derive(Clone, Debug, Default)]
 pub struct Entry<T> {
     inner: T,
-    owner: u32,
+    owner: IndirectIndex,
 }
 
 impl<T> Entry<T> {
-    pub fn new(owner: u32, value: T) -> Self {
+    pub fn new(owner: IndirectIndex, value: T) -> Self {
         Self {
             owner,
             inner: value,
@@ -41,7 +41,7 @@ impl<T> Entry<T> {
     ///
     /// As this is a stable index, it can safely be used across entites and
     /// systems to track data without copying or reference counting.
-    pub fn owner(&self) -> u32 {
+    pub fn owner(&self) -> IndirectIndex {
         self.owner
     }
 
@@ -112,13 +112,11 @@ where
 
 #[derive(Debug)]
 pub struct IndexArrayColumn<T: Default> {
-    /// These indices are guaranteed to be consistent and are never moved
-    /// around to maintain cache locality.
+    /// Collection of direct indices to the `contiguous` data of this Column.
     ///
-    /// Each index refers to an index into the `contiguous` data vector.
-    ///
-    /// Often referred to as "indirect indices".
-    indices: Vec<u32>,
+    /// The indexing of this collection is guaranteed to be stable, assuming
+    /// the correct [`IndirectIndex`] is used when performing index operations.
+    indices: Vec<DirectIndex>,
 
     /// The "real" collection. This is contiguous, optimised for cache
     /// locality.
@@ -127,13 +125,13 @@ pub struct IndexArrayColumn<T: Default> {
     /// the index of the slot that points to the element.
     contiguous: Vec<Entry<T>>,
 
-    /// Keeps track of free slots of the indirect `indices`.
-    free: Vec<u32>,
+    /// Keeps track of free slots of the indirect indices map.
+    free: Vec<IndirectIndex>,
 }
 
 impl<T: Default> IndexArrayColumn<T> {
     pub fn clear(&mut self) {
-        self.indices.resize(1, 0);
+        self.indices.resize(1, DirectIndex::default());
         self.contiguous.resize_with(1, || Entry::default());
         self.free.clear();
     }
@@ -151,7 +149,7 @@ impl<T: Default> IndexArrayColumn<T> {
     /// The only element present is the degenerate element at index `0`.
     pub fn new() -> Self {
         Self {
-            indices: vec![0],
+            indices: vec![DirectIndex::default()],
             contiguous: vec![Entry::default()],
             free: Vec::new(),
         }
@@ -165,7 +163,7 @@ impl<T: Default> IndexArrayColumn<T> {
         let mut stable_indices = Vec::with_capacity(capacity);
         let mut contiguous = Vec::with_capacity(capacity);
 
-        stable_indices.push(0);
+        stable_indices.push(DirectIndex::default());
         contiguous.push(Entry::default());
 
         Self {
@@ -177,19 +175,19 @@ impl<T: Default> IndexArrayColumn<T> {
 }
 
 impl<T: Default> SparseSlot for IndexArrayColumn<T> {
-    fn slots_map(&self) -> &Vec<u32> {
+    fn slots_map(&self) -> &Vec<DirectIndex> {
         &self.indices
     }
 
-    fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+    fn slots_map_mut(&mut self) -> &mut Vec<DirectIndex> {
         &mut self.indices
     }
 
-    fn free_list(&self) -> &Vec<u32> {
+    fn free_list(&self) -> &Vec<IndirectIndex> {
         &self.free
     }
 
-    fn free_list_mut(&mut self) -> &mut Vec<u32> {
+    fn free_list_mut(&mut self) -> &mut Vec<IndirectIndex> {
         &mut self.free
     }
 }
@@ -203,29 +201,29 @@ impl<T: Default> Column<T> for IndexArrayColumn<T> {
         self.indices.len()
     }
 
-    fn free(&mut self, slot: u32) {
-        if slot == 0 {
+    fn free(&mut self, slot: IndirectIndex) {
+        if slot.as_int() == 0 {
             panic!("slot 0 is reserved for degenerate elements and must not be freed");
         }
 
-        let contiguous_slot = self.indices[slot as usize];
-        if contiguous_slot == 0 {
+        let contiguous_slot = self.indices[slot.as_index()];
+        if contiguous_slot.as_int() == 0 {
             return;
         }
-        self.indices[slot as usize] = 0;
+        self.indices[slot.as_index()] = DirectIndex::default();
 
         if let Some(owner_last) = self.contiguous.last().map(Entry::owner) {
-            self.indices[owner_last as usize] = contiguous_slot;
+            self.indices[owner_last.as_index()] = contiguous_slot;
         }
 
-        self.contiguous.swap_remove(contiguous_slot as usize);
+        self.contiguous.swap_remove(contiguous_slot.as_index());
         self.free.push(slot);
     }
 
-    fn put(&mut self, value: T) -> u32 {
+    fn put(&mut self, value: T) -> IndirectIndex {
         let index = self.next_slot_index();
-        let slot = self.contiguous.len();
-        self.indices[index as usize] = slot as u32;
+        let head = self.contiguous.len();
+        self.indices[index.as_index()] = DirectIndex::from_index(head);
         self.contiguous.push(Entry::new(index, value));
         index
     }
@@ -243,13 +241,11 @@ impl<'iter, T: Default + 'iter> IterColumn<'iter, T, Entry<T>> for IndexArrayCol
 
 #[derive(Debug)]
 pub struct ArrayColumn<T: Default> {
-    /// These indices are guaranteed to be consistent and are never moved
-    /// around to maintain cache locality.
+    /// Collection of direct indices to the `contiguous` data of this Column.
     ///
-    /// Each index refers to an index into the `contiguous` data vector.
-    ///
-    /// Often referred to as "indirect indices".
-    indices: Vec<u32>,
+    /// The indexing of this collection is guaranteed to be stable, assuming
+    /// the correct [`IndirectIndex`] is used when performing index operations.
+    indices: Vec<DirectIndex>,
 
     /// The "real" collection. This is contiguous, optimised for cache
     /// locality.
@@ -257,8 +253,8 @@ pub struct ArrayColumn<T: Default> {
     /// Each element stores directly the value of `T` without any metadata.
     contiguous: Vec<T>,
 
-    /// Keeps track of free slots of the indirect `indices`.
-    free: Vec<u32>,
+    /// Keeps track of free slots of the indirect indices map.
+    free: Vec<IndirectIndex>,
 }
 
 impl<T: Default> Default for ArrayColumn<T> {
@@ -273,7 +269,7 @@ impl<T: Default> ArrayColumn<T> {
     /// The only element present is the degenerate element at index `0`.
     pub fn new() -> Self {
         Self {
-            indices: vec![0],
+            indices: vec![DirectIndex::default()],
             contiguous: vec![T::default()],
             free: Vec::new(),
         }
@@ -287,7 +283,7 @@ impl<T: Default> ArrayColumn<T> {
         let mut stable_indices = Vec::with_capacity(capacity);
         let mut contiguous = Vec::with_capacity(capacity);
 
-        stable_indices.push(0);
+        stable_indices.push(DirectIndex::default());
         contiguous.push(T::default());
 
         Self {
@@ -299,19 +295,19 @@ impl<T: Default> ArrayColumn<T> {
 }
 
 impl<T: Default> SparseSlot for ArrayColumn<T> {
-    fn slots_map(&self) -> &Vec<u32> {
+    fn slots_map(&self) -> &Vec<DirectIndex> {
         &self.indices
     }
 
-    fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+    fn slots_map_mut(&mut self) -> &mut Vec<DirectIndex> {
         &mut self.indices
     }
 
-    fn free_list(&self) -> &Vec<u32> {
+    fn free_list(&self) -> &Vec<IndirectIndex> {
         &self.free
     }
 
-    fn free_list_mut(&mut self) -> &mut Vec<u32> {
+    fn free_list_mut(&mut self) -> &mut Vec<IndirectIndex> {
         &mut self.free
     }
 }
@@ -325,27 +321,27 @@ impl<T: Default> Column<T> for ArrayColumn<T> {
         self.indices.len()
     }
 
-    fn free(&mut self, slot: u32) {
-        if slot == 0 {
+    fn free(&mut self, slot: IndirectIndex) {
+        if slot.as_int() == 0 {
             panic!("slot 0 is reserved for degenerate elements and must not be freed");
         }
 
-        let contiguous_slot = self.indices[slot as usize];
-        if contiguous_slot == 0 {
+        let contiguous_slot = self.indices[slot.as_index()];
+        if contiguous_slot.as_int() == 0 {
             return;
         }
-        self.indices[slot as usize] = 0;
+        self.indices[slot.as_index()] = DirectIndex::default();
 
-        self.contiguous.swap_remove(contiguous_slot as usize);
+        self.contiguous.swap_remove(contiguous_slot.as_index());
         self.free.push(slot);
 
         todo!("maintain index stability during ArrayColumn::free");
     }
 
-    fn put(&mut self, value: T) -> u32 {
+    fn put(&mut self, value: T) -> IndirectIndex {
         let index = self.next_slot_index();
-        let slot = self.contiguous.len();
-        self.indices[index as usize] = slot as u32;
+        let head = self.contiguous.len();
+        self.indices[index.as_index()] = DirectIndex::from_index(head);
         self.contiguous.push(value);
         index
     }
@@ -363,13 +359,11 @@ impl<'iter, T: Default + 'iter> IterColumn<'iter, T, T> for ArrayColumn<T> {
 
 #[derive(Debug)]
 pub struct ParallelIndexArrayColumn<T: Default> {
-    /// These indices are guaranteed to be consistent and are never moved
-    /// around to maintain cache locality.
+    /// Collection of direct indices to the `contiguous` data of this Column.
     ///
-    /// Each index refers to an index into the `contiguous` data vector.
-    ///
-    /// Often referred to as "indirect indices".
-    indices: Vec<u32>,
+    /// The indexing of this collection is guaranteed to be stable, assuming
+    /// the correct [`IndirectIndex`] is used when performing index operations.
+    indices: Vec<DirectIndex>,
 
     /// The "real" collection. This is contiguous, optimised for cache
     /// locality.
@@ -377,18 +371,18 @@ pub struct ParallelIndexArrayColumn<T: Default> {
     /// Each element stores directly the value of `T` without any metadata.
     contiguous: Vec<T>,
 
-    /// Keeps track of free slots of the indirect `indices`.
-    free: Vec<u32>,
+    /// Keeps track of free slots of the indirect indices map.
+    free: Vec<IndirectIndex>,
 
     /// The owner indices of each `T` element. This is parallel to the
     /// `contiguous` vec.
-    owners: Vec<u32>,
+    owners: Vec<IndirectIndex>,
 }
 
 impl<T: Default> ParallelIndexArrayColumn<T> {
     pub fn clear(&mut self) {
-        self.indices.resize(1, 0);
-        self.owners.resize(1, 0);
+        self.indices.resize(1, DirectIndex::default());
+        self.owners.resize(1, IndirectIndex::default());
         self.contiguous.resize_with(1, || T::default());
         self.free.clear();
     }
@@ -406,9 +400,9 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
     /// The only element present is the degenerate element at index `0`.
     pub fn new() -> Self {
         Self {
-            indices: vec![0],
+            indices: vec![DirectIndex::default()],
             contiguous: vec![T::default()],
-            owners: vec![0],
+            owners: vec![IndirectIndex::default()],
             free: Vec::new(),
         }
     }
@@ -422,9 +416,9 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
         let mut contiguous = Vec::with_capacity(capacity);
         let mut owners = Vec::with_capacity(capacity);
 
-        stable_indices.push(0);
+        stable_indices.push(DirectIndex::default());
         contiguous.push(T::default());
-        owners.push(0);
+        owners.push(IndirectIndex::default());
 
         Self {
             indices: stable_indices,
@@ -434,29 +428,29 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
         }
     }
 
-    pub fn handles(&self) -> &[u32] {
+    pub fn handles(&self) -> &[IndirectIndex] {
         &self.owners
     }
 
-    pub fn handles_mut(&mut self) -> &mut [u32] {
+    pub fn handles_mut(&mut self) -> &mut [IndirectIndex] {
         &mut self.owners
     }
 }
 
 impl<T: Default> SparseSlot for ParallelIndexArrayColumn<T> {
-    fn slots_map(&self) -> &Vec<u32> {
+    fn slots_map(&self) -> &Vec<DirectIndex> {
         &self.indices
     }
 
-    fn slots_map_mut(&mut self) -> &mut Vec<u32> {
+    fn slots_map_mut(&mut self) -> &mut Vec<DirectIndex> {
         &mut self.indices
     }
 
-    fn free_list(&self) -> &Vec<u32> {
+    fn free_list(&self) -> &Vec<IndirectIndex> {
         &self.free
     }
 
-    fn free_list_mut(&mut self) -> &mut Vec<u32> {
+    fn free_list_mut(&mut self) -> &mut Vec<IndirectIndex> {
         &mut self.free
     }
 }
@@ -470,32 +464,32 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
         self.indices.len()
     }
 
-    fn free(&mut self, slot: u32) {
-        if slot == 0 {
+    fn free(&mut self, slot: IndirectIndex) {
+        if slot.as_int() == 0 {
             panic!("slot 0 is reserved for degenerate elements and must not be freed");
         }
 
-        let contiguous_slot = self.indices[slot as usize];
-        if contiguous_slot == 0 {
+        let contiguous_slot = self.indices[slot.as_index()];
+        if contiguous_slot.as_int() == 0 {
             return;
         }
 
-        self.indices[slot as usize] = 0;
+        self.indices[slot.as_index()] = DirectIndex::default();
         let last_owner = *self
             .owners
             .last()
             .expect("contiguous vectors are never empty");
-        self.indices[last_owner as usize] = contiguous_slot;
+        self.indices[last_owner.as_index()] = contiguous_slot;
 
-        self.owners.swap_remove(contiguous_slot as usize);
-        self.contiguous.swap_remove(contiguous_slot as usize);
+        self.owners.swap_remove(contiguous_slot.as_index());
+        self.contiguous.swap_remove(contiguous_slot.as_index());
         self.free.push(slot);
     }
 
-    fn put(&mut self, value: T) -> u32 {
+    fn put(&mut self, value: T) -> IndirectIndex {
         let index = self.next_slot_index();
-        let slot = self.contiguous.len();
-        self.indices[index as usize] = slot as u32;
+        let head = self.contiguous.len();
+        self.indices[index.as_index()] = DirectIndex::from_index(head);
         self.contiguous.push(value);
         self.owners.push(index);
         index
@@ -557,14 +551,14 @@ mod tests {
 
         // free random
         {
-            column.free(37);
-            column.free(14);
-            column.free(32);
-            column.free(45);
-            column.free(24);
-            column.free(3);
-            column.free(7);
-            column.free(35);
+            column.free(IndirectIndex::from_int(37));
+            column.free(IndirectIndex::from_int(14));
+            column.free(IndirectIndex::from_int(32));
+            column.free(IndirectIndex::from_int(45));
+            column.free(IndirectIndex::from_int(24));
+            column.free(IndirectIndex::from_int(3));
+            column.free(IndirectIndex::from_int(7));
+            column.free(IndirectIndex::from_int(35));
         }
 
         // free last
