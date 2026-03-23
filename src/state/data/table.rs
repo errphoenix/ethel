@@ -1,9 +1,10 @@
 use std::{
+    fmt::Debug,
     iter::{Map, Zip},
     slice::{Iter, IterMut},
 };
 
-use crate::state::data::Column;
+use crate::state::data::{Column, DirectIndex, IndirectIndex};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SoloView<'row, Def, A>
@@ -733,6 +734,33 @@ where
 
 pub trait Table<Def: Sized + Default>: Column<Def> {}
 
+pub trait TableView<'view, Def: Sized + Default>: Debug + Clone + Copy {
+    /// The indirect indices map of the whole table, regardless of this
+    /// view's offset or length.
+    fn indirect_indices(&self) -> &'view [DirectIndex];
+
+    /// The "reverse" indices map of each entry of this table view.
+    fn handles(&self) -> &'view [IndirectIndex];
+
+    /// The indexing offset between sparse index values and contiguous slices.
+    fn view_offset(&self) -> usize;
+
+    /// The length of this view's contiguous slice(s).
+    fn len(&self) -> usize {
+        self.handles().len()
+    }
+
+    fn solve(&self, indirect: IndirectIndex) -> DirectIndex {
+        let global = self.indirect_indices()[indirect.as_index()];
+        DirectIndex::from_index(global.as_index() - self.view_offset())
+    }
+
+    unsafe fn solve_unchecked(&self, indirect: IndirectIndex) -> DirectIndex {
+        let global = unsafe { self.indirect_indices().get_unchecked(indirect.as_index()) };
+        DirectIndex::from_index(global.as_index() - self.view_offset())
+    }
+}
+
 #[macro_export]
 macro_rules! table_spec {
     (
@@ -746,6 +774,136 @@ macro_rules! table_spec {
                 $rt_0,
                     $($rt,)+
                 );
+
+            #[derive(Debug, Clone, Copy)]
+            pub struct [< $name RowTableView >]<'view> {
+                pub indirect_indices: &'view [$crate::state::data::DirectIndex],
+                view_offset: usize,
+
+                pub handles: &'view [$crate::state::data::IndirectIndex],
+                pub $row_0: &'view [$rt_0],
+                $(
+                    pub $row: &'view [$rt],
+                )+
+            }
+
+            impl<'view> [< $name RowTableView >]<'view> {
+                pub fn from(table: &'view [< $name RowTable >]) -> Self {
+                    use $crate::state::data::SparseSlot;
+
+                    Self {
+                        indirect_indices: table.slots_map(),
+                        view_offset: 0,
+
+                        handles: table.handles(),
+                        $row_0: table. [< $row_0 _slice >] (),
+                        $(
+                            $row: table. [< $row _slice >] (),
+                        )+
+                    }
+                }
+
+                pub fn from_range(table: &'view [< $name RowTable >], offset: usize, length: usize) -> Self {
+                    use $crate::state::data::{SparseSlot, Column};
+
+                    debug_assert!(
+                        offset < table.len(),
+                        "cannot construct RowTableView: offset {offset} goes beyond table length of {}",
+                        table.len()
+                    );
+                    debug_assert!(
+                        (offset + length) < table.len(),
+                        "cannot construct RowTableView: attempted to create view over range {offset}..{} for table of length {}",
+                        offset + length,
+                        table.len()
+                    );
+
+                    Self {
+                        indirect_indices: table.slots_map(),
+                        view_offset: offset,
+
+                        handles: &table.handles()[offset..(offset+length)],
+                        $row_0: &table. [< $row_0 _slice >]()[offset..(offset+length)],
+                        $(
+                            $row: &table. [< $row _slice >]()[offset..(offset+length)],
+                        )+
+                    }
+                }
+
+                pub fn coalesced(&self, indirect: $crate::state::data::IndirectIndex) -> (
+                    &$rt_0,
+                    $(
+                        &$rt,
+                    )+
+                ) {
+                    use $crate::state::data::table::TableView;
+                    let direct = self.solve(indirect).as_index();
+
+                    (
+                        &self.$row_0[direct],
+                        $(
+                            &self.$row[direct],
+                        )+
+                    )
+                }
+
+                pub unsafe fn coalesced_unchecked(&self, indirect: $crate::state::data::IndirectIndex) -> (
+                    &$rt_0,
+                    $(
+                        &$rt,
+                    )+
+                ) {
+                    use $crate::state::data::table::TableView;
+                    let direct = unsafe { self.solve_unchecked(indirect).as_index() };
+
+                    (
+                        unsafe { self.$row_0.get_unchecked(direct) },
+                        $(
+                            unsafe { self.$row.get_unchecked(direct) },
+                        )+
+                    )
+                }
+
+                pub fn $row_0(&self, indirect: $crate::state::data::IndirectIndex) -> &$rt_0 {
+                    use $crate::state::data::table::TableView;
+                    let direct = self.solve(indirect);
+                    &self.$row_0[direct.as_index()]
+                }
+
+                pub unsafe fn [< $row_0 _unchecked >](&self, indirect: $crate::state::data::IndirectIndex) -> &$rt_0 {
+                    use $crate::state::data::table::TableView;
+                    let direct = unsafe { self.solve_unchecked(indirect) };
+                    unsafe { self.$row_0.get_unchecked(direct.as_index()) }
+                }
+
+                $(
+                    pub fn $row(&self, indirect: $crate::state::data::IndirectIndex) -> &$rt {
+                        use $crate::state::data::table::TableView;
+                        let direct = self.solve(indirect);
+                        &self.$row[direct.as_index()]
+                    }
+
+                    pub unsafe fn [< $row _unchecked >](&self, indirect: $crate::state::data::IndirectIndex) -> &$rt {
+                        use $crate::state::data::table::TableView;
+                        let direct = unsafe { self.solve_unchecked(indirect) };
+                        unsafe { self.$row.get_unchecked(direct.as_index()) }
+                    }
+                )+
+            }
+
+            impl<'view> $crate::state::data::table::TableView<'view, [< $name TableDef >]> for [< $name RowTableView >]<'view> {
+                fn indirect_indices(&self) -> &'view [$crate::state::data::DirectIndex] {
+                    &self.indirect_indices
+                }
+
+                fn handles(&self) -> &'view [$crate::state::data::IndirectIndex] {
+                    &self.handles
+                }
+
+                fn view_offset(&self) -> usize {
+                    self.view_offset
+                }
+            }
 
             #[derive(Debug)]
             pub struct [< $name RowTable >] {
@@ -1083,6 +1241,9 @@ mod tests {
                 positions: (f32, f32);
             }
         };
+
+        let tab = TestRowTable::new();
+        let view = TestRowTableView::from(&tab);
     }
 
     #[test]
