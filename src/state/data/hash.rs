@@ -81,8 +81,9 @@ impl std::ops::Mul<i32> for Cell {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SpatialResolution(u32);
+/// The size of each cell of a spatial hash structure.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct SpatialResolution(f32);
 
 impl Default for SpatialResolution {
     fn default() -> Self {
@@ -91,36 +92,46 @@ impl Default for SpatialResolution {
 }
 
 impl SpatialResolution {
-    pub const DEFAULT_RESOLUTION: u32 = 1;
+    pub const DEFAULT_RESOLUTION: f32 = 1.0;
 
-    pub fn new(resolution: u32) -> Self {
-        debug_assert!(resolution > 0, "spatial resolution must be atleast 1");
+    pub fn new(resolution: f32) -> Self {
+        debug_assert!(
+            resolution > 0.0,
+            "spatial resolution must be greather than 0"
+        );
         Self(resolution)
     }
 
-    pub fn get(&self) -> u32 {
+    pub fn get(&self) -> f32 {
         self.0
     }
 
     #[inline]
     pub fn encode_point(&self, point: glam::Vec3) -> Cell {
-        let cx = (point.x * self.0 as f32).floor();
-        let cy = (point.y * self.0 as f32).floor();
-        let cz = (point.z * self.0 as f32).floor();
+        // let cx = (point.x * self.0 as f32).floor();
+        // let cy = (point.y * self.0 as f32).floor();
+        // let cz = (point.z * self.0 as f32).floor();
 
+        // Cell {
+        //     x: cx as i32,
+        //     y: cy as i32,
+        //     z: cz as i32,
+        // }
+
+        let cell_size = self.0;
         Cell {
-            x: cx as i32,
-            y: cy as i32,
-            z: cz as i32,
+            x: ((point.x + cell_size * 0.5).floor() / cell_size) as i32,
+            y: ((point.y + cell_size * 0.5).floor() / cell_size) as i32,
+            z: ((point.z + cell_size * 0.5).floor() / cell_size) as i32,
         }
     }
 
     #[inline]
     pub fn approx_point(&self, cell: Cell) -> glam::Vec3 {
         glam::vec3(
-            cell.x as f32 / self.0 as f32,
-            cell.y as f32 / self.0 as f32,
-            cell.z as f32 / self.0 as f32,
+            cell.x as f32 / self.0,
+            cell.y as f32 / self.0,
+            cell.z as f32 / self.0,
         )
     }
 }
