@@ -909,11 +909,12 @@ macro_rules! table_spec {
             pub struct [< $name RowTable >] {
                 indices: Vec<$crate::state::data::DirectIndex>,
                 free: Vec<$crate::state::data::IndirectIndex>,
-                owners: Vec<$crate::state::data::IndirectIndex>,
 
-                $row_0: Vec<$rt_0>,
+                pub handles: Vec<$crate::state::data::IndirectIndex>,
+
+                pub $row_0: Vec<$rt_0>,
                 $(
-                    $row: Vec<$rt>,
+                    pub $row: Vec<$rt>,
                 )+
             }
 
@@ -962,13 +963,13 @@ macro_rules! table_spec {
 
                     self.indices[slot.as_index()] = $crate::state::data::DirectIndex::default();
                     let last_owner = *self
-                        .owners
+                        .handles
                         .last()
                         .expect("contiguous vectors are never empty");
                     self.indices[last_owner.as_index()] = contiguous_slot;
 
                     let contiguous_index = contiguous_slot.as_index();
-                    self.owners.swap_remove(contiguous_index);
+                    self.handles.swap_remove(contiguous_index);
                     self.$row_0.swap_remove(contiguous_index);
                     $(
                         self.$row.swap_remove(contiguous_index);
@@ -983,7 +984,7 @@ macro_rules! table_spec {
                     let head = self.$row_0.len();
 
                     self.indices[index.as_index()] = $crate::state::data::DirectIndex::from_index(head);
-                    self.owners.push(index);
+                    self.handles.push(index);
 
                     self.$row_0.push($row_0);
                     $(
@@ -997,7 +998,7 @@ macro_rules! table_spec {
                 pub fn new() -> Self {
                     Self {
                         indices: vec![$crate::state::data::DirectIndex::default()],
-                        owners: vec![$crate::state::data::IndirectIndex::default()],
+                        handles: vec![$crate::state::data::IndirectIndex::default()],
                         free: Vec::new(),
 
                         $row_0: vec![Default::default()],
@@ -1007,11 +1008,11 @@ macro_rules! table_spec {
 
                 pub fn with_capacity(capacity: usize) -> Self {
                     let mut indices = Vec::with_capacity(capacity);
-                    let mut owners = Vec::with_capacity(capacity);
+                    let mut handles = Vec::with_capacity(capacity);
                     let mut $row_0 = Vec::with_capacity(capacity);
 
                     indices.push($crate::state::data::DirectIndex::default());
-                    owners.push($crate::state::data::IndirectIndex::default());
+                    handles.push($crate::state::data::IndirectIndex::default());
                     $row_0.push(Default::default());
 
                     $(
@@ -1021,7 +1022,7 @@ macro_rules! table_spec {
 
                     Self {
                         indices,
-                        owners,
+                        handles,
                         free: Vec::new(),
 
                         $row_0,
@@ -1029,13 +1030,13 @@ macro_rules! table_spec {
                     }
                 }
 
-                /// Returns the "reverse map" for owner indices.
+                /// Returns the "reverse map" for the handle of each element.
                 ///
                 /// Each handle corresponds in parallel to an element in all
                 /// rows. The value of this handle is the indirect index of
                 /// that element across all rows of the same index.
                 pub fn handles(&self) -> &[$crate::state::data::IndirectIndex] {
-                    &self.owners
+                    &self.handles
                 }
 
                 /// Returns the "reverse map" for owner indices.
@@ -1045,7 +1046,7 @@ macro_rules! table_spec {
                 /// that element across all rows of the same index.
                 pub fn handles_view(&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $crate::state::data::IndirectIndex> {
                     $crate::state::data::table::SoloView {
-                        alpha: &self.owners,
+                        alpha: &self.handles,
                         _definition: std::marker::PhantomData,
                     }
                 }
