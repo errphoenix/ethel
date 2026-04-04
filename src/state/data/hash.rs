@@ -97,7 +97,7 @@ impl SpatialResolution {
     pub fn new(resolution: f32) -> Self {
         debug_assert!(
             resolution > 0.0,
-            "spatial resolution must be greather than 0"
+            "spatial resolution must be greater than 0"
         );
         Self(resolution)
     }
@@ -108,16 +108,6 @@ impl SpatialResolution {
 
     #[inline]
     pub fn encode_point(&self, point: glam::Vec3) -> Cell {
-        // let cx = (point.x * self.0 as f32).floor();
-        // let cy = (point.y * self.0 as f32).floor();
-        // let cz = (point.z * self.0 as f32).floor();
-
-        // Cell {
-        //     x: cx as i32,
-        //     y: cy as i32,
-        //     z: cz as i32,
-        // }
-
         let cell_size = self.0;
         Cell {
             x: ((point.x + cell_size * 0.5).floor() / cell_size) as i32,
@@ -188,18 +178,18 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     ///
     /// # Returns
     /// The removed elemenet in `cell`, if any.
-    pub fn remove(&mut self, cell: &Cell) -> Option<T> {
-        self.map.remove(cell)
+    pub fn remove(&mut self, cell: Cell) -> Option<T> {
+        self.map.remove(&cell)
     }
 
     /// Get a reference to the element placed in `cell` if existing.
-    pub fn get(&self, cell: &Cell) -> Option<&T> {
-        self.map.get(cell)
+    pub fn get(&self, cell: Cell) -> Option<&T> {
+        self.map.get(&cell)
     }
 
     /// Get an exlusive reference to the element placed in `cell` if existing.
-    pub fn get_mut(&mut self, cell: &Cell) -> Option<&mut T> {
-        self.map.get_mut(cell)
+    pub fn get_mut(&mut self, cell: Cell) -> Option<&mut T> {
+        self.map.get_mut(&cell)
     }
 
     pub fn clear(&mut self) {
@@ -337,5 +327,113 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     #[inline]
     pub fn len(&self) -> usize {
         self.map.len()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FxLsSpatialHash<T: Clone + Copy> {
+    map: HashMap<Cell, Vec<T>>,
+
+    pub resolution: SpatialResolution,
+}
+
+impl<T: Default + Clone + Copy> Default for FxLsSpatialHash<T> {
+    fn default() -> Self {
+        Self {
+            resolution: Default::default(),
+            map: Default::default(),
+        }
+    }
+}
+
+impl<T: Clone + Copy> FxLsSpatialHash<T> {
+    pub fn new(resolution: SpatialResolution) -> Self {
+        Self {
+            resolution,
+            map: HashMap::default(),
+        }
+    }
+
+    pub fn with_capacity(resolution: SpatialResolution, capacity: usize) -> Self {
+        Self {
+            resolution,
+            map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
+        }
+    }
+
+    pub fn cells(&self) -> Keys<'_, Cell, Vec<T>> {
+        self.map.keys()
+    }
+
+    pub fn elements(&self) -> Values<'_, Cell, Vec<T>> {
+        self.map.values()
+    }
+
+    /// Add an `element` to the spatial hash to a specific `cell`.
+    pub fn put(&mut self, cell: Cell, element: T) {
+        let vec = self.map.entry(cell).or_insert_with(|| Vec::new());
+        vec.push(element);
+    }
+
+    /// Removes the element placed in `cell`.
+    ///
+    /// # Returns
+    /// The removed elemenet in `cell`, if any.
+    pub fn clear_bucket(&mut self, cell: Cell) -> Option<Vec<T>> {
+        self.map.remove(&cell)
+    }
+
+    /// Get a reference to the element placed in `cell` if existing.
+    pub fn get(&self, cell: Cell) -> Option<&Vec<T>> {
+        self.map.get(&cell)
+    }
+
+    /// Get an exlusive reference to the element placed in `cell` if existing.
+    pub fn get_mut(&mut self, cell: Cell) -> Option<&mut Vec<T>> {
+        self.map.get_mut(&cell)
+    }
+
+    /// Clears the contents of all buckets, but keeps their allocations.
+    ///
+    /// Useful when updating the spatial hash every frame.
+    pub fn clear(&mut self) {
+        self.map.values_mut().for_each(Vec::clear);
+    }
+
+    /// Completely trashes all data, deallocating all buckets.
+    pub fn empty(&mut self) {
+        self.map.clear();
+    }
+
+    pub fn resolution(&self) -> SpatialResolution {
+        self.resolution
+    }
+
+    #[inline]
+    pub fn cell_at(&self, point: glam::Vec3) -> Cell {
+        self.resolution.encode_point(point)
+    }
+
+    #[inline]
+    pub fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
+        self.resolution.approx_point(cell)
+    }
+
+    pub fn dump_soa(&mut self, positions: &[glam::Vec3], elements: &[T]) {
+        let resolution = self.resolution;
+        positions
+            .iter()
+            .map(|&point| resolution.encode_point(point))
+            .zip(elements)
+            .for_each(|(cell, &element)| {
+                self.put(cell, element);
+            });
+    }
+
+    pub fn dump_aos(&mut self, data: &[(glam::Vec3, T)]) {
+        data.iter().for_each(|&(point, element)| {
+            let cell = self.cell_at(point);
+            self.put(cell, element);
+        });
     }
 }
