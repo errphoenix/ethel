@@ -94,7 +94,7 @@ impl Default for SpatialResolution {
 impl SpatialResolution {
     pub const DEFAULT_RESOLUTION: f32 = 1.0;
 
-    pub fn new(resolution: f32) -> Self {
+    pub const fn new(resolution: f32) -> Self {
         debug_assert!(
             resolution > 0.0,
             "spatial resolution must be greater than 0"
@@ -102,12 +102,12 @@ impl SpatialResolution {
         Self(resolution)
     }
 
-    pub fn get(&self) -> f32 {
+    pub const fn get(&self) -> f32 {
         self.0
     }
 
     #[inline]
-    pub fn encode_point(&self, point: glam::Vec3) -> Cell {
+    pub const fn encode_point(&self, point: glam::Vec3) -> Cell {
         let cell_size = self.0;
         Cell {
             x: ((point.x + cell_size * 0.5).floor() / cell_size) as i32,
@@ -117,7 +117,7 @@ impl SpatialResolution {
     }
 
     #[inline]
-    pub fn approx_point(&self, cell: Cell) -> glam::Vec3 {
+    pub const fn approx_point(&self, cell: Cell) -> glam::Vec3 {
         glam::vec3(
             cell.x as f32 / self.0,
             cell.y as f32 / self.0,
