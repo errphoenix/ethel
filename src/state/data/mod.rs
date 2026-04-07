@@ -140,6 +140,10 @@ pub trait Column<T: Default>: SparseSlot + Default {
     ///   elements
     fn free(&mut self, slot: IndirectIndex);
 
+    fn free_many(&mut self, slots: &[IndirectIndex]) {
+        slots.iter().for_each(|&slot| self.free(slot));
+    }
+
     /// Add an element `value` to the inner SoA storage.
     ///
     /// This will automatically handle getting a valid slot for the inserted
