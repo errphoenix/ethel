@@ -1,4 +1,5 @@
 pub mod mesh;
+pub mod profile;
 pub mod render;
 pub mod shader;
 pub mod state;
