@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{time::Instant, u32};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Frame {
@@ -16,10 +16,11 @@ struct TraceId {
 
 const TRACE_STACK_LENGTH: usize = 8;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Profiler {
     stack: Vec<Frame>,
     page: u64,
+    last_dump_page: u64,
 
     trace_stack: [&'static str; TRACE_STACK_LENGTH],
     trace_index: usize,
@@ -29,11 +30,18 @@ pub struct Profiler {
     frame_trace_current: TraceId,
 }
 
+impl Default for Profiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Profiler {
     pub fn new() -> Self {
         Self {
             stack: Vec::new(),
-            page: 0,
+            page: 1,
+            last_dump_page: 0,
             trace_stack: [""; TRACE_STACK_LENGTH],
             trace_index: 0,
             full_trace: String::new(),
@@ -79,6 +87,8 @@ impl Profiler {
             index: self.frame_traces.len() as u32,
             length: self.full_trace.len() as u32,
         };
+
+        self.frame_traces.push_str(&self.full_trace);
     }
 
     #[inline]
@@ -106,5 +116,110 @@ impl Profiler {
 
     pub fn current_page(&self) -> u64 {
         self.page
+    }
+
+    pub fn write<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
+        let page_count = self.page - self.last_dump_page;
+        let frame_count = self.stack.len();
+
+        writeln!(out, "Ethel Profiler Dump")?;
+        writeln!(out, "- Total Pages: {page_count}")?;
+        writeln!(out, "- Total Frames: {frame_count}")?;
+        writeln!(out)?;
+
+        let mut last_page = 0;
+        let mut frame_index_abs = 0;
+        let mut frame_index_page = 0;
+
+        self.stack.drain(..).try_for_each(|frame| {
+            let page = frame.page;
+            if last_page != page {
+                writeln!(out, "+ New Page: {page}")?;
+                last_page = page;
+                frame_index_page = 0;
+            }
+
+            let TraceId { index, length } = frame.trace_handle;
+            let start = index as usize;
+            let end = (index + length) as usize;
+            let trace = &self.frame_traces[start..end];
+
+            write!(out, "[{frame_index_abs};{frame_index_page}] ")?;
+            write!(out, "{trace}#{}", frame.name)?;
+            writeln!(out, " = {}", frame.value)?;
+
+            frame_index_abs += 1;
+            frame_index_page += 1;
+
+            Ok::<(), std::io::Error>(())
+        })?;
+        out.flush()?;
+        self.frame_traces.clear();
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{thread, time::Duration};
+
+    use super::*;
+
+    #[test]
+    fn profiler_dump() {
+        let mut profiler = Profiler::new();
+
+        profiler.capture_duration("initialise", || thread::sleep(Duration::from_millis(50)));
+
+        for _ in 0..100 {
+            profiler.capture_duration("page_init", || thread::sleep(Duration::from_micros(25)));
+
+            profiler.push_trace("group_1");
+            profiler.capture_duration("fn_1_a", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_1_b", || thread::sleep(Duration::from_micros(10)));
+
+            profiler.push_trace("group_1_sub_a");
+            profiler.capture_duration("fn_1a_a", || thread::sleep(Duration::from_micros(15)));
+            profiler.capture_duration("fn_1a_b", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_1a_c", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_1a_d", || thread::sleep(Duration::from_micros(10)));
+            profiler.pop_trace();
+
+            profiler.push_trace("group_1_sub_b");
+            profiler.capture_duration("fn_1b_a", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_1b_b", || thread::sleep(Duration::from_micros(20)));
+            profiler.capture_duration("fn_1a_c", || thread::sleep(Duration::from_micros(10)));
+            profiler.pop_trace();
+            profiler.pop_trace();
+
+            profiler.push_trace("group_2");
+            profiler.capture_duration("fn_2_a", || thread::sleep(Duration::from_micros(50)));
+            profiler.capture_duration("fn_2_b", || thread::sleep(Duration::from_micros(20)));
+            profiler.capture_duration("fn_2_c", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_2_d", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_2_e", || thread::sleep(Duration::from_micros(10)));
+            profiler.capture_duration("fn_2_f", || thread::sleep(Duration::from_micros(10)));
+            profiler.pop_trace();
+
+            profiler.push_trace("group_3");
+            profiler.capture_duration("fn_3_a", || thread::sleep(Duration::from_micros(25)));
+            profiler.capture_duration("fn_3_b", || thread::sleep(Duration::from_micros(32)));
+            profiler.capture_duration("fn_3_c", || thread::sleep(Duration::from_micros(32)));
+            profiler.capture_duration("fn_3_d", || thread::sleep(Duration::from_micros(32)));
+            profiler.capture_duration("fn_3_e", || thread::sleep(Duration::from_micros(32)));
+
+            profiler.push_trace("group_1_sub_a");
+            profiler.capture_duration("fn_3a_a", || thread::sleep(Duration::from_micros(50)));
+            profiler.capture_duration("fn_3a_b", || thread::sleep(Duration::from_micros(60)));
+            profiler.capture_duration("fn_3a_c", || thread::sleep(Duration::from_micros(32)));
+            profiler.pop_trace();
+            profiler.pop_trace();
+
+            profiler.page();
+        }
+
+        profiler.capture_duration("finalize", || thread::sleep(Duration::from_millis(50)));
+
+        profiler.write(&mut std::io::stdout()).unwrap();
     }
 }
