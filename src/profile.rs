@@ -1,4 +1,7 @@
-use std::{time::Instant, u32};
+use std::{
+    time::{Duration, Instant},
+    u32,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -7,14 +10,14 @@ pub struct StackFrame<'a> {
     name: &'a str,
     trace: &'a str,
     page: u64,
-    value: u64,
+    duration: Duration,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct Frame {
     name: &'static str,
     page: u64,
-    value: u64,
+    duration: Duration,
     trace_handle: TraceId,
 }
 
@@ -109,11 +112,10 @@ impl Profiler {
         let func_return = func();
         let t1 = Instant::now();
 
-        let d = (t1 - t0).as_nanos() as u64;
         self.stack.push(Frame {
             name,
             page,
-            value: d,
+            duration: t1 - t0,
             trace_handle: self.frame_trace_current,
         });
 
@@ -142,7 +144,7 @@ impl Profiler {
             name: frame.name,
             trace,
             page: frame.page,
-            value: frame.value,
+            duration: frame.duration,
         }
     }
 
@@ -187,7 +189,7 @@ impl Profiler {
 
             write!(out, "[{frame_index_abs};{frame_index_page}] ")?;
             write!(out, "{trace}#{}", frame.name)?;
-            writeln!(out, " = {}", frame.value)?;
+            writeln!(out, " = {} microseconds", frame.duration.as_micros())?;
 
             frame_index_abs += 1;
             frame_index_page += 1;
