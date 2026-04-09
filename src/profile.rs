@@ -3,6 +3,14 @@ use std::{time::Instant, u32};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
+pub struct StackFrame<'a> {
+    name: &'a str,
+    trace: &'a str,
+    page: u64,
+    value: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct Frame {
     name: &'static str,
     page: u64,
@@ -124,14 +132,34 @@ impl Profiler {
         &self.stack
     }
 
-    pub fn write_bytes<'b>(&mut self, out: &'b mut [u8]) -> postcard::Result<&'b mut [u8]> {
-        let bytes = postcard::to_slice(&self.stack, out);
+    fn build_stackframe(&self, frame: &Frame) -> StackFrame<'_> {
+        let TraceId { index, length } = frame.trace_handle;
+        let start = index as usize;
+        let end = (index + length) as usize;
+        let trace = &self.frame_traces[start..end];
+
+        StackFrame {
+            name: frame.name,
+            trace,
+            page: frame.page,
+            value: frame.value,
+        }
+    }
+
+    pub fn write_bytes_flush<'b>(&mut self, out: &'b mut [u8]) -> postcard::Result<&'b mut [u8]> {
+        let stackframes = self
+            .stack
+            .iter()
+            .map(|frame| self.build_stackframe(&frame))
+            .collect::<Vec<_>>();
+
+        let bytes = postcard::to_slice(&stackframes, out);
         self.stack.clear();
         self.frame_traces.clear();
         bytes
     }
 
-    pub fn write_plain<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
+    pub fn write_plain_flush<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let page_count = self.page - self.last_dump_page;
         let frame_count = self.stack.len();
 
@@ -233,6 +261,6 @@ mod tests {
 
         profiler.capture_duration("finalize", || thread::sleep(Duration::from_millis(50)));
 
-        profiler.write_plain(&mut std::io::stdout()).unwrap();
+        profiler.write_plain_flush(&mut std::io::stdout()).unwrap();
     }
 }
