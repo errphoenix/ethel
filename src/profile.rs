@@ -10,20 +10,22 @@ pub struct StackFrame<'a> {
     pub name: &'a str,
     pub trace: &'a str,
     pub page: u64,
-    /// elapsed nanos
-    pub start: u128,
-    /// elapsed nanos
-    pub end: u128,
+    pub timestamp: u64,
+    /// elapsed time local to page in nanoseconds
+    pub start: u64,
+    /// elapsed time local to page in nanoseconds
+    pub end: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct Frame {
     name: &'static str,
     page: u64,
-    // elapsed nanos
-    start: u128,
-    // elapsed nanos
-    end: u128,
+    timestamp: u64,
+    // elapsed time local to page in nanoseconds
+    start: u64,
+    // elapsed time local to page in nanoseconds
+    end: u64,
     trace_handle: TraceId,
 }
 
@@ -38,8 +40,12 @@ const TRACE_STACK_LENGTH: usize = 8;
 #[derive(Debug)]
 pub struct Profiler {
     stack: Vec<Frame>,
+
+    init_time: Instant,
+
     page: u64,
     last_dump_page: u64,
+    page_time: Instant,
 
     trace_stack: [&'static str; TRACE_STACK_LENGTH],
     trace_index: usize,
@@ -59,8 +65,10 @@ impl Profiler {
     pub fn new() -> Self {
         Self {
             stack: Vec::new(),
+            init_time: Instant::now(),
             page: 1,
             last_dump_page: 0,
+            page_time: Instant::now(),
             trace_stack: [""; TRACE_STACK_LENGTH],
             trace_index: 0,
             full_trace: String::new(),
@@ -113,6 +121,7 @@ impl Profiler {
     #[inline]
     pub fn capture_duration<R, F: FnMut() -> R>(&mut self, name: &'static str, mut func: F) -> R {
         let page = self.page;
+        let time_offset = self.page_time;
 
         let t0 = Instant::now();
         let func_return = func();
@@ -121,8 +130,9 @@ impl Profiler {
         self.stack.push(Frame {
             name,
             page,
-            start: t0.elapsed().as_nanos(),
-            end: t1.elapsed().as_nanos(),
+            timestamp: (t0 - self.init_time).as_micros() as u64,
+            start: (t0 - time_offset).as_nanos() as u64,
+            end: (t1 - time_offset).as_nanos() as u64,
             trace_handle: self.frame_trace_current,
         });
 
@@ -131,6 +141,7 @@ impl Profiler {
 
     pub fn page(&mut self) {
         self.page += 1;
+        self.page_time = Instant::now();
     }
 
     pub fn current_page(&self) -> u64 {
@@ -150,6 +161,7 @@ impl Profiler {
         StackFrame {
             name: frame.name,
             trace,
+            timestamp: frame.timestamp,
             page: frame.page,
             start: frame.start,
             end: frame.end,
@@ -174,7 +186,7 @@ impl Profiler {
         Ok(())
     }
 
-    pub fn prsent_plain<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
+    pub fn present_plan<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let page_count = self.page - self.last_dump_page;
         let frame_count = self.stack.len();
 
@@ -203,7 +215,7 @@ impl Profiler {
             write!(out, "[{frame_index_abs};{frame_index_page}] ")?;
             write!(out, "{trace}#{}", frame.name)?;
 
-            let d = Duration::from_nanos_u128(frame.end - frame.start);
+            let d = Duration::from_nanos(frame.end - frame.start);
             writeln!(out, " = {} microseconds", d.as_micros())?;
 
             frame_index_abs += 1;
@@ -219,7 +231,11 @@ impl Profiler {
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
+    use std::{
+        io::{BufWriter, Write},
+        thread,
+        time::Duration,
+    };
 
     use super::*;
 
