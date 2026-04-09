@@ -10,14 +10,20 @@ pub struct StackFrame<'a> {
     pub name: &'a str,
     pub trace: &'a str,
     pub page: u64,
-    pub duration: Duration,
+    /// elapsed nanos
+    pub start: u128,
+    /// elapsed nanos
+    pub end: u128,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct Frame {
     name: &'static str,
     page: u64,
-    duration: Duration,
+    // elapsed nanos
+    start: u128,
+    // elapsed nanos
+    end: u128,
     trace_handle: TraceId,
 }
 
@@ -115,7 +121,8 @@ impl Profiler {
         self.stack.push(Frame {
             name,
             page,
-            duration: t1 - t0,
+            start: t0.elapsed().as_nanos(),
+            end: t1.elapsed().as_nanos(),
             trace_handle: self.frame_trace_current,
         });
 
@@ -144,7 +151,8 @@ impl Profiler {
             name: frame.name,
             trace,
             page: frame.page,
-            duration: frame.duration,
+            start: frame.start,
+            end: frame.end,
         }
     }
 
@@ -194,7 +202,9 @@ impl Profiler {
 
             write!(out, "[{frame_index_abs};{frame_index_page}] ")?;
             write!(out, "{trace}#{}", frame.name)?;
-            writeln!(out, " = {} microseconds", frame.duration.as_micros())?;
+
+            let d = Duration::from_nanos_u128(frame.end - frame.start);
+            writeln!(out, " = {} microseconds", d.as_micros())?;
 
             frame_index_abs += 1;
             frame_index_page += 1;
