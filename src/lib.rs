@@ -1,8 +1,10 @@
 pub mod mesh;
-pub mod profile;
 pub mod render;
 pub mod shader;
 pub mod state;
+
+#[cfg(feature = "profile")]
+pub mod profile;
 
 use janus::{input::InputState, sync::Mirror};
 

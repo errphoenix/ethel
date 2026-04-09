@@ -1,6 +1,8 @@
 use std::{time::Instant, u32};
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct Frame {
     name: &'static str,
     page: u64,
@@ -8,7 +10,7 @@ pub struct Frame {
     trace_handle: TraceId,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct TraceId {
     index: u32,
     length: u32,
@@ -118,7 +120,18 @@ impl Profiler {
         self.page
     }
 
-    pub fn write<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
+    pub fn frames_stack(&self) -> &[Frame] {
+        &self.stack
+    }
+
+    pub fn write_bytes<'b>(&mut self, out: &'b mut [u8]) -> postcard::Result<&'b mut [u8]> {
+        let bytes = postcard::to_slice(&self.stack, out);
+        self.stack.clear();
+        self.frame_traces.clear();
+        bytes
+    }
+
+    pub fn write_plain<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let page_count = self.page - self.last_dump_page;
         let frame_count = self.stack.len();
 
@@ -220,6 +233,6 @@ mod tests {
 
         profiler.capture_duration("finalize", || thread::sleep(Duration::from_millis(50)));
 
-        profiler.write(&mut std::io::stdout()).unwrap();
+        profiler.write_plain(&mut std::io::stdout()).unwrap();
     }
 }
