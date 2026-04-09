@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct StackFrame<'a> {
-    name: &'a str,
-    trace: &'a str,
-    page: u64,
-    duration: Duration,
+    pub name: &'a str,
+    pub trace: &'a str,
+    pub page: u64,
+    pub duration: Duration,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
@@ -148,20 +148,25 @@ impl Profiler {
         }
     }
 
-    pub fn write_bytes_flush<'b>(&mut self, out: &'b mut [u8]) -> postcard::Result<&'b mut [u8]> {
+    pub fn present_encoded<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let stackframes = self
             .stack
             .iter()
             .map(|frame| self.build_stackframe(&frame))
             .collect::<Vec<_>>();
 
-        let bytes = postcard::to_slice(&stackframes, out);
+        let bytes = postcard::to_allocvec(&stackframes)
+            .expect("failed to encode profiler stackframes to dynamic buffer");
+
         self.stack.clear();
         self.frame_traces.clear();
-        bytes
+
+        out.write_all(&bytes)?;
+        out.flush()?;
+        Ok(())
     }
 
-    pub fn write_plain_flush<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
+    pub fn prsent_plain<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let page_count = self.page - self.last_dump_page;
         let frame_count = self.stack.len();
 
@@ -212,7 +217,7 @@ mod tests {
     fn profiler_dump() {
         let mut profiler = Profiler::new();
 
-        profiler.capture_duration("initialise", || thread::sleep(Duration::from_millis(50)));
+        profiler.capture_duration("initialise", || thread::sleep(Duration::from_micros(50)));
 
         for _ in 0..100 {
             profiler.capture_duration("page_init", || thread::sleep(Duration::from_micros(25)));
@@ -261,8 +266,7 @@ mod tests {
             profiler.page();
         }
 
-        profiler.capture_duration("finalize", || thread::sleep(Duration::from_millis(50)));
-
-        profiler.write_plain_flush(&mut std::io::stdout()).unwrap();
+        profiler.capture_duration("finalize", || thread::sleep(Duration::from_micros(50)));
+        profiler.prsent_plain(&mut std::io::stdout()).unwrap();
     }
 }
