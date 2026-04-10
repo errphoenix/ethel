@@ -180,6 +180,7 @@ impl Profiler {
 
         self.stack.clear();
         self.frame_traces.clear();
+        self.init_time = Instant::now();
 
         out.write_all(&bytes)?;
         out.flush()?;
@@ -223,8 +224,9 @@ impl Profiler {
 
             Ok::<(), std::io::Error>(())
         })?;
-        out.flush()?;
         self.frame_traces.clear();
+        self.init_time = Instant::now();
+        out.flush()?;
         Ok(())
     }
 }
@@ -293,6 +295,6 @@ mod tests {
         }
 
         profiler.capture_duration("finalize", || thread::sleep(Duration::from_micros(50)));
-        profiler.prsent_plain(&mut std::io::stdout()).unwrap();
+        profiler.present_plan(&mut std::io::stdout()).unwrap();
     }
 }
