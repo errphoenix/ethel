@@ -1046,7 +1046,7 @@ macro_rules! table_spec {
                 /// that element across all rows of the same index.
                 pub fn handles_view(&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $crate::state::data::IndirectIndex> {
                     $crate::state::data::table::SoloView {
-                        alpha: &self.handles,
+                        alpha: &self.handles[1..],
                         _definition: std::marker::PhantomData,
                     }
                 }
@@ -1059,12 +1059,12 @@ macro_rules! table_spec {
                 ) {
                     (
                         $crate::state::data::table::SoloView {
-                            alpha: &self.$row_0,
+                            alpha: &self.$row_0[1..],
                             _definition: std::marker::PhantomData,
                         },
                         $(
                             $crate::state::data::table::SoloView {
-                            alpha: &self.$row,
+                            alpha: &self.$row[1..],
                                 _definition: std::marker::PhantomData,
                             },
                         )+
@@ -1079,12 +1079,12 @@ macro_rules! table_spec {
                 ) {
                     (
                         $crate::state::data::table::SoloViewMut {
-                            alpha: &mut self.$row_0,
+                            alpha: &mut self.$row_0[1..],
                             _definition: std::marker::PhantomData,
                         },
                         $(
                             $crate::state::data::table::SoloViewMut {
-                                alpha: &mut self.$row,
+                                alpha: &mut self.$row[1..],
                                 _definition: std::marker::PhantomData,
                             },
                         )+
@@ -1153,14 +1153,14 @@ macro_rules! table_spec {
 
                 pub fn [< $row_0 _view >](&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt_0> {
                     $crate::state::data::table::SoloView {
-                        alpha: &self.$row_0,
+                        alpha: &self.$row_0[1..],
                         _definition: std::marker::PhantomData,
                     }
                 }
 
                 pub fn [< $row_0 _mut_view >](&mut self) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt_0> {
                     $crate::state::data::table::SoloViewMut {
-                        alpha: &mut self.$row_0,
+                        alpha: &mut self.$row_0[1..],
                         _definition: std::marker::PhantomData,
                     }
                 }
@@ -1194,14 +1194,14 @@ macro_rules! table_spec {
 
                     pub fn [< $row _view >](&self) -> $crate::state::data::table::SoloView<'_, [< $name TableDef >], $rt> {
                         $crate::state::data::table::SoloView {
-                            alpha: &self.$row,
+                            alpha: &self.$row[1..],
                             _definition: std::marker::PhantomData,
                         }
                     }
 
                     pub fn [< $row _mut_view >](&mut self) -> $crate::state::data::table::SoloViewMut<'_, [< $name TableDef >], $rt> {
                         $crate::state::data::table::SoloViewMut {
-                            alpha: &mut self.$row,
+                            alpha: &mut self.$row[1..],
                             _definition: std::marker::PhantomData,
                         }
                     }
