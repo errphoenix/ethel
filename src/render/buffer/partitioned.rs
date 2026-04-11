@@ -424,7 +424,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     }
 
     /// Copy the given `data` in a `partition` of a `section` of the buffer at
-    /// the given `offset`.
+    /// the given bytes `offset`.
     ///
     /// A `partition` represents a contiguous stream of data of the same type.
     ///
@@ -476,7 +476,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     }
 
     /// Copy the given `data` in a `partition` of a `section` of the buffer at
-    /// the given `offset` with a padding of `pad_lan` at the end of each
+    /// the given byte `offset` with a padding of `pad_lan` at the end of each
     /// element.
     ///
     /// A `partition` represents a contiguous stream of data of the same time.
