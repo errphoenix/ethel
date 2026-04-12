@@ -47,20 +47,20 @@ const TRACE_STACK_LENGTH: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemInformation {
-    name: String,
-    os_version: String,
-    kernel_v: String,
+    pub name: String,
+    pub os_version: String,
+    pub kernel_v: String,
 
-    cpu_count: u32,
-    cpu_arch: String,
-    cpu_phys_count: u32,
+    pub cpu_count: u32,
+    pub cpu_arch: String,
+    pub cpu_phys_count: u32,
 
-    cpu_brand: String,
-    cpu_speed: u64,
+    pub cpu_brand: String,
+    pub cpu_speed: u64,
 
-    total_memory: u64,
+    pub total_memory: u64,
 
-    uptime_at_init: u64,
+    pub uptime_at_init: u64,
 }
 
 impl std::fmt::Display for SystemInformation {
@@ -68,21 +68,18 @@ impl std::fmt::Display for SystemInformation {
         writeln!(
             f,
             r#"System Information:
-Name: {}
-Version: {}
-Kernel version: {}
-Uptime (at init.): {}
+OS: {} version {}, kernel {}
 Architecture: {}
+Uptime (at init.): {}
 CPU brand: {}
-CPU cores (logical, or threads): {}
-CPU cores (physical): {}
+CPU cores (logical - physical): {} - {}
 CPU speed: {} MHz
 Memory: {} bytes"#,
             self.name,
             self.os_version,
             self.kernel_v,
-            self.uptime_at_init,
             self.cpu_arch,
+            self.uptime_at_init,
             self.cpu_brand,
             self.cpu_count,
             self.cpu_phys_count,

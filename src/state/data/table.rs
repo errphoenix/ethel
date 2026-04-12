@@ -961,12 +961,16 @@ macro_rules! table_spec {
                         return;
                     }
 
-                    self.indices[slot.as_index()] = $crate::state::data::DirectIndex::default();
                     let last_owner = *self
                         .handles
                         .last()
                         .expect("contiguous vectors are never empty");
-                    self.indices[last_owner.as_index()] = contiguous_slot;
+
+                    self.indices[slot.as_index()] = $crate::state::data::DirectIndex::default();
+                    // do not reassign slot if we are freeing last
+                    if last_owner != slot {
+                        self.indices[last_owner.as_index()] = contiguous_slot;
+                    }
 
                     let contiguous_index = contiguous_slot.as_index();
                     self.handles.swap_remove(contiguous_index);
