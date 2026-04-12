@@ -4,6 +4,14 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use sysinfo::System;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProfileMetrics<'a> {
+    pub sys_info: SystemInformation,
+    #[serde(borrow)]
+    pub stackframes: Vec<StackFrame<'a>>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct StackFrame<'a> {
@@ -37,8 +45,81 @@ struct TraceId {
 
 const TRACE_STACK_LENGTH: usize = 8;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemInformation {
+    name: String,
+    os_version: String,
+    kernel_v: String,
+
+    cpu_count: u32,
+    cpu_arch: String,
+    cpu_phys_count: u32,
+
+    cpu_brand: String,
+    cpu_speed: u64,
+
+    total_memory: u64,
+
+    uptime_at_init: u64,
+}
+
+impl std::fmt::Display for SystemInformation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            r#"System Information:
+Name: {}
+Version: {}
+Kernel version: {}
+Uptime (at init.): {}
+Architecture: {}
+CPU brand: {}
+CPU cores (logical, or threads): {}
+CPU cores (physical): {}
+CPU speed: {} MHz
+Memory: {} bytes"#,
+            self.name,
+            self.os_version,
+            self.kernel_v,
+            self.uptime_at_init,
+            self.cpu_arch,
+            self.cpu_brand,
+            self.cpu_count,
+            self.cpu_phys_count,
+            self.cpu_speed,
+            self.total_memory,
+        )
+    }
+}
+
+impl SystemInformation {
+    const FALLBACK: &str = "N/A";
+
+    pub fn new() -> Self {
+        let sys = System::new_all();
+        Self {
+            name: System::name().unwrap_or_else(|| Self::FALLBACK.to_owned()),
+            os_version: System::os_version().unwrap_or_else(|| Self::FALLBACK.to_owned()),
+            kernel_v: System::kernel_version().unwrap_or_else(|| Self::FALLBACK.to_owned()),
+
+            cpu_count: sys.cpus().len() as u32,
+            cpu_arch: System::cpu_arch(),
+            cpu_phys_count: System::physical_core_count().unwrap_or_default() as u32,
+
+            cpu_brand: sys.cpus()[0].brand().to_owned(),
+            cpu_speed: sys.cpus()[0].frequency(),
+
+            total_memory: sys.total_memory(),
+
+            uptime_at_init: System::uptime(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Profiler {
+    sys_info: SystemInformation,
+
     stack: Vec<Frame>,
 
     init_time: Instant,
@@ -64,6 +145,7 @@ impl Default for Profiler {
 impl Profiler {
     pub fn new() -> Self {
         Self {
+            sys_info: SystemInformation::new(),
             stack: Vec::new(),
             init_time: Instant::now(),
             page: 1,
@@ -175,8 +257,13 @@ impl Profiler {
             .map(|frame| self.build_stackframe(&frame))
             .collect::<Vec<_>>();
 
-        let bytes = postcard::to_allocvec(&stackframes)
-            .expect("failed to encode profiler stackframes to dynamic buffer");
+        let metrics = ProfileMetrics {
+            sys_info: self.sys_info.clone(),
+            stackframes,
+        };
+
+        let bytes = postcard::to_allocvec(&metrics)
+            .expect("failed to encode profiler metrics to dynamic buffer");
 
         self.stack.clear();
         self.frame_traces.clear();
@@ -187,13 +274,14 @@ impl Profiler {
         Ok(())
     }
 
-    pub fn present_plan<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
+    pub fn present_plain<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let page_count = self.page - self.last_dump_page;
         let frame_count = self.stack.len();
 
         writeln!(out, "Ethel Profiler Dump")?;
         writeln!(out, "- Total Pages: {page_count}")?;
         writeln!(out, "- Total Frames: {frame_count}")?;
+        writeln!(out, "{}", self.sys_info)?;
         writeln!(out)?;
 
         let mut last_page = 0;
@@ -233,11 +321,7 @@ impl Profiler {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        io::{BufWriter, Write},
-        thread,
-        time::Duration,
-    };
+    use std::{thread, time::Duration};
 
     use super::*;
 
@@ -295,6 +379,6 @@ mod tests {
         }
 
         profiler.capture_duration("finalize", || thread::sleep(Duration::from_micros(50)));
-        profiler.present_plan(&mut std::io::stdout()).unwrap();
+        profiler.present_plain(&mut std::io::stdout()).unwrap();
     }
 }
