@@ -1030,6 +1030,18 @@ macro_rules! table_spec {
                     }
                 }
 
+                pub fn clear(&mut self) {
+                    self.indices.resize(1, $crate::state::data::DirectIndex::default());
+                    self.handles.resize(1, $crate::state::data::IndirectIndex::default());
+
+                    self.$row_0.resize(1, Default::default());
+                    $(
+                        self.$row.resize(1, Default::default());
+                    )+
+
+                    self.free.clear();
+                }
+
                 /// Returns the "reverse map" for the handle of each element.
                 ///
                 /// Each handle corresponds in parallel to an element in all
