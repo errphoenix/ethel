@@ -12,6 +12,7 @@ use crate::{
 pub mod camera;
 pub mod cross;
 pub mod data;
+pub mod time;
 
 #[derive(Debug, Default)]
 pub struct State<D: Sized, T: StateHandler<D>> {
