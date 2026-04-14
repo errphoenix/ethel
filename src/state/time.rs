@@ -29,6 +29,14 @@ impl<const LENGTH: usize, T: AccumValue> AccumulationWindow<LENGTH, T> {
         }
     }
 
+    pub fn accumulated(&self) -> T {
+        let mut accumulated = T::default();
+        for i in 0..LENGTH {
+            accumulated += self.buffer[i].value();
+        }
+        accumulated
+    }
+
     pub fn bucket_size(&self) -> Duration {
         self.bucket_size
     }
@@ -67,6 +75,10 @@ impl<T: AccumValue> AccumulationBucket<T> {
             self.accumulated += value;
         }
         self.last_update = time;
+        self.accumulated
+    }
+
+    pub fn value(&self) -> T {
         self.accumulated
     }
 
