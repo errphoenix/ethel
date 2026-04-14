@@ -158,5 +158,5 @@ pub trait Column<T: Default>: SparseSlot + Default {
     ///
     /// # Returns
     /// Returns the indirect index of the newly inserted element.
-    fn insert(&mut self, value: T) -> IndirectIndex;
+    fn insert<V: Into<T>>(&mut self, value: V) -> IndirectIndex;
 }

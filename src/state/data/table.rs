@@ -770,10 +770,19 @@ macro_rules! table_spec {
         }
     ) => {
         paste::paste! {
-            pub type [< $name TableDef >] = (
-                $rt_0,
-                    $($rt,)+
-                );
+            #[derive(Clone, Debug, Default)]
+            pub struct [< $name TableDef >](
+                (
+                    $rt_0,
+                        $($rt,)+
+                )
+            );
+
+            impl From<($rt_0, $($rt,)+)> for [< $name TableDef >] {
+                fn from(value: ($rt_0, $($rt,)+)) -> [< $name TableDef >] {
+                    [< $name TableDef >](value)
+                }
+            }
 
             #[derive(Debug, Clone, Copy)]
             pub struct [< $name RowTableView >]<'view> {
@@ -981,8 +990,10 @@ macro_rules! table_spec {
                     self.free.push(slot);
                 }
 
-                fn insert(&mut self, ($row_0, $($row, )+): [< $name TableDef >]) -> $crate::state::data::IndirectIndex {
+                fn insert<V: Into<[< $name TableDef >]>>(&mut self, element: V) -> $crate::state::data::IndirectIndex {
                     use $crate::state::data::SparseSlot;
+
+                    let [< $name TableDef >] ( ( $row_0, $($row, )+) ) = element.into();
 
                     let index = self.next_slot_index();
                     let head = self.$row_0.len();
