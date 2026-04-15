@@ -186,13 +186,18 @@ pub trait Column<T: Default>: SparseSlot + Default {
     /// depending on the internal memory layout of the Column.
     #[inline]
     fn solve_indirect(&self, slot: IndirectIndex) -> Option<DirectIndex> {
-        if let Some(index) = self.slots_map().get(slot.as_index()).copied()
-            && index.generation == slot.generation
-        {
-            Some(index)
-        } else {
-            None
+        if let Some(index) = self.slots_map().get(slot.as_index()).copied() {
+            if index.generation == slot.generation {
+                return Some(index);
+            }
+
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "Column (debug): direct index of handle {slot:?} was present ({index:?}) but the generation is incompatible."
+            )
         }
+
+        None
     }
 
     /// Solve the given indirect index.
