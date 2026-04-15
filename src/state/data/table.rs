@@ -752,12 +752,12 @@ pub trait TableView<'view, Def: Sized + Default>: Debug + Clone + Copy {
 
     fn solve(&self, indirect: IndirectIndex) -> DirectIndex {
         let global = self.indirect_indices()[indirect.as_index()];
-        DirectIndex::from_index(global.as_index() - self.view_offset())
+        DirectIndex::from_index(global.as_index() - self.view_offset(), global.generation())
     }
 
     unsafe fn solve_unchecked(&self, indirect: IndirectIndex) -> DirectIndex {
         let global = unsafe { self.indirect_indices().get_unchecked(indirect.as_index()) };
-        DirectIndex::from_index(global.as_index() - self.view_offset())
+        DirectIndex::from_index(global.as_index() - self.view_offset(), global.generation())
     }
 }
 
@@ -966,7 +966,7 @@ macro_rules! table_spec {
                     }
 
                     let contiguous_slot = self.indices[slot.as_index()];
-                    if contiguous_slot.as_int() == 0 {
+                    if !contiguous_slot.related_to_indirect(&slot) || contiguous_slot.as_int() == 0 {
                         return;
                     }
 
@@ -975,9 +975,9 @@ macro_rules! table_spec {
                         .last()
                         .expect("contiguous vectors are never empty");
 
-                    self.indices[slot.as_index()] = $crate::state::data::DirectIndex::default();
+                    self.indices[slot.as_index()] = contiguous_slot.next_generation();
                     // do not reassign slot if we are freeing last
-                    if last_owner != slot {
+                    if last_owner.as_index() != slot.as_index() {
                         self.indices[last_owner.as_index()] = contiguous_slot;
                     }
 
@@ -987,7 +987,7 @@ macro_rules! table_spec {
                     $(
                         self.$row.swap_remove(contiguous_index);
                     )+
-                    self.free.push(slot);
+                    self.free.push(slot.next_generation());
                 }
 
                 fn insert<V: Into<[< $name TableDef >]>>(&mut self, element: V) -> $crate::state::data::IndirectIndex {
@@ -998,7 +998,7 @@ macro_rules! table_spec {
                     let index = self.next_slot_index();
                     let head = self.$row_0.len();
 
-                    self.indices[index.as_index()] = $crate::state::data::DirectIndex::from_index(head);
+                    self.indices[index.as_index()] = $crate::state::data::DirectIndex::from_index(head, index.generation());
                     self.handles.push(index);
 
                     self.$row_0.push($row_0);
@@ -1294,14 +1294,14 @@ mod tests {
 
         // free random
         {
-            table.free(IndirectIndex::from_int(37));
-            table.free(IndirectIndex::from_int(14));
-            table.free(IndirectIndex::from_int(32));
-            table.free(IndirectIndex::from_int(45));
-            table.free(IndirectIndex::from_int(24));
-            table.free(IndirectIndex::from_int(3));
-            table.free(IndirectIndex::from_int(7));
-            table.free(IndirectIndex::from_int(35));
+            table.free(IndirectIndex::from_int(37, 0));
+            table.free(IndirectIndex::from_int(14, 0));
+            table.free(IndirectIndex::from_int(32, 0));
+            table.free(IndirectIndex::from_int(45, 0));
+            table.free(IndirectIndex::from_int(24, 0));
+            table.free(IndirectIndex::from_int(3, 0));
+            table.free(IndirectIndex::from_int(7, 0));
+            table.free(IndirectIndex::from_int(35, 0));
         }
 
         // free last

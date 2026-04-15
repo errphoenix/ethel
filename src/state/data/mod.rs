@@ -6,44 +6,114 @@ pub use column::{ArrayColumn, IndexArrayColumn, ParallelIndexArrayColumn};
 pub use table::Table;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct IndirectIndex(pub(crate) u32);
+pub struct IndirectIndex {
+    pub(crate) index: u32,
+    pub(crate) generation: u32,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct DirectIndex(pub(crate) u32);
+pub struct DirectIndex {
+    pub(crate) index: u32,
+    pub(crate) generation: u32,
+}
 
 impl IndirectIndex {
-    pub fn from_index(index: usize) -> Self {
-        Self(index as u32)
+    pub fn null(generation: u32) -> Self {
+        Self {
+            index: 0,
+            generation,
+        }
     }
 
-    pub(crate) fn from_int(int: u32) -> Self {
-        Self(int)
+    pub fn from_index(index: usize, generation: u32) -> Self {
+        Self {
+            index: index as u32,
+            generation,
+        }
+    }
+
+    pub fn from_int(int: u32, generation: u32) -> Self {
+        Self {
+            index: int,
+            generation,
+        }
+    }
+
+    pub fn next_generation(self) -> Self {
+        Self {
+            index: 0,
+            generation: self.generation + 1,
+        }
+    }
+
+    pub fn related_to_direct(&self, direct: &DirectIndex) -> bool {
+        self.generation == direct.generation
+    }
+
+    pub fn related_to(&self, other: &IndirectIndex) -> bool {
+        self.eq(other)
     }
 
     pub fn as_int(self) -> u32 {
-        self.0
+        self.index
     }
 
     pub fn as_index(self) -> usize {
-        self.0 as usize
+        self.index as usize
+    }
+
+    pub fn generation(&self) -> u32 {
+        self.generation
     }
 }
 
 impl DirectIndex {
-    pub fn from_index(index: usize) -> Self {
-        Self(index as u32)
+    pub fn null(generation: u32) -> Self {
+        Self {
+            index: 0,
+            generation,
+        }
     }
 
-    pub(crate) fn from_int(int: u32) -> Self {
-        Self(int)
+    pub fn from_index(index: usize, generation: u32) -> Self {
+        Self {
+            index: index as u32,
+            generation,
+        }
+    }
+
+    pub fn from_int(int: u32, generation: u32) -> Self {
+        Self {
+            index: int,
+            generation,
+        }
+    }
+
+    pub fn next_generation(self) -> Self {
+        Self {
+            index: 0,
+            generation: self.generation + 1,
+        }
+    }
+
+    pub fn related_to_indirect(&self, indirect: &IndirectIndex) -> bool {
+        self.generation == indirect.generation
+    }
+
+    pub fn related_to(&self, other: &DirectIndex) -> bool {
+        self.eq(other)
     }
 
     pub fn as_int(self) -> u32 {
-        self.0
+        self.index
     }
 
     pub fn as_index(self) -> usize {
-        self.0 as usize
+        self.index as usize
+    }
+
+    pub fn generation(&self) -> u32 {
+        self.generation
     }
 }
 
@@ -82,9 +152,12 @@ pub trait SparseSlot: Default {
 
     fn next_slot_index(&mut self) -> IndirectIndex {
         if let Some(cached_index) = self.free_list_mut().pop() {
+            // cached index's generatin is already updated, since it was freed
             cached_index
         } else {
-            let new_index = IndirectIndex::from_index(self.slots_map().len());
+            // new index, gen 0
+            let new_index = IndirectIndex::from_index(self.slots_map().len(), 0);
+
             // uninitialised index pushed solely to ensure that an available
             // slot exists when requested, it is not tracked.
             // the stability of this data structure depends entirely on
@@ -113,13 +186,25 @@ pub trait Column<T: Default>: SparseSlot + Default {
     /// depending on the internal memory layout of the Column.
     #[inline]
     fn solve_indirect(&self, slot: IndirectIndex) -> Option<DirectIndex> {
-        self.slots_map().get(slot.as_index()).copied()
+        if let Some(index) = self.slots_map().get(slot.as_index()).copied()
+            && index.generation == slot.generation
+        {
+            Some(index)
+        } else {
+            None
+        }
     }
 
     /// Solve the given indirect index.
     ///
     /// The returned direct index is not a stable index and will change
     /// depending on the internal memory layout of the Column.
+    ///
+    /// This also does not check for the indices' generations to be equal.
+    ///
+    /// In most cases, you'll want to stick with
+    /// [`solve_indirect`](Self::solve_indirect), which maintains all security
+    /// guarantees.
     ///
     /// # Safety
     /// Caller must ensure that the given `slot` is always a valid index within

@@ -207,23 +207,23 @@ impl<T: Default> Column<T> for IndexArrayColumn<T> {
         }
 
         let contiguous_slot = self.indices[slot.as_index()];
-        if contiguous_slot.as_int() == 0 {
+        if !contiguous_slot.related_to_indirect(&slot) || contiguous_slot.as_int() == 0 {
             return;
         }
-        self.indices[slot.as_index()] = DirectIndex::default();
+        self.indices[slot.as_index()] = contiguous_slot.next_generation();
 
         if let Some(owner_last) = self.contiguous.last().map(Entry::owner) {
             self.indices[owner_last.as_index()] = contiguous_slot;
         }
 
         self.contiguous.swap_remove(contiguous_slot.as_index());
-        self.free.push(slot);
+        self.free.push(slot.next_generation());
     }
 
     fn insert<V: Into<T>>(&mut self, value: V) -> IndirectIndex {
         let index = self.next_slot_index();
         let head = self.contiguous.len();
-        self.indices[index.as_index()] = DirectIndex::from_index(head);
+        self.indices[index.as_index()] = DirectIndex::from_index(head, index.generation);
         self.contiguous.push(Entry::new(index, value.into()));
         index
     }
@@ -327,13 +327,13 @@ impl<T: Default> Column<T> for ArrayColumn<T> {
         }
 
         let contiguous_slot = self.indices[slot.as_index()];
-        if contiguous_slot.as_int() == 0 {
+        if !contiguous_slot.related_to_indirect(&slot) || contiguous_slot.as_int() == 0 {
             return;
         }
-        self.indices[slot.as_index()] = DirectIndex::default();
+        self.indices[slot.as_index()] = contiguous_slot.next_generation();
 
         self.contiguous.swap_remove(contiguous_slot.as_index());
-        self.free.push(slot);
+        self.free.push(slot.next_generation());
 
         todo!("maintain index stability during ArrayColumn::free");
     }
@@ -341,7 +341,7 @@ impl<T: Default> Column<T> for ArrayColumn<T> {
     fn insert<V: Into<T>>(&mut self, value: V) -> IndirectIndex {
         let index = self.next_slot_index();
         let head = self.contiguous.len();
-        self.indices[index.as_index()] = DirectIndex::from_index(head);
+        self.indices[index.as_index()] = DirectIndex::from_index(head, index.generation);
         self.contiguous.push(value.into());
         index
     }
@@ -470,11 +470,11 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
         }
 
         let contiguous_slot = self.indices[slot.as_index()];
-        if contiguous_slot.as_int() == 0 {
+        if !contiguous_slot.related_to_indirect(&slot) || contiguous_slot.as_int() == 0 {
             return;
         }
 
-        self.indices[slot.as_index()] = DirectIndex::default();
+        self.indices[slot.as_index()] = contiguous_slot.next_generation();
         let last_owner = *self
             .owners
             .last()
@@ -483,13 +483,13 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
 
         self.owners.swap_remove(contiguous_slot.as_index());
         self.contiguous.swap_remove(contiguous_slot.as_index());
-        self.free.push(slot);
+        self.free.push(slot.next_generation());
     }
 
     fn insert<V: Into<T>>(&mut self, value: V) -> IndirectIndex {
         let index = self.next_slot_index();
         let head = self.contiguous.len();
-        self.indices[index.as_index()] = DirectIndex::from_index(head);
+        self.indices[index.as_index()] = DirectIndex::from_index(head, index.generation);
         self.contiguous.push(value.into());
         self.owners.push(index);
         index
@@ -551,14 +551,14 @@ mod tests {
 
         // free random
         {
-            column.free(IndirectIndex::from_int(37));
-            column.free(IndirectIndex::from_int(14));
-            column.free(IndirectIndex::from_int(32));
-            column.free(IndirectIndex::from_int(45));
-            column.free(IndirectIndex::from_int(24));
-            column.free(IndirectIndex::from_int(3));
-            column.free(IndirectIndex::from_int(7));
-            column.free(IndirectIndex::from_int(35));
+            column.free(IndirectIndex::from_int(37, 0));
+            column.free(IndirectIndex::from_int(14, 0));
+            column.free(IndirectIndex::from_int(32, 0));
+            column.free(IndirectIndex::from_int(45, 0));
+            column.free(IndirectIndex::from_int(24, 0));
+            column.free(IndirectIndex::from_int(3, 0));
+            column.free(IndirectIndex::from_int(7, 0));
+            column.free(IndirectIndex::from_int(35, 0));
         }
 
         // free last
