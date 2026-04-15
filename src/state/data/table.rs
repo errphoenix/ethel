@@ -750,6 +750,13 @@ pub trait TableView<'view, Def: Sized + Default>: Debug + Clone + Copy {
         self.handles().len()
     }
 
+    // The size of the table's sparse indices array.
+    //
+    // Equivalent to [`Column::size`].
+    fn size(&self) -> usize {
+        self.indirect_indices().len()
+    }
+
     fn solve(&self, indirect: IndirectIndex) -> DirectIndex {
         let global = self.indirect_indices()[indirect.as_index()];
         DirectIndex::from_index(global.as_index() - self.view_offset(), global.generation())
