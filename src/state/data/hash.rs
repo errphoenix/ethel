@@ -200,6 +200,13 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         self.resolution
     }
 
+    /// Returns the `min, max` world positions of `cell`.
+    pub fn cell_extents(&self, cell: Cell) -> (glam::Vec3, glam::Vec3) {
+        let p = self.approx_point_at(cell);
+        let hs = self.resolution.0 * 0.5;
+        (p - hs, p + hs)
+    }
+
     #[inline]
     pub fn cell_at(&self, point: glam::Vec3) -> Cell {
         self.resolution.encode_point(point)
@@ -407,6 +414,13 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
 
     pub fn resolution(&self) -> SpatialResolution {
         self.resolution
+    }
+
+    /// Returns the `min, max` world positions of `cell`.
+    pub fn cell_extents(&self, cell: Cell) -> (glam::Vec3, glam::Vec3) {
+        let p = self.approx_point_at(cell);
+        let hs = self.resolution.0 * 0.5;
+        (p - hs, p + hs)
     }
 
     #[inline]
