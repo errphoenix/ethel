@@ -7,6 +7,12 @@ use std::ops::Deref;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Id(pub(crate) u32);
 
+impl Id {
+    pub unsafe fn from_value(index: u32) -> Self {
+        Self(index)
+    }
+}
+
 /// The position and length of a Mesh on GPU memory.
 ///
 /// This is usually accessed through a [`Mesh ID`](Id), and it is the only
@@ -22,6 +28,12 @@ pub struct Id(pub(crate) u32);
 pub struct Metadata {
     pub(crate) offset: u32,
     pub(crate) length: u32,
+}
+
+impl Metadata {
+    pub unsafe fn from_values(offset: u32, length: u32) -> Self {
+        Self { offset, length }
+    }
 }
 
 const INITIAL_MESH_ALLOC: usize = 16;
