@@ -72,6 +72,7 @@ impl Meshadata {
         &self.metadata[id.0 as usize]
     }
 
+    /// The current head of the vertex buffer.
     pub fn head(&self) -> u32 {
         self.head
     }
