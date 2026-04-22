@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 pub trait GlslAlloc {
     fn to_glsl_alloc(&self) -> String;
 }
