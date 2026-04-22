@@ -1,14 +1,50 @@
-//! This is all unstable and will be subject to change.
-//!
-//! A fully compile-time static model is planned.
+pub mod glsl;
 
-use std::io::BufRead;
+use std::{
+    collections::{HashMap, hash_map::Keys},
+    hash::Hash,
+    io::BufRead,
+};
 
 use janus::gl;
 use tracing::{Level, event};
 
+pub trait Value: std::fmt::Display {}
+
+impl<D: std::fmt::Display> Value for D {}
+
+pub trait Inject {
+    fn inject_glsl(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
+}
+
+#[derive(Clone, Debug)]
+pub struct Constant<T: Clone + Copy + Value> {
+    name: String,
+    value: T,
+}
+
+impl<T: Clone + Copy + Value> Constant<T> {
+    pub fn new(name: String, value: T) -> Self {
+        Self { name, value }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn value(&self) -> T {
+        self.value
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Default, Debug)]
 pub struct UniformLocation(i32);
+
+impl UniformLocation {
+    pub fn get(&self) -> i32 {
+        self.0
+    }
+}
 
 impl std::ops::Deref for UniformLocation {
     type Target = i32;
@@ -18,9 +54,58 @@ impl std::ops::Deref for UniformLocation {
     }
 }
 
+#[derive(Debug)]
+pub struct ShaderComposer<ShaderId>
+where
+    ShaderId: Hash + PartialEq + Eq + PartialOrd + Ord + Clone,
+{
+    common_header: String,
+
+    shaders: HashMap<ShaderId, String>,
+}
+
+impl<ShaderId> ShaderComposer<ShaderId>
+where
+    ShaderId: Hash + PartialEq + Eq + PartialOrd + Ord + Clone,
+{
+    pub fn new() -> Self {
+        Self {
+            common_header: String::new(),
+            shaders: HashMap::new(),
+        }
+    }
+
+    pub fn header(&self) -> &str {
+        &self.common_header
+    }
+
+    pub fn inject_header(&mut self, element: &impl Inject) -> std::fmt::Result {
+        element.inject_glsl(&mut self.common_header)
+    }
+
+    pub fn get(&self, shader_id: &ShaderId) -> Option<&String> {
+        self.shaders.get(shader_id)
+    }
+
+    pub fn get_mut(&mut self, shader_id: &ShaderId) -> Option<&mut String> {
+        self.shaders.get_mut(shader_id)
+    }
+
+    pub fn shaders(&'_ self) -> Keys<'_, ShaderId, String> {
+        self.shaders.keys()
+    }
+
+    pub fn compose(mut self) -> HashMap<ShaderId, String> {
+        self.shaders
+            .values_mut()
+            .for_each(|src| *src = format!("{}\n\n{src}", self.common_header));
+        self.shaders
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ShaderHandle {
-    gl_obj: u32,
+    prog_obj: u32,
 }
 
 impl ShaderHandle {
@@ -66,13 +151,13 @@ impl ShaderHandle {
             program
         };
 
-        Self { gl_obj: program }
+        Self { prog_obj: program }
     }
 
     pub fn uniform_location(&self, name: &str) -> UniformLocation {
         // todo: cache uniform locations
         let c_name = std::ffi::CString::new(name).unwrap();
-        UniformLocation(unsafe { gl::GetUniformLocation(self.gl_obj, c_name.as_ptr()) })
+        UniformLocation(unsafe { gl::GetUniformLocation(self.prog_obj, c_name.as_ptr()) })
     }
 
     pub fn uniform_mat4_glam(&self, uniform: &str, mat: glam::Mat4) {
@@ -102,7 +187,7 @@ impl ShaderHandle {
 
     pub fn bind(&self) {
         unsafe {
-            gl::UseProgram(self.gl_obj);
+            gl::UseProgram(self.prog_obj);
         }
     }
 
@@ -113,10 +198,10 @@ impl ShaderHandle {
 
 impl Drop for ShaderHandle {
     fn drop(&mut self) {
-        if self.gl_obj == 0 {
+        if self.prog_obj == 0 {
             return;
         }
-        unsafe { gl::DeleteProgram(self.gl_obj) }
+        unsafe { gl::DeleteProgram(self.prog_obj) }
     }
 }
 
