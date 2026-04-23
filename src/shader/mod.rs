@@ -1,4 +1,5 @@
 pub mod glsl;
+pub mod header;
 
 #[allow(unused_imports)]
 pub use glsl::{GlslHeap, GlslStack};
@@ -11,6 +12,8 @@ use std::{
 
 use janus::gl;
 use tracing::{Level, event};
+
+use crate::shader::header::ShaderHeader;
 
 pub trait WriteValue {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
@@ -82,7 +85,11 @@ where
         &self.common_header
     }
 
-    pub fn inject_header(&mut self, element: &impl Inject) -> std::fmt::Result {
+    pub fn inject_header(&mut self, header: &impl ShaderHeader) -> std::fmt::Result {
+        self.inject_element(header)
+    }
+
+    fn inject_element(&mut self, element: &impl Inject) -> std::fmt::Result {
         element.inject_shader(&mut self.common_header)
     }
 

@@ -219,9 +219,9 @@ impl super::WriteValue for glam::Vec4 {
 #[macro_export]
 macro_rules! glsl_struct {
     (
-        $vsb:vis struct $name:ident {
+        struct $name:ident {
             $(
-                $f_vsb:vis $f_name:ident: $f_typ:ty => $f_lit:literal,
+                $f_name:ident: $f_typ:ty => $f_lit:literal,
             )+
         }
     ) => {
