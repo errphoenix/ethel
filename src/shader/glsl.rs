@@ -1,18 +1,62 @@
+use std::ops::Deref;
+
+#[derive(Clone, Copy, Debug)]
+pub struct GlslStack<G: Glsl> {
+    _marker: std::marker::PhantomData<G>,
+}
+
+impl<G: Glsl> GlslStack<G> {
+    pub fn new() -> Self {
+        Self {
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GlslHeap<G: GlslAlloc>(pub G);
+
+impl<G: GlslAlloc> GlslHeap<G> {
+    pub fn new(value: G) -> Self {
+        Self(value)
+    }
+
+    pub fn get(&self) -> &G {
+        &self.0
+    }
+}
+
+impl<G: GlslAlloc> Deref for GlslHeap<G> {
+    type Target = G;
+
+    fn deref(&self) -> &Self::Target {
+        self.get()
+    }
+}
+
+impl<G: Glsl> super::Inject for GlslStack<G> {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        let glsl = G::to_glsl();
+        to.write_str(glsl)?;
+        to.write_char('\n')?;
+        Ok(())
+    }
+}
+impl<G: GlslAlloc> super::Inject for GlslHeap<G> {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        let glsl = self.to_glsl_alloc();
+        to.write_str(&glsl)?;
+        to.write_char('\n')?;
+        Ok(())
+    }
+}
+
 pub trait GlslAlloc {
     fn to_glsl_alloc(&self) -> String;
 }
 
 pub trait Glsl {
     fn to_glsl() -> &'static str;
-}
-
-impl<T: Glsl> super::Inject for T {
-    fn inject_glsl(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        let glsl = T::to_glsl();
-        to.write_str(glsl)?;
-        to.write_char('\n')?;
-        Ok(())
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -230,7 +274,7 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_version() {
-        let TEST: &str = "# version 330 core";
+        const TEST: &str = "# version 330 core";
 
         let version = ShadingVersion::core(330);
         let str = version.to_glsl_alloc();

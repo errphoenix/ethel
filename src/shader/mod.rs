@@ -1,5 +1,8 @@
 pub mod glsl;
 
+#[allow(unused_imports)]
+pub use glsl::{GlslHeap, GlslStack};
+
 use std::{
     collections::{HashMap, hash_map::Keys},
     hash::Hash,
@@ -14,7 +17,7 @@ pub trait WriteValue {
 }
 
 pub trait Inject {
-    fn inject_glsl(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
 }
 
 #[derive(Clone, Debug)]
@@ -80,7 +83,7 @@ where
     }
 
     pub fn inject_header(&mut self, element: &impl Inject) -> std::fmt::Result {
-        element.inject_glsl(&mut self.common_header)
+        element.inject_shader(&mut self.common_header)
     }
 
     pub fn get(&self, shader_id: &ShaderId) -> Option<&String> {
