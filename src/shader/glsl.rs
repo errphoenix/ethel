@@ -54,14 +54,14 @@ impl GlslAlloc for ShadingVersion {
     }
 }
 
-impl<T: Clone + Copy + Glsl + super::Value> GlslAlloc for super::Constant<T> {
+impl<T: Clone + Copy + Glsl + super::WriteValue> GlslAlloc for super::Constant<T> {
     fn to_glsl_alloc(&self) -> String {
-        format!(
-            "const {} {} = {};",
-            T::to_glsl(),
-            self.name.to_uppercase(),
-            self.value
-        )
+        let mut f = format!("const {} {} = ", T::to_glsl(), self.name.to_uppercase());
+        self.value
+            .write_value(&mut f)
+            .expect("failed to write value to glsl constant");
+        f += ";";
+        f
     }
 }
 
@@ -78,6 +78,64 @@ const GLSL_TYPE_MAT4: &'static str = "mat4";
 impl Glsl for f32 {
     fn to_glsl() -> &'static str {
         GLSL_TYPE_FLOAT
+    }
+}
+
+macro_rules! write_value_display {
+    ( $( $t:ty )+ ) => {
+        $(
+            impl $crate::shader::WriteValue for $t {
+                fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+                    write!(to, "{self}")
+                }
+            }
+        )+
+    };
+}
+
+write_value_display!(f32 i32 u32 bool);
+
+impl super::WriteValue for [f32; 2] {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "vec2({}, {})", self[0], self[1])
+    }
+}
+
+impl super::WriteValue for [f32; 3] {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "vec3({}, {}, {})", self[0], self[1], self[2])
+    }
+}
+
+impl super::WriteValue for [f32; 4] {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(
+            to,
+            "vec4({}, {}, {}, {})",
+            self[0], self[1], self[2], self[3]
+        )
+    }
+}
+
+impl super::WriteValue for glam::Vec2 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "vec2({}, {})", self[0], self[1])
+    }
+}
+
+impl super::WriteValue for glam::Vec3 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "vec3({}, {}, {})", self[0], self[1], self[2])
+    }
+}
+
+impl super::WriteValue for glam::Vec4 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(
+            to,
+            "vec4({}, {}, {}, {})",
+            self[0], self[1], self[2], self[3]
+        )
     }
 }
 

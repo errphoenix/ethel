@@ -9,21 +9,21 @@ use std::{
 use janus::gl;
 use tracing::{Level, event};
 
-pub trait Value: std::fmt::Display {}
-
-impl<D: std::fmt::Display> Value for D {}
+pub trait WriteValue {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
+}
 
 pub trait Inject {
     fn inject_glsl(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
 }
 
 #[derive(Clone, Debug)]
-pub struct Constant<T: Clone + Copy + Value> {
+pub struct Constant<T: Clone + Copy + WriteValue> {
     name: String,
     value: T,
 }
 
-impl<T: Clone + Copy + Value> Constant<T> {
+impl<T: Clone + Copy + WriteValue> Constant<T> {
     pub fn new(name: String, value: T) -> Self {
         Self { name, value }
     }
