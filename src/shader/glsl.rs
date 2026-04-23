@@ -59,6 +59,10 @@ pub trait Glsl {
     fn to_glsl() -> &'static str;
 }
 
+pub trait GlslType {
+    fn to_glsl_type() -> &'static str;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShadingVersion {
     version: u32,
@@ -98,9 +102,13 @@ impl GlslAlloc for ShadingVersion {
     }
 }
 
-impl<T: Clone + Copy + Glsl + super::WriteValue> GlslAlloc for super::Constant<T> {
+impl<T: Clone + Copy + GlslType + super::WriteValue> GlslAlloc for super::Constant<T> {
     fn to_glsl_alloc(&self) -> String {
-        let mut f = format!("const {} {} = ", T::to_glsl(), self.name.to_uppercase());
+        let mut f = format!(
+            "const {} {} = ",
+            T::to_glsl_type(),
+            self.name.to_uppercase()
+        );
         self.value
             .write_value(&mut f)
             .expect("failed to write value to glsl constant");
@@ -109,45 +117,61 @@ impl<T: Clone + Copy + Glsl + super::WriteValue> GlslAlloc for super::Constant<T
     }
 }
 
-const GLSL_TYPE_FLOAT: &'static str = "float";
-const GLSL_TYPE_INT: &'static str = "int";
-const GLSL_TYPE_UINT: &'static str = "uint";
-const GLSL_TYPE_BOOL: &'static str = "boolean";
-const GLSL_TYPE_VEC2: &'static str = "vec2";
-const GLSL_TYPE_VEC3: &'static str = "vec3";
-const GLSL_TYPE_VEC4: &'static str = "vec4";
-const GLSL_TYPE_MAT3: &'static str = "mat3";
-const GLSL_TYPE_MAT4: &'static str = "mat4";
-
-impl Glsl for f32 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_FLOAT
-    }
-}
-
 macro_rules! write_value_display {
-    ( $( $t:ty )+ ) => {
-        $(
-            impl $crate::shader::WriteValue for $t {
-                fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-                    write!(to, "{self}")
-                }
+    ($t:ty) => {
+        impl $crate::shader::WriteValue for $t {
+            fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+                write!(to, "{self}")
             }
-        )+
+        }
     };
 }
 
-write_value_display!(f32 i32 u32 bool);
+macro_rules! copy_type_name_glsl {
+    ($gt:ty => $lab:literal) => {
+        impl $crate::shader::glsl::Glsl for $gt {
+            fn to_glsl() -> &'static str {
+                $lab
+            }
+        }
+
+        impl $crate::shader::glsl::GlslType for $gt {
+            fn to_glsl_type() -> &'static str {
+                $lab
+            }
+        }
+    };
+}
+
+write_value_display!(f32);
+write_value_display!(i32);
+write_value_display!(u32);
+write_value_display!(bool);
+
+copy_type_name_glsl!(f32 => "float");
+copy_type_name_glsl!(i32 => "int");
+copy_type_name_glsl!(u32 => "uint");
+copy_type_name_glsl!(bool => "boolean");
+copy_type_name_glsl!(glam::Vec2 => "vec2");
+copy_type_name_glsl!([f32; 2] => "vec2");
+copy_type_name_glsl!(glam::Vec3 => "vec3");
+copy_type_name_glsl!([f32; 3] => "vec3");
+copy_type_name_glsl!(glam::Vec4 => "vec4");
+copy_type_name_glsl!([f32; 4] => "vec4");
+copy_type_name_glsl!(glam::Mat3 => "mat3");
+copy_type_name_glsl!([f32; 9] => "mat3");
+copy_type_name_glsl!(glam::Mat4 => "mat4");
+copy_type_name_glsl!([f32; 16] => "mat4");
 
 impl super::WriteValue for [f32; 2] {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(to, "vec2({}, {})", self[0], self[1])
+        write!(to, "vec2({:.3}, {:.3})", self[0], self[1])
     }
 }
 
 impl super::WriteValue for [f32; 3] {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(to, "vec3({}, {}, {})", self[0], self[1], self[2])
+        write!(to, "vec3({:.3}, {:.3}, {:.3})", self[0], self[1], self[2])
     }
 }
 
@@ -155,7 +179,7 @@ impl super::WriteValue for [f32; 4] {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(
             to,
-            "vec4({}, {}, {}, {})",
+            "vec4({:.3}, {:.3}, {:.3}, {:.3})",
             self[0], self[1], self[2], self[3]
         )
     }
@@ -163,13 +187,13 @@ impl super::WriteValue for [f32; 4] {
 
 impl super::WriteValue for glam::Vec2 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(to, "vec2({}, {})", self[0], self[1])
+        write!(to, "vec2({:.3}, {:.3})", self[0], self[1])
     }
 }
 
 impl super::WriteValue for glam::Vec3 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(to, "vec3({}, {}, {})", self[0], self[1], self[2])
+        write!(to, "vec3({:.3}, {:.3}, {:.3})", self[0], self[1], self[2])
     }
 }
 
@@ -177,94 +201,70 @@ impl super::WriteValue for glam::Vec4 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(
             to,
-            "vec4({}, {}, {}, {})",
+            "vec4({:.3}, {:.3}, {:.3}, {:.3})",
             self[0], self[1], self[2], self[3]
         )
     }
 }
 
-impl Glsl for i32 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_INT
-    }
-}
+/// Generate a Glsl struct from the given data structure.
+///
+/// Also creates a Rust struct by the same name and fields, deriving the
+/// `Clone`, `Copy`, and `Default` traits.
+///
+/// Glsl compatibility is given from the automatic implementation of the `Glsl`
+/// and `GlslAlloc` traits:
+/// * `Glsl` will return a static Glsl struct declaration.
+/// * `GlslAlloc` requires a `String` allocation on the heap, and will
+#[macro_export]
+macro_rules! glsl_struct {
+    (
+        $vsb:vis struct $name:ident {
+            $(
+                $f_vsb:vis $f_name:ident: $f_typ:ty => $f_lit:literal,
+            )+
+        }
+    ) => {
+        #[derive(Clone, Copy, Default)]
+        pub struct $name {
+            $(
+                pub $f_name: $f_typ,
+            )+
+        }
 
-impl Glsl for u32 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_UINT
-    }
-}
+        impl $crate::shader::glsl::Glsl for $name {
+            fn to_glsl() -> &'static str {
+                concat!(
+                    "struct ", stringify!($name), " {\n",
+                    $(
+                        "  ", $f_lit, " ", stringify!($f_name), ";\n",
+                    )+
+                    "};"
+                )
+            }
+        }
 
-impl Glsl for bool {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_BOOL
-    }
-}
+        impl $crate::shader::glsl::GlslType for $name {
+            fn to_glsl_type() -> &'static str {
+                stringify!($name)
+            }
+        }
 
-impl Glsl for [f32; 3] {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC3
-    }
-}
-
-impl Glsl for [f32; 4] {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC4
-    }
-}
-
-impl Glsl for [f32; 2] {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC2
-    }
-}
-
-impl Glsl for glam::Vec3 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC3
-    }
-}
-
-impl Glsl for glam::Vec2 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC2
-    }
-}
-
-impl Glsl for glam::Vec4 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC4
-    }
-}
-
-impl Glsl for glam::Quat {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_VEC4
-    }
-}
-
-impl Glsl for glam::Mat3 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_MAT3
-    }
-}
-
-impl Glsl for glam::Mat4 {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_MAT4
-    }
-}
-
-impl Glsl for [f32; 9] {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_MAT3
-    }
-}
-
-impl Glsl for [f32; 16] {
-    fn to_glsl() -> &'static str {
-        GLSL_TYPE_MAT4
-    }
+        impl $crate::shader::glsl::GlslAlloc for $name {
+            fn to_glsl_alloc(&self) -> String {
+                let mut s = format!("{}(", stringify!($name));
+                let mut i = 0;
+                $(
+                    if i > 0 {
+                        s += ", ";
+                    }
+                    $crate::shader::WriteValue::write_value(&self.$f_name, &mut s);
+                    i += 1;
+                )+
+                format!("{s});")
+            }
+        }
+    };
 }
 
 #[cfg(test)]
