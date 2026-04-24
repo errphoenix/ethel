@@ -124,6 +124,20 @@ macro_rules! layout_mesh_buffer {
     };
 }
 
+pub const GLSL_SSBO_INTEGRATION: &str = concat!(
+    crate::ssbo_glsl! {
+        buf VertexBuffer on 10 => {
+            [dyn_array Vertex: vertex_buffer]
+        }
+    },
+    "/n/n",
+    crate::ssbo_glsl! {
+        buf MeshMetadata on 11 => {
+            [dyn_array Metadata: metadata]
+        }
+    }
+);
+
 #[derive(Debug)]
 pub struct MeshStaging {
     metadata: Meshadata,
