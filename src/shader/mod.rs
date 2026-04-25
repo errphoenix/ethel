@@ -1,6 +1,8 @@
 pub mod glsl;
 pub mod header;
 
+pub use crate::ssbo_glsl;
+
 #[allow(unused_imports)]
 pub use glsl::{GlslHeap, GlslStack};
 
@@ -13,7 +15,10 @@ use std::{
 use janus::gl;
 use tracing::{Level, event};
 
-use crate::shader::header::ShaderHeader;
+use crate::shader::{
+    glsl::{GlslAlloc, GlslType, ShadingVersion},
+    header::ShaderHeader,
+};
 
 pub trait WriteValue {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
@@ -61,55 +66,151 @@ impl std::ops::Deref for UniformLocation {
 }
 
 #[derive(Debug)]
-pub struct ShaderComposer<ShaderId>
-where
-    ShaderId: Hash + PartialEq + Eq + PartialOrd + Ord + Clone,
-{
-    common_header: String,
-
-    shaders: HashMap<ShaderId, String>,
+pub struct ShaderComposer {
+    version: ShadingVersion,
+    header: String,
+    intermediate: String,
+    source: String,
 }
 
-impl<ShaderId> ShaderComposer<ShaderId>
-where
-    ShaderId: Hash + PartialEq + Eq + PartialOrd + Ord + Clone,
-{
-    pub fn new() -> Self {
+impl ShaderComposer {
+    pub fn new(version: ShadingVersion) -> Self {
         Self {
-            common_header: String::new(),
-            shaders: HashMap::new(),
+            version,
+            header: String::new(),
+            intermediate: String::new(),
+            source: String::new(),
         }
     }
 
+    pub fn version(&self) -> ShadingVersion {
+        self.version
+    }
+
     pub fn header(&self) -> &str {
-        &self.common_header
+        &self.header
+    }
+
+    pub fn mid_section(&self) -> &str {
+        &self.intermediate
+    }
+
+    pub fn source(&self) -> &str {
+        &self.source
     }
 
     pub fn inject_header(&mut self, header: &impl ShaderHeader) -> std::fmt::Result {
-        self.inject_element(header)
+        header.inject_shader(&mut self.header)
     }
 
-    fn inject_element(&mut self, element: &impl Inject) -> std::fmt::Result {
-        element.inject_shader(&mut self.common_header)
+    pub fn set_source(&mut self, source: &impl Inject) -> std::fmt::Result {
+        self.source.clear();
+        source.inject_shader(&mut self.source)
     }
 
-    pub fn get(&self, shader_id: &ShaderId) -> Option<&String> {
-        self.shaders.get(shader_id)
+    pub fn add_constant<T: WriteValue + Clone + Copy + GlslType>(&mut self, constant: Constant<T>) {
+        let glsl = constant.to_glsl_alloc();
+        self.intermediate += &glsl;
+        self.intermediate += "\n";
     }
 
-    pub fn get_mut(&mut self, shader_id: &ShaderId) -> Option<&mut String> {
-        self.shaders.get_mut(shader_id)
+    pub fn compose(self) -> ShaderSource {
+        ShaderSource(format!(
+            "{}\n\n{}\n\n{}\n\nvoid main() {{ \n{} \n}}\n",
+            self.version.to_glsl_alloc(),
+            self.header,
+            self.intermediate,
+            self.source
+        ))
     }
+}
 
-    pub fn shaders(&'_ self) -> Keys<'_, ShaderId, String> {
-        self.shaders.keys()
-    }
+#[derive(Clone, Debug, Default)]
+pub struct ShaderSource(String);
 
-    pub fn compose(mut self) -> HashMap<ShaderId, String> {
-        self.shaders
-            .values_mut()
-            .for_each(|src| *src = format!("{}\n\n{src}", self.common_header));
-        self.shaders
+macro_rules! library {
+    (
+        struct $title:ident [
+            $(
+            $sty:ty
+            )*
+        ]
+
+    ) => {
+        paste::paste! {
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+            pub enum [< $title ShadersLibrary >] {
+                $(
+                [< $sty:camel >]
+                )*
+            }
+        }
+    };
+}
+
+library! {
+    struct Test [
+        ShaderTest
+    ]
+}
+
+#[macro_export]
+macro_rules! shader_glsl {
+    (
+        struct $name:ident > [$ver:expr] {
+            $(ssbo => {
+                $(
+                $ssbo_glsl:expr
+                )+
+            };)?
+            $(const {
+                $(
+                    $c_ty:ident $c_name:ident = $c_v:expr;
+                )+
+            };)?
+
+            src() {
+                $src:literal
+            }
+        }
+    ) => {
+        paste::paste! {
+            struct [< Shader $name >];
+
+            impl [< Shader $name >] {
+                //pub fn composer() -> ShaderComposer {}
+            }
+        }
+    };
+}
+
+shader_glsl! {
+    struct Test > [460] {
+        ssbo => {
+            ssbo_glsl! {
+                buf POD_Test1 on 2 => {
+                    [dyn_array vec4: pod_test_1]
+                }
+            }
+
+            ssbo_glsl! {
+                buf POD_Test2 on 3 => {
+                    [dyn_array vec4: pod_test_2]
+                }
+            }
+        };
+
+        const {
+            float test_const = 9.807;
+        };
+
+        src() {
+            "
+            void main() {
+
+            }
+            "
+        }
     }
 }
 
