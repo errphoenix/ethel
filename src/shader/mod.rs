@@ -6,11 +6,7 @@ pub use crate::ssbo_glsl;
 #[allow(unused_imports)]
 pub use glsl::{GlslHeap, GlslStack};
 
-use std::{
-    collections::{HashMap, hash_map::Keys},
-    hash::Hash,
-    io::BufRead,
-};
+use std::{hash::Hash, io::BufRead};
 
 use janus::gl;
 use tracing::{Level, event};
@@ -103,15 +99,17 @@ impl ShaderComposer {
         header.inject_shader(&mut self.header)
     }
 
-    pub fn set_source(&mut self, source: &impl Inject) -> std::fmt::Result {
-        self.source.clear();
-        source.inject_shader(&mut self.source)
+    pub fn set_source(&mut self, source: impl Into<ShaderSource>) {
+        self.source = source.into().0;
     }
 
-    pub fn add_constant<T: WriteValue + Clone + Copy + GlslType>(&mut self, constant: Constant<T>) {
+    pub fn add_constant<T: WriteValue + Clone + Copy + GlslType>(
+        &mut self,
+        constant: &Constant<T>,
+    ) {
         let glsl = constant.to_glsl_alloc();
-        self.intermediate += &glsl;
-        self.intermediate += "\n";
+        self.header += &glsl;
+        self.header += "\n";
     }
 
     pub fn compose(self) -> ShaderSource {
@@ -127,6 +125,28 @@ impl ShaderComposer {
 
 #[derive(Clone, Debug, Default)]
 pub struct ShaderSource(String);
+
+impl std::fmt::Display for ShaderSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for ShaderSource {
+    fn from(value: String) -> Self {
+        ShaderSource::new(&value)
+    }
+}
+
+impl ShaderSource {
+    pub fn new(source: &str) -> Self {
+        Self(format!("void main() {{\n {source} \n}}\n"))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 macro_rules! library {
     (
@@ -175,10 +195,17 @@ macro_rules! shader_glsl {
         }
     ) => {
         paste::paste! {
-            struct [< Shader $name >];
+            #[derive(Clone, Copy, Default)]
+            pub struct [< Shader $name >];
 
             impl [< Shader $name >] {
-                //pub fn composer() -> ShaderComposer {}
+                pub fn compose() -> $crate::shader::ShaderComposer {
+                    let version = $crate::shader::ShadingVersion::core($ver);
+
+                    let mut composer = $crate::shader::ShaderComposer::new(version);
+
+                    composer
+                }
             }
         }
     };

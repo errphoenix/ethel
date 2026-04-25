@@ -1,5 +1,7 @@
 use std::ops::Deref;
 
+use crate::shader::header::ShaderHeader;
+
 #[derive(Clone, Copy, Debug)]
 pub struct GlslStack<G: Glsl> {
     _marker: std::marker::PhantomData<G>,
@@ -207,6 +209,52 @@ impl super::WriteValue for glam::Vec4 {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct GlslStruct(String);
+
+impl std::fmt::Display for GlslStruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl GlslStruct {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GlslStorage(String);
+
+impl std::fmt::Display for GlslStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl GlslStorage {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl super::Inject for GlslStorage {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        writeln!(to, "{}\n", self.0)
+    }
+}
+
+impl super::Inject for GlslStruct {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        writeln!(to, "{}\n", self.0)
+    }
+}
+
+impl ShaderHeader for GlslStorage {}
+
+impl ShaderHeader for GlslStruct {}
+
 /// Generate a Glsl struct from the given data structure.
 ///
 /// Also creates a Rust struct by the same name and fields, deriving the
@@ -221,47 +269,53 @@ macro_rules! glsl_struct {
     (
         struct $name:ident {
             $(
-                $f_name:ident: $f_typ:ty => $f_lit:literal,
+                $f_name:ident: $f_typ:ty => $f_lit:ident;
             )+
         }
     ) => {
-        #[derive(Clone, Copy, Default)]
-        pub struct $name {
-            $(
-                pub $f_name: $f_typ,
-            )+
-        }
-
-        impl $crate::shader::glsl::Glsl for $name {
-            fn to_glsl() -> &'static str {
-                concat!(
-                    "struct ", stringify!($name), " {\n",
-                    $(
-                        "  ", $f_lit, " ", stringify!($f_name), ";\n",
-                    )+
-                    "};"
-                )
-            }
-        }
-
-        impl $crate::shader::glsl::GlslType for $name {
-            fn to_glsl_type() -> &'static str {
-                stringify!($name)
-            }
-        }
-
-        impl $crate::shader::glsl::GlslAlloc for $name {
-            fn to_glsl_alloc(&self) -> String {
-                let mut s = format!("{}(", stringify!($name));
-                let mut i = 0;
+        paste::paste! {
+            #[derive(Clone, Copy, Debug)]
+            pub struct [< $name GlslStruct >] {
                 $(
-                    if i > 0 {
-                        s += ", ";
-                    }
-                    $crate::shader::WriteValue::write_value(&self.$f_name, &mut s);
-                    i += 1;
+                    pub $f_name: $f_typ,
                 )+
-                format!("{s});")
+            }
+
+            impl $crate::shader::glsl::Glsl for [< $name GlslStruct >] {
+                fn to_glsl() -> &'static str {
+                    concat!(
+                        "struct ", stringify!($name), " {\n",
+                        $(
+                            "  ", stringify!($f_lit), " ", stringify!($f_name), ";\n",
+                        )+
+                        "};"
+                    )
+                }
+            }
+
+            impl From<[< $name GlslStruct >]> for $crate::shader::glsl::GlslStruct {
+                fn from(_: [< $name GlslStruct >]) -> Self {
+                    Self(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl().to_string())
+                }
+            }
+
+            impl $crate::shader::glsl::GlslType for [< $name GlslStruct >] {
+                fn to_glsl_type() -> &'static str {
+                    stringify!($name)
+                }
+            }
+
+            impl $crate::shader::glsl::GlslAlloc for [< $name GlslStruct >] {
+                fn to_glsl_alloc(&self) -> String {
+                    let mut s = format!("{}(", stringify!($name));
+
+                    $(
+                        $crate::shader::WriteValue::write_value(&self.$f_name, &mut s);
+                        s += ", ";
+                    )+
+
+                    format!("{});", s.trim_end_matches(", "))
+                }
             }
         }
     };
