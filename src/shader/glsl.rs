@@ -217,7 +217,7 @@ impl std::fmt::Display for GlslStruct {
 }
 
 impl GlslStruct {
-    pub const unsafe fn new(value: String) -> Self {
+    pub const fn new(value: String) -> Self {
         Self(value)
     }
 
@@ -236,7 +236,7 @@ impl std::fmt::Display for GlslStorage {
 }
 
 impl GlslStorage {
-    pub const unsafe fn new(value: &'static str) -> Self {
+    pub const fn new(value: &'static str) -> Self {
         Self(value)
     }
 
@@ -255,7 +255,7 @@ impl std::fmt::Display for GlslLib {
 }
 
 impl GlslLib {
-    pub const unsafe fn new(value: &'static str) -> Self {
+    pub const fn new(value: &'static str) -> Self {
         Self(value)
     }
 
@@ -328,9 +328,7 @@ macro_rules! shader_glsl_struct {
 
             impl From<[< $name GlslStruct >]> for $crate::shader::glsl::GlslStruct {
                 fn from(_: [< $name GlslStruct >]) -> Self {
-                    unsafe {
-                        Self::new(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl().to_string())
-                    }
+                    Self::new(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl().to_string())
                 }
             }
 
@@ -368,17 +366,15 @@ macro_rules! shader_glsl_ssbo {
             )?
         }
     ) => {
-        unsafe {
-            $crate::shader::glsl::GlslStorage::new(
-                concat!("layout(std430, binding = ", stringify!($index), ") buffer ",
-                    stringify!($ssbo), "\n {\n",
-                    $("    ", stringify!($t), " ", stringify!($n), ";\n",)*
-                    $("    ", stringify!($dat), " ", stringify!($dan), "[]",
-                        $("[", $len, "]",)?
-                        ";\n",)?
-                    "};\n")
-            )
-        }
+        $crate::shader::glsl::GlslStorage::new(
+            concat!("layout(std430, binding = ", stringify!($index), ") buffer ",
+                stringify!($ssbo), "\n {\n",
+                $("    ", stringify!($t), " ", stringify!($n), ";\n",)*
+                $("    ", stringify!($dat), " ", stringify!($dan), "[]",
+                    $("[", $len, "]",)?
+                    ";\n",)?
+                "};\n")
+        )
     };
 }
 
@@ -391,15 +387,13 @@ macro_rules! shader_glsl_lib {
             $lib_src:literal
 
     ) => {
-        unsafe {
-            $crate::shader::glsl::GlslLib::new(
-                concat!(
-                    stringify!($return), " ", stringify!($fun_name), "(",
-                    $(stringify!($par_t_0), " ", stringify!($par_n_0), $(", ", stringify!($par_t_n), " ", stringify!($par_n_n),)*)?
-                    ") {\n", indoc::indoc! { $lib_src }, "\n}\n"
-                )
+        $crate::shader::glsl::GlslLib::new(
+            concat!(
+                stringify!($return), " ", stringify!($fun_name), "(",
+                $(stringify!($par_t_0), " ", stringify!($par_n_0), $(", ", stringify!($par_t_n), " ", stringify!($par_n_n),)*)?
+                ") {\n", indoc::indoc! { $lib_src }, "\n}\n"
             )
-        }
+        )
     };
 }
 
