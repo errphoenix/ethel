@@ -178,9 +178,33 @@ impl ShaderSource {
 }
 
 #[macro_export]
+macro_rules! shader_glsl_build_uniform_interface {
+    ($gl_name:ident: $gl_type:expr => $r_type:ty; $up_l:block) => {
+        paste:paste! {
+            pub fn [< uniform_ $gl_name _ $gl_type]>(&self, $gl_name: $r_type) $up_l
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! shader_glsl {
     (
         struct $name:ident > [$ver:expr] {
+            $(attribs {
+                $(
+                    $attrib_glsl:expr
+                )+
+            };)?
+            $(uniform {
+                $(
+                    $uniform_a:expr
+                )+
+            };)?
+            $(type {
+                $(
+                    $type_glsl:expr
+                )+
+            };)?
             $(ssbo {
                 $(
                     $ssbo_glsl:expr
@@ -201,14 +225,34 @@ macro_rules! shader_glsl {
         }
     ) => {
         paste::paste! {
-            #[derive(Clone, Copy, Default)]
-            pub struct [< Shader $name >];
+            #[derive(Clone, Default)]
+            pub struct [< Shader $name >] {
+                handle: $crate::shader::ShaderHandle,
+            }
 
             impl [< Shader $name >] {
                 pub fn compose() -> $crate::shader::ShaderComposer {
                     let version = $crate::shader::ShadingVersion::core($ver);
 
                     let mut composer = $crate::shader::ShaderComposer::new(version);
+
+                    $(
+                        $(
+                            composer.inject_header(&$attrib_glsl);
+                        )+
+                    )?
+
+                    $(
+                        $(
+                            composer.add_uniform($uniform_a);
+                        )+
+                    )?
+
+                    $(
+                        $(
+                            composer.inject_header(&$type_glsl);
+                        )+
+                    )?
 
                     $(
                         $(
@@ -239,6 +283,10 @@ macro_rules! shader_glsl {
 
 shader_glsl! {
     struct Test > [460] {
+        uniform {
+            ShaderUniform::new("projection", uniform::UniformKind::Matrix4)
+        };
+
         ssbo {
             shader_glsl_ssbo! {
                 buf POD_Test1 on 2 => {

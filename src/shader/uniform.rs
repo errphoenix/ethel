@@ -20,29 +20,32 @@ pub enum UniformKind {
     Boolean,
 }
 
+impl UniformKind {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            UniformKind::Matrix4 => "mat4",
+            UniformKind::Matrix3 => "mat3",
+            UniformKind::Matrix2 => "mat2",
+            UniformKind::Float => "float",
+            UniformKind::Vec2 => "vec2",
+            UniformKind::Vec3 => "vec3",
+            UniformKind::Vec4 => "vec4",
+            UniformKind::Int => "int",
+            UniformKind::Ivec2 => "ivec2",
+            UniformKind::Ivec3 => "ivec3",
+            UniformKind::Ivec4 => "ivec4",
+            UniformKind::Uint => "uint",
+            UniformKind::Uivec2 => "uivec2",
+            UniformKind::Uivec3 => "uivec3",
+            UniformKind::Uivec4 => "uivec4",
+            UniformKind::Boolean => "boolean",
+        }
+    }
+}
+
 impl super::glsl::GlslAlloc for UniformKind {
     fn to_glsl_alloc(&self) -> String {
-        format!(
-            "{}",
-            match self {
-                UniformKind::Matrix4 => "mat4",
-                UniformKind::Matrix3 => "mat3",
-                UniformKind::Matrix2 => "mat2",
-                UniformKind::Float => "float",
-                UniformKind::Vec2 => "vec2",
-                UniformKind::Vec3 => "vec3",
-                UniformKind::Vec4 => "vec4",
-                UniformKind::Int => "int",
-                UniformKind::Ivec2 => "ivec2",
-                UniformKind::Ivec3 => "ivec3",
-                UniformKind::Ivec4 => "ivec4",
-                UniformKind::Uint => "uint",
-                UniformKind::Uivec2 => "uivec2",
-                UniformKind::Uivec3 => "uivec3",
-                UniformKind::Uivec4 => "uivec4",
-                UniformKind::Boolean => "boolean",
-            }
-        )
+        format!("{}", self.as_str())
     }
 }
 
@@ -59,7 +62,7 @@ pub struct ShaderUniform {
 }
 
 impl ShaderUniform {
-    pub fn new(name: &'static str, kind: UniformKind) -> Self {
+    pub const fn new(name: &'static str, kind: UniformKind) -> Self {
         Self { name, kind }
     }
 }
