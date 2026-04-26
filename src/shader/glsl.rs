@@ -271,7 +271,7 @@ impl super::ShaderHeader for GlslStruct {}
 /// * `Glsl` will return a static Glsl struct declaration.
 /// * `GlslAlloc` requires a `String` allocation on the heap, and will
 #[macro_export]
-macro_rules! glsl_struct {
+macro_rules! shader_glsl_struct {
     (
         struct $name:ident {
             $(
@@ -330,7 +330,7 @@ macro_rules! glsl_struct {
 }
 
 #[macro_export]
-macro_rules! ssbo_glsl {
+macro_rules! shader_glsl_ssbo {
     (
         buf $ssbo:ident on $index:expr => {
             $(
@@ -374,7 +374,7 @@ mod tests {
     fn shader_compose_glsl_const() {
         const TEST: &str = "const float AMBIENT_LIGHT = 0.1;";
 
-        let constant = Constant::new("ambient_light".to_string(), 0.1);
+        let constant = Constant::new("ambient_light", 0.1);
         let str = constant.to_glsl_alloc();
 
         assert_eq!(TEST, &str);
@@ -385,7 +385,7 @@ mod tests {
         const TEST: &str =
             "layout(std430, binding = 2) buffer POD_BindPose\n {\n    vec4 pod_bind_pose[];\n};\n";
 
-        let generated = ssbo_glsl! {
+        let generated = shader_glsl_ssbo! {
             buf POD_BindPose on 2 => {
                 [dyn_array vec4: pod_bind_pose]
             }
@@ -396,7 +396,7 @@ mod tests {
         const TEST1: &str =
             "layout(std430, binding = 3) buffer POD_Weights\n {\n    float pod_weights[][2];\n};\n";
 
-        let generated = ssbo_glsl! {
+        let generated = shader_glsl_ssbo! {
             buf POD_Weights on 3 => {
                 [dyn_array float: pod_weights => each 2]
             }

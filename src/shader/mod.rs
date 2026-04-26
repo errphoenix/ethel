@@ -1,6 +1,6 @@
 pub mod glsl;
 
-pub use crate::ssbo_glsl;
+pub use crate::shader_glsl_ssbo;
 
 #[allow(unused_imports)]
 pub use glsl::{GlslHeap, GlslStack};
@@ -22,6 +22,8 @@ pub trait Inject {
 
 pub trait ShaderHeader: Inject {}
 
+pub trait ShaderBody: Inject {}
+
 #[derive(Clone, Debug)]
 pub struct Constant<T: Clone + Copy + WriteValue> {
     name: String,
@@ -29,15 +31,18 @@ pub struct Constant<T: Clone + Copy + WriteValue> {
 }
 
 impl<T: Clone + Copy + WriteValue> Constant<T> {
-    pub fn new(name: String, value: T) -> Self {
-        Self { name, value }
+    pub fn new(name: &str, value: T) -> Self {
+        Self {
+            name: name.to_string(),
+            value,
+        }
     }
 
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn value(&self) -> T {
+    pub const fn value(&self) -> T {
         self.value
     }
 }
@@ -63,7 +68,7 @@ impl std::ops::Deref for UniformLocation {
 pub struct ShaderComposer {
     version: ShadingVersion,
     header: String,
-    intermediate: String,
+    body: String,
     source: String,
 }
 
@@ -72,7 +77,7 @@ impl ShaderComposer {
         Self {
             version,
             header: String::new(),
-            intermediate: String::new(),
+            body: String::new(),
             source: String::new(),
         }
     }
@@ -85,8 +90,8 @@ impl ShaderComposer {
         &self.header
     }
 
-    pub fn mid_section(&self) -> &str {
-        &self.intermediate
+    pub fn body(&self) -> &str {
+        &self.body
     }
 
     pub fn source(&self) -> &str {
@@ -95,6 +100,10 @@ impl ShaderComposer {
 
     pub fn inject_header(&mut self, header: &impl ShaderHeader) -> std::fmt::Result {
         header.inject_shader(&mut self.header)
+    }
+
+    pub fn inject_body(&mut self, body: &impl ShaderBody) -> std::fmt::Result {
+        body.inject_shader(&mut self.body)
     }
 
     pub fn set_source(&mut self, source: impl Into<ShaderSource>) {
@@ -115,7 +124,7 @@ impl ShaderComposer {
             "{}\n\n{}\n\n{}\n\nvoid main() {{ \n{} \n}}\n",
             self.version.to_glsl_alloc(),
             self.header,
-            self.intermediate,
+            self.body,
             self.source
         ))
     }
@@ -136,6 +145,12 @@ impl From<String> for ShaderSource {
     }
 }
 
+impl From<&str> for ShaderSource {
+    fn from(value: &str) -> Self {
+        ShaderSource::new(value)
+    }
+}
+
 impl ShaderSource {
     pub fn new(source: &str) -> Self {
         Self(format!("void main() {{\n {source} \n}}\n"))
@@ -146,49 +161,23 @@ impl ShaderSource {
     }
 }
 
-macro_rules! library {
-    (
-        struct $title:ident [
-            $(
-            $sty:ty
-            )*
-        ]
-
-    ) => {
-        paste::paste! {
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-            pub enum [< $title ShadersLibrary >] {
-                $(
-                [< $sty:camel >]
-                )*
-            }
-        }
-    };
-}
-
-library! {
-    struct Test [
-        ShaderTest
-    ]
-}
-
 #[macro_export]
 macro_rules! shader_glsl {
     (
         struct $name:ident > [$ver:expr] {
             $(ssbo {
                 $(
-                $ssbo_glsl:expr
+                    $ssbo_glsl:expr
                 )+
             };)?
             $(const {
                 $(
-                    $c_ty:ident $c_name:ident = $c_v:expr;
+                    $const_a:expr
                 )+
             };)?
             $(lib {
                 $(
-                    $lib_src:literal;
+                    $lib:literal;
                 )+
             };)?
 
@@ -207,6 +196,26 @@ macro_rules! shader_glsl {
 
                     let mut composer = $crate::shader::ShaderComposer::new(version);
 
+                    $(
+                        $(
+                            composer.inject_header(&$ssbo_glsl);
+                        )+
+                    )?
+
+                    $(
+                        $(
+                            composer.add_constant(&$const_a);
+                        )+
+                    )?
+
+                    $(
+                        $(
+                            composer.inject_body(&$lib);
+                        )+
+                    )?
+
+                    composer.set_source($src);
+
                     composer
                 }
             }
@@ -217,13 +226,13 @@ macro_rules! shader_glsl {
 shader_glsl! {
     struct Test > [460] {
         ssbo {
-            ssbo_glsl! {
+            shader_glsl_ssbo! {
                 buf POD_Test1 on 2 => {
                     [dyn_array vec4: pod_test_1]
                 }
             }
 
-            ssbo_glsl! {
+            shader_glsl_ssbo! {
                 buf POD_Test2 on 3 => {
                     [dyn_array vec4: pod_test_2]
                 }
@@ -231,7 +240,7 @@ shader_glsl! {
         };
 
         const {
-            float test_const = 9.807;
+            Constant::new("test", 0.5)
         };
 
         src() {

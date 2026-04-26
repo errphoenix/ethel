@@ -127,12 +127,12 @@ macro_rules! layout_mesh_buffer {
 }
 
 pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
-    crate::ssbo_glsl! {
+    crate::shader_glsl_ssbo! {
         buf VertexBuffer on 10 => {
             [dyn_array Vertex: vertex_buffer]
         }
     },
-    crate::ssbo_glsl! {
+    crate::shader_glsl_ssbo! {
         buf MeshMetadata on 11 => {
             [dyn_array Metadata: metadata]
         }
