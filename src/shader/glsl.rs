@@ -208,7 +208,7 @@ impl super::WriteValue for glam::Vec4 {
 }
 
 #[derive(Clone, Debug)]
-pub struct GlslStruct(String);
+pub struct GlslStruct(&'static str);
 
 impl std::fmt::Display for GlslStruct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -217,12 +217,12 @@ impl std::fmt::Display for GlslStruct {
 }
 
 impl GlslStruct {
-    pub const fn new(value: String) -> Self {
+    pub const fn new(value: &'static str) -> Self {
         Self(value)
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0
     }
 }
 
