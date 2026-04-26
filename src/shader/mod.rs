@@ -1,4 +1,5 @@
 pub mod glsl;
+pub mod uniform;
 
 pub use crate::shader_glsl_ssbo;
 
@@ -10,7 +11,10 @@ use std::{hash::Hash, io::BufRead};
 use janus::gl;
 use tracing::{Level, event};
 
-use crate::shader::glsl::{GlslAlloc, GlslType, ShadingVersion};
+use crate::shader::{
+    glsl::{GlslAlloc, GlslType, ShadingVersion},
+    uniform::ShaderUniform,
+};
 
 pub trait WriteValue {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
@@ -50,6 +54,12 @@ impl<T: Clone + Copy + WriteValue> Constant<T> {
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Default, Debug)]
 pub struct UniformLocation(i32);
 
+impl std::fmt::Display for UniformLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl UniformLocation {
     pub fn get(&self) -> i32 {
         self.0
@@ -70,6 +80,7 @@ pub struct ShaderComposer {
     header: String,
     body: String,
     source: String,
+    uniforms: Vec<ShaderUniform>,
 }
 
 impl ShaderComposer {
@@ -79,6 +90,7 @@ impl ShaderComposer {
             header: String::new(),
             body: String::new(),
             source: String::new(),
+            uniforms: Vec::new(),
         }
     }
 
@@ -98,18 +110,26 @@ impl ShaderComposer {
         &self.source
     }
 
+    /// Inject shader SSBO declarations, struct type declarations, and
+    /// attributes.
     pub fn inject_header(&mut self, header: &impl ShaderHeader) -> std::fmt::Result {
         header.inject_shader(&mut self.header)
     }
 
+    /// Inject shader utility (or "library") source code, available for use in
+    /// the shader's main function.
     pub fn inject_body(&mut self, body: &impl ShaderBody) -> std::fmt::Result {
         body.inject_shader(&mut self.body)
     }
 
+    /// Set the shader's main function contents.
     pub fn set_source(&mut self, source: impl Into<ShaderSource>) {
         self.source = source.into().0;
     }
 
+    /// Add a constant variable to the shader's header.
+    ///
+    /// Compatible with Rust types. See [`Constant`].
     pub fn add_constant<T: WriteValue + Clone + Copy + GlslType>(
         &mut self,
         constant: &Constant<T>,
@@ -119,17 +139,13 @@ impl ShaderComposer {
         self.header += "\n";
     }
 
-    pub fn compose(self) -> ShaderSource {
-        ShaderSource(format!(
-            "{}\n\n{}\n\n{}\n\nvoid main() {{ \n{} \n}}\n",
-            self.version.to_glsl_alloc(),
-            self.header,
-            self.body,
-            self.source
-        ))
+    /// Add a uniform declaration to the shader's body.
+    pub fn add_uniform(&mut self, uniform: ShaderUniform) {
+        self.uniforms.push(uniform);
     }
 }
 
+/// The raw source code of a shader's `main()` function.
 #[derive(Clone, Debug, Default)]
 pub struct ShaderSource(String);
 

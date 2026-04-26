@@ -208,6 +208,84 @@ impl super::WriteValue for glam::Vec4 {
 }
 
 #[derive(Clone, Debug)]
+pub struct GlslAttribute(&'static str);
+
+impl std::fmt::Display for GlslAttribute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl GlslAttribute {
+    pub const fn new(value: &'static str) -> Self {
+        Self(value)
+    }
+
+    pub const fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+#[macro_export]
+macro_rules! shader_glsl_attribs {
+    (
+        input $gl_n:ident: $gl_t:ident;
+    ) => {
+        GlslAttribute::new(concat!(
+            "in",
+            " ",
+            stringify!($gl_t),
+            " ",
+            stringify!($gl_n),
+            ";"
+        ))
+    };
+    (
+        output $gl_n:ident: $gl_t:ident;
+    ) => {
+        GlslAttribute::new(concat!(
+            "out",
+            " ",
+            stringify!($gl_t),
+            " ",
+            stringify!($gl_n),
+            ";"
+        ))
+    };
+    (
+        $(input $i_gl_n:ident: $i_gl_t:ident;)*
+        $(output $o_gl_n:ident: $o_gl_t:ident;)*
+    ) => {
+        GlslAttribute::new(concat!(
+            $(
+                "in",
+                " ",
+                stringify!($i_gl_t),
+                " ",
+                stringify!($i_gl_n),
+                ";\n",
+            )*
+            $(
+                "out",
+                " ",
+                stringify!($o_gl_t),
+                " ",
+                stringify!($o_gl_n),
+                ";\n",
+            )*
+        ))
+    };
+}
+
+impl super::Inject for GlslAttribute {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        writeln!(to, "{}\n", self.0)
+    }
+}
+
+impl super::ShaderHeader for GlslAttribute {}
+
+#[derive(Clone, Debug)]
 pub struct GlslStruct(&'static str);
 
 impl std::fmt::Display for GlslStruct {
@@ -221,7 +299,7 @@ impl GlslStruct {
         Self(value)
     }
 
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0
     }
 }
@@ -460,5 +538,20 @@ mod tests {
         };
 
         assert_eq!(TEST1, generated.as_str());
+    }
+
+    #[test]
+    fn shader_compose_glsl_attribs() {
+        const TEST: &str =
+            "in vec4 color;\nin vec3 test;\nout vec3 worldPos;\nout vec2 texCoords;\n";
+
+        let generated = shader_glsl_attribs! {
+            input color: vec4;
+            input test: vec3;
+            output worldPos: vec3;
+            output texCoords: vec2;
+        };
+
+        assert_eq!(TEST, generated.as_str());
     }
 }
