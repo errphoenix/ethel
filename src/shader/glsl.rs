@@ -236,8 +236,27 @@ impl std::fmt::Display for GlslStorage {
 }
 
 impl GlslStorage {
-    pub const unsafe fn new(value: &'static str) -> GlslStorage {
-        GlslStorage(value)
+    pub const unsafe fn new(value: &'static str) -> Self {
+        Self(value)
+    }
+
+    pub const fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GlslLib(&'static str);
+
+impl std::fmt::Display for GlslLib {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl GlslLib {
+    pub const unsafe fn new(value: &'static str) -> Self {
+        Self(value)
     }
 
     pub const fn as_str(&self) -> &str {
@@ -257,9 +276,17 @@ impl super::Inject for GlslStruct {
     }
 }
 
+impl super::Inject for GlslLib {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        writeln!(to, "{}\n", self.0)
+    }
+}
+
 impl super::ShaderHeader for GlslStorage {}
 
 impl super::ShaderHeader for GlslStruct {}
+
+impl super::ShaderBody for GlslLib {}
 
 /// Generate a Glsl struct from the given data structure.
 ///
@@ -355,10 +382,45 @@ macro_rules! shader_glsl_ssbo {
     };
 }
 
+#[macro_export]
+macro_rules! shader_glsl_lib {
+    (
+        $return:ident $fun_name:ident [ $($par_n_0:ident: $par_t_0:ident $(, $par_n_n:ident: $par_t_n:ident)*)? ] => {
+            $($t:tt)+
+        }
+
+    ) => {
+        unsafe {
+            $crate::shader::glsl::GlslLib::new(
+                concat!(
+                    stringify!($return), " ", stringify!($fun_name), "(",
+                    $(stringify!($par_t_0), " ", stringify!($par_n_0), $(", ", stringify!($par_t_n), " ", stringify!($par_n_n),)*)?
+                    ") {\n", $(" ", stringify!($t),)+ "\n}\n"
+                )
+            )
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::*;
     use super::*;
+
+    #[test]
+    fn shader_compose_glsl_lib() {
+        const TEST: &str =
+            "float mulBySeven(float num) {\n float result = num * 7.0 ; return result ;\n}\n";
+
+        let generated = shader_glsl_lib! {
+            float mulBySeven [ num: float ] => {
+                float result = num * 7.0;
+                return result;
+            }
+        };
+
+        assert_eq!(TEST, generated.as_str());
+    }
 
     #[test]
     fn shader_compose_glsl_version() {
