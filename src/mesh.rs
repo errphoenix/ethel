@@ -1,5 +1,7 @@
 use std::ops::Deref;
 
+use crate::shader::glsl::GlslStorage;
+
 /// The ID that represents a Mesh present on GPU memory, from the CPU.
 ///
 /// It is used to link objects or "renderables" to a mesh that is present on
@@ -124,19 +126,18 @@ macro_rules! layout_mesh_buffer {
     };
 }
 
-pub const GLSL_SSBO_INTEGRATION: &str = concat!(
+pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
     crate::ssbo_glsl! {
         buf VertexBuffer on 10 => {
             [dyn_array Vertex: vertex_buffer]
         }
     },
-    "/n/n",
     crate::ssbo_glsl! {
         buf MeshMetadata on 11 => {
             [dyn_array Metadata: metadata]
         }
-    }
-);
+    },
+];
 
 #[derive(Debug)]
 pub struct MeshStaging {

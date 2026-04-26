@@ -1,7 +1,5 @@
 use std::ops::Deref;
 
-use crate::shader::header::ShaderHeader;
-
 #[derive(Clone, Copy, Debug)]
 pub struct GlslStack<G: Glsl> {
     _marker: std::marker::PhantomData<G>,
@@ -219,13 +217,17 @@ impl std::fmt::Display for GlslStruct {
 }
 
 impl GlslStruct {
+    pub const unsafe fn new(value: String) -> Self {
+        Self(value)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct GlslStorage(String);
+pub struct GlslStorage(&'static str);
 
 impl std::fmt::Display for GlslStorage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -234,8 +236,12 @@ impl std::fmt::Display for GlslStorage {
 }
 
 impl GlslStorage {
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub const unsafe fn new(value: &'static str) -> GlslStorage {
+        GlslStorage(value)
+    }
+
+    pub const fn as_str(&self) -> &str {
+        self.0
     }
 }
 
@@ -251,9 +257,9 @@ impl super::Inject for GlslStruct {
     }
 }
 
-impl ShaderHeader for GlslStorage {}
+impl super::ShaderHeader for GlslStorage {}
 
-impl ShaderHeader for GlslStruct {}
+impl super::ShaderHeader for GlslStruct {}
 
 /// Generate a Glsl struct from the given data structure.
 ///
@@ -295,7 +301,9 @@ macro_rules! glsl_struct {
 
             impl From<[< $name GlslStruct >]> for $crate::shader::glsl::GlslStruct {
                 fn from(_: [< $name GlslStruct >]) -> Self {
-                    Self(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl().to_string())
+                    unsafe {
+                        Self::new(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl().to_string())
+                    }
                 }
             }
 
@@ -317,6 +325,32 @@ macro_rules! glsl_struct {
                     format!("{});", s.trim_end_matches(", "))
                 }
             }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! ssbo_glsl {
+    (
+        buf $ssbo:ident on $index:expr => {
+            $(
+                $t:ident : $n:ident;
+            )*
+            $(
+                [dyn_array $dat:ident: $dan:ident $(=> each $len:expr)?]
+            )?
+        }
+    ) => {
+        unsafe {
+            $crate::shader::glsl::GlslStorage::new(
+                concat!("layout(std430, binding = ", stringify!($index), ") buffer ",
+                    stringify!($ssbo), "\n {\n",
+                    $("    ", stringify!($t), " ", stringify!($n), ";\n",)*
+                    $("    ", stringify!($dat), " ", stringify!($dan), "[]",
+                        $("[", $len, "]",)?
+                        ";\n",)?
+                    "};\n")
+            )
         }
     };
 }
@@ -344,5 +378,30 @@ mod tests {
         let str = constant.to_glsl_alloc();
 
         assert_eq!(TEST, &str);
+    }
+
+    #[test]
+    fn shader_compose_glsl_ssbo() {
+        const TEST: &str =
+            "layout(std430, binding = 2) buffer POD_BindPose\n {\n    vec4 pod_bind_pose[];\n};\n";
+
+        let generated = ssbo_glsl! {
+            buf POD_BindPose on 2 => {
+                [dyn_array vec4: pod_bind_pose]
+            }
+        };
+
+        assert_eq!(TEST, generated.as_str());
+
+        const TEST1: &str =
+            "layout(std430, binding = 3) buffer POD_Weights\n {\n    float pod_weights[][2];\n};\n";
+
+        let generated = ssbo_glsl! {
+            buf POD_Weights on 3 => {
+                [dyn_array float: pod_weights => each 2]
+            }
+        };
+
+        assert_eq!(TEST1, generated.as_str());
     }
 }

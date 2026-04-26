@@ -1,5 +1,4 @@
 pub mod glsl;
-pub mod header;
 
 pub use crate::ssbo_glsl;
 
@@ -11,10 +10,7 @@ use std::{hash::Hash, io::BufRead};
 use janus::gl;
 use tracing::{Level, event};
 
-use crate::shader::{
-    glsl::{GlslAlloc, GlslType, ShadingVersion},
-    header::ShaderHeader,
-};
+use crate::shader::glsl::{GlslAlloc, GlslType, ShadingVersion};
 
 pub trait WriteValue {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
@@ -23,6 +19,8 @@ pub trait WriteValue {
 pub trait Inject {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
 }
+
+pub trait ShaderHeader: Inject {}
 
 #[derive(Clone, Debug)]
 pub struct Constant<T: Clone + Copy + WriteValue> {
@@ -178,7 +176,7 @@ library! {
 macro_rules! shader_glsl {
     (
         struct $name:ident > [$ver:expr] {
-            $(ssbo => {
+            $(ssbo {
                 $(
                 $ssbo_glsl:expr
                 )+
@@ -186,6 +184,11 @@ macro_rules! shader_glsl {
             $(const {
                 $(
                     $c_ty:ident $c_name:ident = $c_v:expr;
+                )+
+            };)?
+            $(lib {
+                $(
+                    $lib_src:literal;
                 )+
             };)?
 
@@ -213,7 +216,7 @@ macro_rules! shader_glsl {
 
 shader_glsl! {
     struct Test > [460] {
-        ssbo => {
+        ssbo {
             ssbo_glsl! {
                 buf POD_Test1 on 2 => {
                     [dyn_array vec4: pod_test_1]
