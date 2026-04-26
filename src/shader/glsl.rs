@@ -385,9 +385,10 @@ macro_rules! shader_glsl_ssbo {
 #[macro_export]
 macro_rules! shader_glsl_lib {
     (
-        $return:ident $fun_name:ident [ $($par_n_0:ident: $par_t_0:ident $(, $par_n_n:ident: $par_t_n:ident)*)? ] => {
-            $($t:tt)+
-        }
+        $return:ident $fun_name:ident [
+            $($par_n_0:ident: $par_t_0:ident $(, $par_n_n:ident: $par_t_n:ident)*)?
+        ] =>
+            $lib_src:literal
 
     ) => {
         unsafe {
@@ -395,7 +396,7 @@ macro_rules! shader_glsl_lib {
                 concat!(
                     stringify!($return), " ", stringify!($fun_name), "(",
                     $(stringify!($par_t_0), " ", stringify!($par_n_0), $(", ", stringify!($par_t_n), " ", stringify!($par_n_n),)*)?
-                    ") {\n", $(" ", stringify!($t),)+ "\n}\n"
+                    ") {\n", indoc::indoc! { $lib_src }, "\n}\n"
                 )
             )
         }
@@ -410,13 +411,13 @@ mod tests {
     #[test]
     fn shader_compose_glsl_lib() {
         const TEST: &str =
-            "float mulBySeven(float num) {\n float result = num * 7.0 ; return result ;\n}\n";
+            "float mulBySeven(float num) {\nfloat result = num * 7.0;\nreturn result;\n\n}\n";
 
         let generated = shader_glsl_lib! {
-            float mulBySeven [ num: float ] => {
+            float mulBySeven [ num: float ] => "
                 float result = num * 7.0;
                 return result;
-            }
+            "
         };
 
         assert_eq!(TEST, generated.as_str());

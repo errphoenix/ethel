@@ -177,13 +177,11 @@ macro_rules! shader_glsl {
             };)?
             $(lib {
                 $(
-                    $lib:literal;
+                    $lib:expr;
                 )+
             };)?
 
-            src() {
-                $src:literal
-            }
+            src() $src:literal
         }
     ) => {
         paste::paste! {
@@ -214,7 +212,7 @@ macro_rules! shader_glsl {
                         )+
                     )?
 
-                    composer.set_source($src);
+                    composer.set_source(indoc::indoc! { $src });
 
                     composer
                 }
@@ -243,13 +241,9 @@ shader_glsl! {
             Constant::new("test", 0.5)
         };
 
-        src() {
-            "
-            void main() {
-
-            }
-            "
-        }
+        src() "
+            gl_Position = vec4(1.0);
+        "
     }
 }
 
