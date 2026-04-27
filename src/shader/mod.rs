@@ -78,9 +78,9 @@ impl std::ops::Deref for UniformLocation {
 pub struct ShaderComposer {
     version: ShadingVersion,
     header: String,
+    uniforms_section: String,
     body: String,
     source: String,
-    uniforms: Vec<ShaderUniform>,
 }
 
 impl ShaderComposer {
@@ -88,9 +88,9 @@ impl ShaderComposer {
         Self {
             version,
             header: String::new(),
+            uniforms_section: String::new(),
             body: String::new(),
             source: String::new(),
-            uniforms: Vec::new(),
         }
     }
 
@@ -140,8 +140,11 @@ impl ShaderComposer {
     }
 
     /// Add a uniform declaration to the shader's body.
-    pub fn add_uniform(&mut self, uniform: ShaderUniform) {
-        self.uniforms.push(uniform);
+    pub fn add_uniform<U: uniform::HasUniform>(
+        &mut self,
+        uniform: ShaderUniform<U>,
+    ) -> std::fmt::Result {
+        uniform.inject_shader(&mut self.uniforms_section)
     }
 }
 
@@ -175,15 +178,6 @@ impl ShaderSource {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-#[macro_export]
-macro_rules! shader_glsl_build_uniform_interface {
-    ($gl_name:ident: $gl_type:expr => $r_type:ty; $up_l:block) => {
-        paste:paste! {
-            pub fn [< uniform_ $gl_name _ $gl_type]>(&self, $gl_name: $r_type) $up_l
-        }
-    };
 }
 
 #[macro_export]
@@ -283,9 +277,9 @@ macro_rules! shader_glsl {
 
 shader_glsl! {
     struct Test > [460] {
-        uniform {
-            ShaderUniform::new("projection", uniform::UniformKind::Matrix4)
-        };
+        // uniform {
+        //     ShaderUniform::new("projection", uniform::UniformKind::Matrix4)
+        // };
 
         ssbo {
             shader_glsl_ssbo! {

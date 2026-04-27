@@ -1,115 +1,115 @@
-use crate::shader::{ShaderHandle, UniformLocation, glsl::GlslAlloc};
+use crate::shader::{
+    UniformLocation,
+    glsl::{Glsl, GlslAlloc},
+};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum UniformKind {
-    Matrix4,
-    Matrix3,
-    Matrix2,
-    Float,
-    Vec2,
-    Vec3,
-    Vec4,
-    Int,
-    Ivec2,
-    Ivec3,
-    Ivec4,
-    Uint,
-    Uivec2,
-    Uivec3,
-    Uivec4,
-    Boolean,
+#[macro_export]
+macro_rules! shader_glsl_build_uniform_interface {
+    ($gl_name:ident: $gl_type:expr => $r_type:ty; $up_l:block) => {
+        paste:paste! {
+            pub fn [< uniform_ $gl_name _ $gl_type]>(&self, $gl_name: $r_type) $up_l
+        }
+    };
+    ($uni:expr) => {
+
+    }
 }
 
-impl UniformKind {
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            UniformKind::Matrix4 => "mat4",
-            UniformKind::Matrix3 => "mat3",
-            UniformKind::Matrix2 => "mat2",
-            UniformKind::Float => "float",
-            UniformKind::Vec2 => "vec2",
-            UniformKind::Vec3 => "vec3",
-            UniformKind::Vec4 => "vec4",
-            UniformKind::Int => "int",
-            UniformKind::Ivec2 => "ivec2",
-            UniformKind::Ivec3 => "ivec3",
-            UniformKind::Ivec4 => "ivec4",
-            UniformKind::Uint => "uint",
-            UniformKind::Uivec2 => "uivec2",
-            UniformKind::Uivec3 => "uivec3",
-            UniformKind::Uivec4 => "uivec4",
-            UniformKind::Boolean => "boolean",
+pub trait HasUniform: Glsl {
+    fn upload(&self, location: UniformLocation);
+}
+
+impl HasUniform for glam::Vec2 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform2f(*location, self.x, self.y);
         }
     }
 }
 
-impl super::glsl::GlslAlloc for UniformKind {
-    fn to_glsl_alloc(&self) -> String {
-        format!("{}", self.as_str())
-    }
-}
-
-impl std::fmt::Display for UniformKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_glsl_alloc())
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ShaderUniform {
-    pub name: &'static str,
-    pub kind: UniformKind,
-}
-
-impl ShaderUniform {
-    pub const fn new(name: &'static str, kind: UniformKind) -> Self {
-        Self { name, kind }
-    }
-}
-
-impl super::glsl::GlslAlloc for ShaderUniform {
-    fn to_glsl_alloc(&self) -> String {
-        format!("uniform {} {};", self.kind, self.name)
-    }
-}
-
-impl std::fmt::Display for ShaderUniform {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_glsl_alloc())
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ShaderUniformCache(rustc_hash::FxHashMap<&'static str, UniformLocation>);
-
-impl std::fmt::Display for ShaderUniformCache {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "[")?;
-        for (name, loc) in self.0.iter() {
-            writeln!(f, "    {name} : {loc}")?;
+impl HasUniform for glam::Vec3 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform3f(*location, self.x, self.y, self.z);
         }
-        writeln!(f, "]")
     }
 }
 
-impl ShaderUniformCache {
-    pub fn new(uniforms: &[ShaderUniform], shader: ShaderHandle) -> Self {
-        Self(
-            uniforms
-                .iter()
-                .map(|ShaderUniform { name, .. }| {
-                    let c_name = std::ffi::CString::new(*name).unwrap();
-                    let location = UniformLocation(unsafe {
-                        janus::gl::GetUniformLocation(shader.prog_obj, c_name.as_ptr())
-                    });
-                    (*name, location)
-                })
-                .collect::<rustc_hash::FxHashMap<_, _>>(),
-        )
+impl HasUniform for glam::Vec4 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform4f(*location, self.x, self.y, self.z, self.w);
+        }
+    }
+}
+
+impl HasUniform for glam::Mat2 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::UniformMatrix2fv(
+                *location,
+                1,
+                janus::gl::FALSE,
+                self.to_cols_array().as_ptr(),
+            );
+        }
+    }
+}
+
+impl HasUniform for glam::Mat3 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::UniformMatrix3fv(
+                *location,
+                1,
+                janus::gl::FALSE,
+                self.to_cols_array().as_ptr(),
+            );
+        }
+    }
+}
+
+impl HasUniform for glam::Mat4 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::UniformMatrix4fv(
+                *location,
+                1,
+                janus::gl::FALSE,
+                self.to_cols_array().as_ptr(),
+            );
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ShaderUniform<T: HasUniform> {
+    name: &'static str,
+    _type: std::marker::PhantomData<T>,
+}
+
+impl<T: HasUniform> ShaderUniform<T> {
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            _type: std::marker::PhantomData,
+        }
     }
 
-    pub fn get(&self, name: &'static str) -> Option<UniformLocation> {
-        self.0.get(name).copied()
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+}
+
+impl<T: HasUniform> GlslAlloc for ShaderUniform<T> {
+    fn to_glsl_alloc(&self) -> String {
+        format!("uniform {} {};", T::to_glsl(), self.name)
+    }
+}
+
+impl<T: HasUniform> super::Inject for ShaderUniform<T> {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        writeln!(to, "{}", self.to_glsl_alloc())
     }
 }
 
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn shader_compose_glsl_uniform() {
         const TEST: &str = "uniform mat4 projection;";
-        let uniform = ShaderUniform::new("projection", UniformKind::Matrix4).to_glsl_alloc();
+        let uniform = ShaderUniform::<glam::Mat4>::new("projection").to_glsl_alloc();
         assert_eq!(TEST, &uniform);
     }
 }

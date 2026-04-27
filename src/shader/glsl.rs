@@ -158,6 +158,7 @@ copy_type_name_glsl!(glam::Vec3 => "vec3");
 copy_type_name_glsl!([f32; 3] => "vec3");
 copy_type_name_glsl!(glam::Vec4 => "vec4");
 copy_type_name_glsl!([f32; 4] => "vec4");
+copy_type_name_glsl!(glam::Mat2 => "mat2");
 copy_type_name_glsl!(glam::Mat3 => "mat3");
 copy_type_name_glsl!([f32; 9] => "mat3");
 copy_type_name_glsl!(glam::Mat4 => "mat4");
