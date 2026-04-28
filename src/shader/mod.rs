@@ -230,9 +230,9 @@ macro_rules! shader_glsl {
             impl [< Shader $name >] {
                 $(
                     $(
-                        $crate::shader_glsl_build_uniform_interface(
-                            $u_gl_name: $u_gl_type => $u_r_type;
-                        )
+                        $crate::shader_glsl_build_uniform_interface! {
+                            $u_gl_name: $u_gl_type => $u_r_type
+                        }
                     )+
                 )?
 
@@ -249,7 +249,7 @@ macro_rules! shader_glsl {
 
                     $(
                         $(
-                            composer.add_uniform($crate::shader_glsl_uniform($u_gl_name: $u_gl_type));
+                            composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
                         )+
                     )?
 

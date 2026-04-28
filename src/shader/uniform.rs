@@ -109,9 +109,9 @@ macro_rules! shader_glsl_uniform {
 macro_rules! shader_glsl_build_uniform_interface {
     ($gl_name:ident: $gl_type:ident => $r_type:ty) => {
         paste::paste! {
-            pub fn [< uniform_ $gl_name _ $gl_type>] (&self, $gl_name: $r_type) {
+            pub fn [< uniform_ $gl_name _ $gl_type >] (&self, $gl_name: $r_type) {
                 let location = self.[< location_ $gl_name _ $gl_type >];
-                $gl_type.upload(location);
+                $crate::shader::uniform::UploadUniform::upload(&$gl_name, location);
             }
         }
     };
