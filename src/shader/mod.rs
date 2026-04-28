@@ -408,7 +408,7 @@ macro_rules! shader_glsl {
         }
     ) => {
         paste::paste! {
-            #[derive(Clone, Default)]
+            #[derive(PartialEq, Eq, Hash)]
             pub struct [< Shader $name >] {
                 handle: $crate::shader::ShaderHandle,
 
@@ -657,7 +657,7 @@ macro_rules! shader_glsl {
     };
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShaderHandle {
     prog_obj: u32,
 }
