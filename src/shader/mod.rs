@@ -3,7 +3,7 @@ pub mod uniform;
 
 pub use crate::shader_glsl_ssbo;
 
-use std::hash::Hash;
+use std::{hash::Hash, str::FromStr};
 
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
@@ -81,7 +81,9 @@ pub fn compile_shader_unit(
         let mut compile_status = 0;
 
         unsafe {
-            janus::gl::ShaderSource(shader_obj, 1, source.as_ptr() as *const _, std::ptr::null());
+            let c_src = std::ffi::CString::from_raw(source.as_ptr() as *mut i8);
+
+            janus::gl::ShaderSource(shader_obj, 1, &c_src.as_ptr(), std::ptr::null());
             janus::gl::CompileShader(shader_obj);
             janus::gl::GetShaderiv(shader_obj, janus::gl::COMPILE_STATUS, &mut compile_status);
         }
@@ -672,9 +674,8 @@ impl ShaderHandle {
     }
 
     pub fn find_uniform_location(&self, uniform_name: &str) -> UniformLocation {
-        let location = unsafe {
-            janus::gl::GetUniformLocation(self.prog_obj, uniform_name.as_ptr() as *const i8)
-        };
+        let c_string = std::ffi::CString::from_str(uniform_name).unwrap();
+        let location = unsafe { janus::gl::GetUniformLocation(self.prog_obj, c_string.as_ptr()) };
         UniformLocation(location)
     }
 }
@@ -694,6 +695,7 @@ pub fn unbind() {
     }
 }
 
+#[allow(unused)]
 #[cfg(test)]
 mod tests {
     use super::*;
