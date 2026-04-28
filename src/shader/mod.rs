@@ -8,10 +8,11 @@ use std::{hash::Hash, str::FromStr};
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
 
-use crate::shader::{
-    glsl::{GlslAlloc, GlslType, ShadingVersion},
-    uniform::GlslUniform,
+pub use glsl::{
+    Glsl, GlslAlloc, GlslAttribute, GlslLib, GlslStorage, GlslStruct, GlslType, GlslType,
+    ShadingVersion,
 };
+pub use uniform::GlslUniform;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShaderKind {
@@ -408,7 +409,7 @@ macro_rules! shader_glsl {
         }
     ) => {
         paste::paste! {
-            #[derive(PartialEq, Eq, Hash)]
+            #[derive(PartialEq, Eq, Hash, Default)]
             pub struct [< Shader $name >] {
                 handle: $crate::shader::ShaderHandle,
 
@@ -657,7 +658,7 @@ macro_rules! shader_glsl {
     };
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ShaderHandle {
     prog_obj: u32,
 }
