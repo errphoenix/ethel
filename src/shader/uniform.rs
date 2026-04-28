@@ -1,25 +1,10 @@
-use crate::shader::{
-    UniformLocation,
-    glsl::{Glsl, GlslAlloc},
-};
+use crate::shader::{UniformLocation, glsl::Glsl};
 
-#[macro_export]
-macro_rules! shader_glsl_build_uniform_interface {
-    ($gl_name:ident: $gl_type:expr => $r_type:ty; $up_l:block) => {
-        paste:paste! {
-            pub fn [< uniform_ $gl_name _ $gl_type]>(&self, $gl_name: $r_type) $up_l
-        }
-    };
-    ($uni:expr) => {
-
-    }
-}
-
-pub trait HasUniform: Glsl {
+pub trait UploadUniform: Glsl {
     fn upload(&self, location: UniformLocation);
 }
 
-impl HasUniform for glam::Vec2 {
+impl UploadUniform for glam::Vec2 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
             janus::gl::Uniform2f(*location, self.x, self.y);
@@ -27,7 +12,7 @@ impl HasUniform for glam::Vec2 {
     }
 }
 
-impl HasUniform for glam::Vec3 {
+impl UploadUniform for glam::Vec3 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
             janus::gl::Uniform3f(*location, self.x, self.y, self.z);
@@ -35,7 +20,7 @@ impl HasUniform for glam::Vec3 {
     }
 }
 
-impl HasUniform for glam::Vec4 {
+impl UploadUniform for glam::Vec4 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
             janus::gl::Uniform4f(*location, self.x, self.y, self.z, self.w);
@@ -43,7 +28,7 @@ impl HasUniform for glam::Vec4 {
     }
 }
 
-impl HasUniform for glam::Mat2 {
+impl UploadUniform for glam::Mat2 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
             janus::gl::UniformMatrix2fv(
@@ -56,7 +41,7 @@ impl HasUniform for glam::Mat2 {
     }
 }
 
-impl HasUniform for glam::Mat3 {
+impl UploadUniform for glam::Mat3 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
             janus::gl::UniformMatrix3fv(
@@ -69,7 +54,7 @@ impl HasUniform for glam::Mat3 {
     }
 }
 
-impl HasUniform for glam::Mat4 {
+impl UploadUniform for glam::Mat4 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
             janus::gl::UniformMatrix4fv(
@@ -83,34 +68,53 @@ impl HasUniform for glam::Mat4 {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ShaderUniform<T: HasUniform> {
-    name: &'static str,
-    _type: std::marker::PhantomData<T>,
-}
+pub struct GlslUniform(&'static str);
 
-impl<T: HasUniform> ShaderUniform<T> {
-    pub fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            _type: std::marker::PhantomData,
-        }
+impl GlslUniform {
+    pub const fn new(string: &'static str) -> Self {
+        Self(string)
     }
 
-    pub fn name(&self) -> &'static str {
-        self.name
+    pub const fn as_str(&self) -> &'static str {
+        self.0
     }
 }
 
-impl<T: HasUniform> GlslAlloc for ShaderUniform<T> {
-    fn to_glsl_alloc(&self) -> String {
-        format!("uniform {} {};", T::to_glsl(), self.name)
+impl std::fmt::Display for GlslUniform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
-impl<T: HasUniform> super::Inject for ShaderUniform<T> {
+impl super::Inject for GlslUniform {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        writeln!(to, "{}", self.to_glsl_alloc())
+        writeln!(to, "{self}")
     }
+}
+
+#[macro_export]
+macro_rules! shader_glsl_uniform {
+    ($gl_name:ident: $gl_type:ident) => {
+        GlslUniform::new(concat!(
+            "uniform ",
+            stringify!($gl_type),
+            " ",
+            stringify!($gl_name),
+            ";"
+        ))
+    };
+}
+
+#[macro_export]
+macro_rules! shader_glsl_build_uniform_interface {
+    ($gl_name:ident: $gl_type:ident => $r_type:ty) => {
+        paste::paste! {
+            pub fn [< uniform_ $gl_name _ $gl_type>] (&self, $gl_name: $r_type) {
+                let location = self.[< location_ $gl_name _ $gl_type >];
+                $gl_type.upload(location);
+            }
+        }
+    };
 }
 
 #[cfg(test)]
@@ -120,7 +124,7 @@ mod tests {
     #[test]
     fn shader_compose_glsl_uniform() {
         const TEST: &str = "uniform mat4 projection;";
-        let uniform = ShaderUniform::<glam::Mat4>::new("projection").to_glsl_alloc();
-        assert_eq!(TEST, &uniform);
+        let uniform = shader_glsl_uniform!(projection: mat4);
+        assert_eq!(TEST, uniform.as_str());
     }
 }
