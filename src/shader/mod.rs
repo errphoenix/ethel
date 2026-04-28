@@ -3,9 +3,6 @@ pub mod uniform;
 
 pub use crate::shader_glsl_ssbo;
 
-#[allow(unused_imports)]
-pub use glsl::{GlslHeap, GlslStack};
-
 use std::hash::Hash;
 
 use janus::{GlProperty, gl};
