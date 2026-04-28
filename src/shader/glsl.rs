@@ -120,7 +120,7 @@ impl<T: Clone + Copy + GlslType + super::WriteValue> GlslAlloc for super::Consta
         self.value
             .write_value(&mut f)
             .expect("failed to write value to glsl constant");
-        f += ";";
+        f += ";\n";
         f
     }
 }
@@ -499,7 +499,7 @@ macro_rules! shader_glsl_lib {
             concat!(
                 stringify!($return), " ", stringify!($fun_name), "(",
                 $(stringify!($par_t_0), " ", stringify!($par_n_0), $(", ", stringify!($par_t_n), " ", stringify!($par_n_n),)*)?
-                ") {\n", indoc::indoc! { $lib_src }, "\n}\n"
+                ") {\n", indoc::indoc! { $lib_src }, "}\n"
             )
         )
     };
@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn shader_compose_glsl_lib() {
         const TEST: &str =
-            "float mulBySeven(float num) {\nfloat result = num * 7.0;\nreturn result;\n\n}\n";
+            "float mulBySeven(float num) {\nfloat result = num * 7.0;\nreturn result;\n}\n";
 
         let generated = shader_glsl_lib! {
             float mulBySeven [ num: float ] => "
@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_const() {
-        const TEST: &str = "const float AMBIENT_LIGHT = 0.100;";
+        const TEST: &str = "const float AMBIENT_LIGHT = 0.100;\n";
 
         let constant = Constant::new("ambient_light", 0.1);
         let str = constant.to_glsl_alloc();
