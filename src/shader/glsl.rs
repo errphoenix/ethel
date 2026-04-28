@@ -103,7 +103,7 @@ impl std::fmt::Display for ShadingVersion {
 impl GlslAlloc for ShadingVersion {
     fn to_glsl_alloc(&self) -> String {
         format!(
-            "# version {} {}",
+            "# version {} {}\n",
             self.version,
             self.core.then(|| "core").unwrap_or_default()
         )
@@ -249,32 +249,32 @@ macro_rules! shader_glsl_attribs {
     (
         input $gl_n:ident: $gl_t:ident;
     ) => {
-        GlslAttribute::new(concat!(
+        $crate::shader::glsl::GlslAttribute::new(concat!(
             "in",
             " ",
             stringify!($gl_t),
             " ",
             stringify!($gl_n),
-            ";"
+            ";\n"
         ))
     };
     (
         output $gl_n:ident: $gl_t:ident;
     ) => {
-        GlslAttribute::new(concat!(
+        $crate::shader::glsl::GlslAttribute::new(concat!(
             "out",
             " ",
             stringify!($gl_t),
             " ",
             stringify!($gl_n),
-            ";"
+            ";\n"
         ))
     };
     (
         $(input $i_gl_n:ident: $i_gl_t:ident;)*
         $(output $o_gl_n:ident: $o_gl_t:ident;)*
     ) => {
-        GlslAttribute::new(concat!(
+        $crate::shader::glsl::GlslAttribute::new(concat!(
             $(
                 "in",
                 " ",
@@ -297,7 +297,7 @@ macro_rules! shader_glsl_attribs {
 
 impl super::Inject for GlslAttribute {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        writeln!(to, "{}\n", self.0)
+        write!(to, "{}\n", self.0)
     }
 }
 
@@ -362,19 +362,19 @@ impl GlslLib {
 
 impl super::Inject for GlslStorage {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        writeln!(to, "{}\n", self.0)
+        writeln!(to, "{}", self.0)
     }
 }
 
 impl super::Inject for GlslStruct {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        writeln!(to, "{}\n", self.0)
+        writeln!(to, "{}", self.0)
     }
 }
 
 impl super::Inject for GlslLib {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        writeln!(to, "{}\n", self.0)
+        writeln!(to, "{}", self.0)
     }
 }
 
@@ -417,7 +417,7 @@ macro_rules! shader_glsl_struct {
                         $(
                             "  ", stringify!($f_lit), " ", stringify!($f_name), ";\n",
                         )+
-                        "};"
+                        "};\n"
                     )
                 }
 
@@ -476,7 +476,7 @@ macro_rules! shader_glsl_ssbo {
     ) => {
         $crate::shader::glsl::GlslStorage::new(
             concat!("layout(std430, binding = ", stringify!($index), ") buffer ",
-                stringify!($ssbo), "\n {\n",
+                stringify!($ssbo), "\n{\n",
                 $("    ", stringify!($t), " ", stringify!($n), ";\n",)*
                 $("    ", stringify!($dat), " ", stringify!($dan), "[]",
                     $("[", $len, "]",)?
@@ -527,7 +527,7 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_version() {
-        const TEST: &str = "# version 330 core";
+        const TEST: &str = "# version 330 core\n";
 
         let version = ShadingVersion::core(330);
         let str = version.to_glsl_alloc();
@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn shader_compose_glsl_ssbo() {
         const TEST: &str =
-            "layout(std430, binding = 2) buffer POD_BindPose\n {\n    vec4 pod_bind_pose[];\n};\n";
+            "layout(std430, binding = 2) buffer POD_BindPose\n{\n    vec4 pod_bind_pose[];\n};\n";
 
         let generated = shader_glsl_ssbo! {
             buf POD_BindPose on 2 => {
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(TEST, generated.as_str());
 
         const TEST1: &str =
-            "layout(std430, binding = 3) buffer POD_Weights\n {\n    float pod_weights[][2];\n};\n";
+            "layout(std430, binding = 3) buffer POD_Weights\n{\n    float pod_weights[][2];\n};\n";
 
         let generated = shader_glsl_ssbo! {
             buf POD_Weights on 3 => {

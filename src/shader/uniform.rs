@@ -100,7 +100,7 @@ macro_rules! shader_glsl_uniform {
             stringify!($gl_type),
             " ",
             stringify!($gl_name),
-            ";"
+            ";\n"
         ))
     };
 }
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_uniform() {
-        const TEST: &str = "uniform mat4 projection;";
+        const TEST: &str = "uniform mat4 projection;\n";
         let uniform = shader_glsl_uniform!(projection: mat4);
         assert_eq!(TEST, uniform.as_str());
     }

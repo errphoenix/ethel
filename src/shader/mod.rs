@@ -169,7 +169,7 @@ impl From<&str> for ShaderSource {
 
 impl ShaderSource {
     pub fn new(source: &str) -> Self {
-        Self(format!("void main() {{\n {source} \n}}\n"))
+        Self(format!("void main() {{\n {source} \n}}"))
     }
 
     pub fn as_str(&self) -> &str {
