@@ -1,5 +1,7 @@
 use std::ops::Deref;
 
+use crate::shader::WriteValue;
+
 #[derive(Clone, Copy, Debug)]
 pub struct GlslStack<G: Glsl> {
     _marker: std::marker::PhantomData<G>,
@@ -92,6 +94,12 @@ impl ShadingVersion {
     }
 }
 
+impl std::fmt::Display for ShadingVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_glsl_alloc())
+    }
+}
+
 impl GlslAlloc for ShadingVersion {
     fn to_glsl_alloc(&self) -> String {
         format!(
@@ -117,16 +125,6 @@ impl<T: Clone + Copy + GlslType + super::WriteValue> GlslAlloc for super::Consta
     }
 }
 
-macro_rules! write_value_display {
-    ($t:ty) => {
-        impl $crate::shader::WriteValue for $t {
-            fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-                write!(to, "{self}")
-            }
-        }
-    };
-}
-
 macro_rules! copy_type_name_glsl {
     ($gt:ty => $lab:literal) => {
         impl $crate::shader::glsl::Glsl for $gt {
@@ -143,10 +141,29 @@ macro_rules! copy_type_name_glsl {
     };
 }
 
-write_value_display!(f32);
-write_value_display!(i32);
-write_value_display!(u32);
-write_value_display!(bool);
+impl WriteValue for f32 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "{:.3}", self)
+    }
+}
+
+impl WriteValue for u32 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "{}", self)
+    }
+}
+
+impl WriteValue for i32 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "{}", self)
+    }
+}
+
+impl WriteValue for bool {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "{}", self)
+    }
+}
 
 copy_type_name_glsl!(f32 => "float");
 copy_type_name_glsl!(i32 => "int");
@@ -208,7 +225,7 @@ impl super::WriteValue for glam::Vec4 {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct GlslAttribute(&'static str);
 
 impl std::fmt::Display for GlslAttribute {
@@ -393,8 +410,8 @@ macro_rules! shader_glsl_struct {
                 )+
             }
 
-            impl $crate::shader::glsl::Glsl for [< $name GlslStruct >] {
-                fn to_glsl() -> &'static str {
+            impl [< $name GlslStruct >] {
+                pub const fn as_definition_str() -> &'static str {
                     concat!(
                         "struct ", stringify!($name), " {\n",
                         $(
@@ -403,11 +420,23 @@ macro_rules! shader_glsl_struct {
                         "};"
                     )
                 }
+
+                pub const fn as_definition() -> $crate::shader::glsl::GlslStruct {
+                    $crate::shader::glsl::GlslStruct::new(
+                        Self::as_definition_str()
+                    )
+                }
+            }
+
+            impl $crate::shader::glsl::Glsl for [< $name GlslStruct >] {
+                fn to_glsl() -> &'static str {
+                    Self::as_definition_str()
+                }
             }
 
             impl From<[< $name GlslStruct >]> for $crate::shader::glsl::GlslStruct {
                 fn from(_: [< $name GlslStruct >]) -> Self {
-                    Self::new(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl().to_string())
+                    Self::new(<[< $name GlslStruct >] as $crate::shader::glsl::Glsl>::to_glsl())
                 }
             }
 
@@ -508,7 +537,7 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_const() {
-        const TEST: &str = "const float AMBIENT_LIGHT = 0.1;";
+        const TEST: &str = "const float AMBIENT_LIGHT = 0.100;";
 
         let constant = Constant::new("ambient_light", 0.1);
         let str = constant.to_glsl_alloc();
