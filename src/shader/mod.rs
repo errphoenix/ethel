@@ -418,7 +418,7 @@ macro_rules! shader_glsl {
                 $(
                     $(
                         $(
-                            [< location_ $u_gl_name _ $u_gl_type _ $kind:snake >]: $crate::shader::UniformLocation,
+                            [< location_ $u_gl_name _ $u_gl_type >]: $crate::shader::UniformLocation,
                         )+
                     )?
                 )+
@@ -644,7 +644,7 @@ macro_rules! shader_glsl {
                         $(
                             $(
                                 $(
-                                    [< location_ $u_gl_name _ $u_gl_type _ $kind:snake >],
+                                    [< location_ $u_gl_name _ $u_gl_type >],
                                 )+
                             )?
                         )+
@@ -749,6 +749,10 @@ mod tests {
                     }
                 };
 
+                uniform {
+                    view: mat4 => glam::Mat4;
+                };
+
                 lib {
                     crate::shader_glsl_lib! {
                         float halve [ num: float ] => "
@@ -820,6 +824,8 @@ mod tests {
             {
                 DirectIndex imap_entity[];
             };
+
+            uniform mat4 view;
 
             uniform mat4 projection;
 
