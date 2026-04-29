@@ -3,7 +3,7 @@ pub mod uniform;
 
 pub use crate::shader_glsl_ssbo;
 
-use std::{hash::Hash, str::FromStr};
+use std::{hash::Hash, ops::Deref, str::FromStr};
 
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
@@ -222,9 +222,9 @@ impl ShaderComposer {
     }
 
     pub fn copy_from(&mut self, other: &ShaderComposer) {
-        self.header = format!("{}{}", self.header, other.header);
-        self.uniforms_section = format!("{}{}", self.uniforms_section, other.uniforms_section);
-        self.body = format!("{}{}", self.body, other.body);
+        self.header = format!("{}{}", other.header, self.header);
+        self.uniforms_section = format!("{}{}", other.uniforms_section, self.uniforms_section);
+        self.body = format!("{}{}", other.body, self.body);
     }
 
     pub fn version(&self) -> ShadingVersion {
@@ -317,7 +317,108 @@ impl ShaderSource {
     }
 }
 
-/// Compose a complete shader p1rogram pass from just one macro invocation.
+pub trait ShaderProgram: janus::GpuResource {
+    fn shader_program(&self) -> u32 {
+        self.resource_id()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct ShaderHandle {
+    prog_obj: u32,
+}
+
+impl janus::GpuResource for ShaderHandle {
+    fn resource_id(&self) -> u32 {
+        self.prog_obj
+    }
+}
+
+impl ShaderProgram for ShaderHandle {}
+
+impl ShaderHandle {
+    pub fn bind(&self) {
+        unsafe {
+            gl::UseProgram(self.prog_obj);
+        }
+    }
+
+    pub fn unbind() {
+        self::unbind();
+    }
+
+    pub fn find_uniform_location(&self, uniform_name: &str) -> UniformLocation {
+        let c_string = std::ffi::CString::from_str(uniform_name).unwrap();
+        let location = unsafe { janus::gl::GetUniformLocation(self.prog_obj, c_string.as_ptr()) };
+        UniformLocation(location)
+    }
+}
+
+impl Drop for ShaderHandle {
+    fn drop(&mut self) {
+        if self.prog_obj == 0 {
+            return;
+        }
+        unsafe { gl::DeleteProgram(self.prog_obj) }
+    }
+}
+
+pub fn unbind() {
+    unsafe {
+        gl::UseProgram(0);
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ComputeShaderHandle {
+    inner: ShaderHandle,
+    workgroups_x: u32,
+    workgroups_y: u32,
+    workgroups_z: u32,
+}
+
+impl Default for ComputeShaderHandle {
+    fn default() -> Self {
+        Self::new(Default::default())
+    }
+}
+
+impl ComputeShaderHandle {
+    pub const fn new(handle: ShaderHandle) -> Self {
+        Self {
+            inner: handle,
+            workgroups_x: 1,
+            workgroups_y: 1,
+            workgroups_z: 1,
+        }
+    }
+
+    pub const fn set_workgroups_size(&mut self, x: u32, y: u32, z: u32) {
+        self.workgroups_x = x;
+        self.workgroups_y = y;
+        self.workgroups_z = z;
+    }
+
+    pub const fn workgroups_size(&self) -> (u32, u32, u32) {
+        (self.workgroups_x, self.workgroups_y, self.workgroups_z)
+    }
+
+    pub fn dispatch_compute(&self) {
+        unsafe {
+            janus::gl::DispatchCompute(self.workgroups_x, self.workgroups_y, self.workgroups_z);
+        }
+    }
+}
+
+impl Deref for ComputeShaderHandle {
+    type Target = ShaderHandle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+/// Compose a complete shader program pass from just one macro invocation.
 ///
 /// The macro presents two sections:
 /// * The `common` shader information
@@ -383,7 +484,7 @@ macro_rules! shader_glsl {
                     };)?
                     $(type {
                         $(
-                            $type_glsl:item
+                            $type_glsl:expr
                         )+
                     };)?
                     $(ssbo {
@@ -657,42 +758,217 @@ macro_rules! shader_glsl {
     };
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct ShaderHandle {
-    prog_obj: u32,
-}
+/// Compose a stand-alone compute shader.
+///
+/// The macro syntax is just like [`crate::shader_glsl`], with the exception of
+/// the `common` and `attribs` sections.
+///
+/// This macro also features a non-optional `workgroup` section, to define the
+/// compute shader's local workgroup size with the `[x, y, z]` syntax.
+///
+/// The `workgroup` section must be defined before all other sections. The
+/// order for all other standard shader sections is the same as defined in
+/// [`crate::shader_glsl`].
+#[macro_export]
+macro_rules! shader_glsl_compute {
+    (
+        struct $name:ident > [$ver:expr] {
+            workgroup [$wg_x:expr, $wg_y:expr, $wg_z:expr];
 
-impl ShaderHandle {
-    pub fn bind(&self) {
-        unsafe {
-            gl::UseProgram(self.prog_obj);
+            $(uniform {
+                $(
+                    $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
+                )+
+            };)?
+            $(type {
+                $(
+                    $type_glsl:expr
+                )+
+            };)?
+            $(ssbo {
+                $(
+                    $ssbo_glsl:expr
+                )+
+            };)?
+            $(const {
+                $(
+                    $const_a:expr
+                )+
+            };)?
+            $(lib {
+                $(
+                    $lib:expr;
+                )+
+            };)?
+
+            src() $src:literal
         }
-    }
+    ) => {
+        paste::paste! {
+            #[derive(Debug, PartialEq, Eq, Hash, Default)]
+            pub struct [< ComputeShader $name >] {
+                handle: $crate::shader::ComputeShaderHandle,
 
-    pub fn unbind() {
-        self::unbind();
-    }
+                $(
+                    $(
+                        [< location_ $u_gl_name _ $u_gl_type >]: $crate::shader::UniformLocation,
+                    )+
+                )?
+            }
 
-    pub fn find_uniform_location(&self, uniform_name: &str) -> UniformLocation {
-        let c_string = std::ffi::CString::from_str(uniform_name).unwrap();
-        let location = unsafe { janus::gl::GetUniformLocation(self.prog_obj, c_string.as_ptr()) };
-        UniformLocation(location)
-    }
-}
+            impl [< Shader $name >] {
+                pub fn bind(&self) {
+                    self.handle.bind();
+                }
 
-impl Drop for ShaderHandle {
-    fn drop(&mut self) {
-        if self.prog_obj == 0 {
-            return;
+                pub fn unbind(&self) {
+                    $crate::shader::unbind();
+                }
+
+                pub const fn set_workgroups_size(&mut self, x: u32, y: u32, z: u32) {
+                    self.handle.set_workgroups_size(x, y, z);
+                }
+
+                pub fn dispatch(&self) {
+                    self.handle.dispatch_compute();
+                }
+
+                pub fn handle(&self) -> &$crate::shader::ShaderHandle {
+                    &self.handle
+                }
+
+                #[cfg(debug_assertions)]
+                pub fn build_sources() -> Vec<String> {
+                    let version = $crate::shader::ShadingVersion::core($ver);
+
+                    let mut composer = $crate::shader::ShaderComposer::new(version);
+                    {
+                        const WORK_GROUP_GLSL: &str = concat!(
+                            "layout(local_size_x = ", $wg_x,
+                            ", local_size_y = ", $wg_y,
+                            ", local_size_z = ", $wg_z, ") in;\n"
+                        );
+                        composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
+                    }
+
+                    $(
+                        $(
+                            composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.inject_header(&$type_glsl);
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.inject_header(&$ssbo_glsl);
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.add_constant(&$const_a);
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.inject_body(&$lib);
+                        )+
+                    )?
+
+                    composer.set_source(indoc::indoc! { $src });
+
+                    composer
+                }
+
+                $(
+                    $(
+                        $crate::shader_glsl_build_uniform_interface! {
+                            $c_u_gl_name: $c_u_gl_type => $c_u_r_type
+                        }
+                    )+
+                )?
+                $(
+                    $(
+                        $(
+                            $crate::shader_glsl_build_uniform_interface! {
+                                $u_gl_name: $u_gl_type => $u_r_type
+                            }
+                        )+
+                    )?
+                )+
+
+                pub fn new_compiled() -> Self {
+                    let version = $crate::shader::ShadingVersion::core($ver);
+
+                    let mut composer = $crate::shader::ShaderComposer::new(version);
+
+                    {
+                        const WORK_GROUP_GLSL: &str = concat!(
+                            "layout(local_size_x = ", $wg_x,
+                            ", local_size_y = ", $wg_y,
+                            ", local_size_z = ", $wg_z, ") in;\n"
+                        );
+                        composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
+                    }
+
+                    $(
+                        $(
+                            composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.inject_header(&$type_glsl);
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.inject_header(&$ssbo_glsl);
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.add_constant(&$const_a);
+                        )+
+                    )?
+                    $(
+                        $(
+                            composer.inject_body(&$lib);
+                        )+
+                    )?
+
+                    composer.set_source(indoc::indoc! { $src });
+
+                    let full_source = composer.build();
+                    let shader_unit = $crate::shader::compile_shader_unit(&full_source, $crate::shader::ShaderKind::Compute)
+                        .expect(concat!("failed to compile Compute shader: see logs for details."));
+
+                    let handle = $crate::shader::generate_blank();
+                    $crate::shader::attach_shader_units(&handle, &units);
+                    $crate::shader::link_shader_program(&handle);
+                    $crate::shader::delete_shader_units(&mut units);
+
+                    $(
+                        $(
+                            let [< location_ $u_gl_name _ $u_gl_type >] = handle.find_uniform_location(stringify!($u_gl_name));
+                        )+
+                    )?
+
+                    Self {
+                        handle,
+
+                        $(
+                            $(
+                                [< location_ $u_gl_name _ $u_gl_type >],
+                            )+
+                        )?
+                    }
+                }
+            }
         }
-        unsafe { gl::DeleteProgram(self.prog_obj) }
-    }
-}
-
-pub fn unbind() {
-    unsafe {
-        gl::UseProgram(0);
-    }
+    };
 }
 
 #[allow(unused)]
@@ -782,8 +1058,6 @@ mod tests {
 
         const S0: &str = indoc::indoc! { "# version 460 core
 
-            const float FIXED_POS = 1.000;
-
             struct DirectIndex {
               uint handle;
               uint generation;
@@ -798,6 +1072,8 @@ mod tests {
             {
                 DirectIndex imap_entity[];
             };
+
+            const float FIXED_POS = 1.000;
 
             uniform mat4 projection;
 
@@ -810,8 +1086,6 @@ mod tests {
 
         const S1: &str = indoc::indoc! { "# version 460 core
 
-            out vec4 outColor;
-
             struct DirectIndex {
               uint handle;
               uint generation;
@@ -827,9 +1101,11 @@ mod tests {
                 DirectIndex imap_entity[];
             };
 
-            uniform mat4 view;
+            out vec4 outColor;
 
             uniform mat4 projection;
+
+            uniform mat4 view;
 
             float halve(float num) {
             return num * 0.5;
