@@ -160,6 +160,21 @@ impl WriteValue for data::DirectIndex {
     }
 }
 
+impl<T: WriteValue, const N: usize> WriteValue for [T; N] {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "[")?;
+        for (i, v) in self.iter().enumerate() {
+            if i != 0 {
+                write!(to, ", ")?;
+            }
+            v.write_value(to)?;
+        }
+        write!(to, "]")?;
+
+        Ok(())
+    }
+}
+
 pub trait Inject {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
 }

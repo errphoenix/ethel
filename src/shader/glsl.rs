@@ -350,7 +350,7 @@ macro_rules! shader_glsl_struct {
     (
         struct $name:ident {
             $(
-                $f_name:ident: $f_typ:ty => $f_lit:ident;
+                $f_name:ident$([$rn:literal])?: $f_typ:ty => $f_lit:ident;
             )+
         }
     ) => {
@@ -367,7 +367,11 @@ macro_rules! shader_glsl_struct {
                     concat!(
                         "struct ", stringify!($name), " {\n",
                         $(
-                            "  ", stringify!($f_lit), " ", stringify!($f_name), ";\n",
+                            "  ", stringify!($f_lit), " ", stringify!($f_name),
+                            $(
+                                "[", $rn, "]",
+                            )?
+                            ";\n",
                         )+
                         "};\n"
                     )
