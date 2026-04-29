@@ -185,19 +185,16 @@ pub trait ShaderBody: Inject {}
 
 #[derive(Clone, Debug)]
 pub struct Constant<T: Clone + Copy + WriteValue> {
-    name: String,
+    name: &'static str,
     value: T,
 }
 
 impl<T: Clone + Copy + WriteValue> Constant<T> {
-    pub fn new(name: &str, value: T) -> Self {
-        Self {
-            name: name.to_string(),
-            value,
-        }
+    pub const fn new(name: &'static str, value: T) -> Self {
+        Self { name, value }
     }
 
-    pub fn name(&self) -> &str {
+    pub const fn name(&self) -> &str {
         &self.name
     }
 
