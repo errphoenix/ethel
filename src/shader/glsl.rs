@@ -398,7 +398,7 @@ macro_rules! shader_glsl_struct {
                     let mut s = format!("{}(", stringify!($name));
 
                     $(
-                        $crate::shader::WriteValue::write_value(&self.$f_name, &mut s);
+                        let _ = $crate::shader::WriteValue::write_value(&self.$f_name, &mut s);
                         s += ", ";
                     )+
 

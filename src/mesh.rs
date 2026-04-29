@@ -102,6 +102,20 @@ pub struct Vertex {
 pub(crate) const BUFFER_VERTEX_STORAGE_INDEX: usize = 0;
 pub(crate) const BUFFER_MESH_META_INDEX: usize = 1;
 
+crate::shader_glsl_struct! {
+    struct Metadata {
+        offset: u32 => uint;
+        length: u32 => uint;
+    }
+}
+
+crate::shader_glsl_struct! {
+    struct Vertex {
+        position: [f32; 4] => vec4;
+        normal: [f32; 4] => vec4;
+    }
+}
+
 #[macro_export]
 macro_rules! layout_mesh_buffer {
     (count: $mc:expr; vertices: $vc:expr) => {

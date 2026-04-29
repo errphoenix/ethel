@@ -9,8 +9,7 @@ use janus::{GlProperty, gl};
 use tracing::{Level, event};
 
 pub use glsl::{
-    Glsl, GlslAlloc, GlslAttribute, GlslLib, GlslStorage, GlslStruct, GlslType, GlslType,
-    ShadingVersion,
+    Glsl, GlslAlloc, GlslAttribute, GlslLib, GlslStorage, GlslStruct, GlslType, ShadingVersion,
 };
 pub use uniform::GlslUniform;
 
@@ -72,7 +71,7 @@ const SHADER_INFOLOG_LEN: usize = 1024;
 static mut SHADER_INFOLOG_BYTES: [i8; SHADER_INFOLOG_LEN] = [0i8; SHADER_INFOLOG_LEN];
 
 pub fn compile_shader_unit(
-    source: &[u8],
+    source: &str,
     shader_kind: ShaderKind,
 ) -> Result<ShaderUnit, std::borrow::Cow<'_, str>> {
     let shader_obj = unsafe { janus::gl::CreateShader(shader_kind.property_enum()) };
@@ -82,7 +81,7 @@ pub fn compile_shader_unit(
         let mut compile_status = 0;
 
         unsafe {
-            let c_src = std::ffi::CString::from_raw(source.as_ptr() as *mut i8);
+            let c_src = std::ffi::CString::from_str(source).unwrap();
 
             janus::gl::ShaderSource(shader_obj, 1, &c_src.as_ptr(), std::ptr::null());
             janus::gl::CompileShader(shader_obj);
@@ -409,7 +408,7 @@ macro_rules! shader_glsl {
         }
     ) => {
         paste::paste! {
-            #[derive(PartialEq, Eq, Hash, Default)]
+            #[derive(Debug, PartialEq, Eq, Hash, Default)]
             pub struct [< Shader $name >] {
                 handle: $crate::shader::ShaderHandle,
 
@@ -611,7 +610,7 @@ macro_rules! shader_glsl {
                             };
 
                             let full_source = composer.build();
-                            let shader_unit = $crate::shader::compile_shader_unit(full_source.as_bytes(), $kind)
+                            let shader_unit = $crate::shader::compile_shader_unit(&full_source, $kind)
                                 .expect(concat!("failed to compile ", stringify!($kind), " shader: see logs for details."));
 
                             units.push(shader_unit);
