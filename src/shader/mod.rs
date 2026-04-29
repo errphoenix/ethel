@@ -2,6 +2,7 @@ pub mod glsl;
 pub mod uniform;
 
 pub use crate::shader_glsl_ssbo;
+use crate::state::data;
 
 use std::{hash::Hash, ops::Deref, str::FromStr};
 
@@ -145,6 +146,18 @@ pub fn delete_shader_units(units: &mut [ShaderUnit]) {
 
 pub trait WriteValue {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result;
+}
+
+impl WriteValue for data::IndirectIndex {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "IndirectIndex({}, {})", self.index, self.generation)
+    }
+}
+
+impl WriteValue for data::DirectIndex {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "DirectIndex({}, {})", self.index, self.generation)
+    }
 }
 
 pub trait Inject {
