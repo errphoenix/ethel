@@ -116,6 +116,22 @@ crate::shader_glsl_struct! {
     }
 }
 
+/// Helper macro to initialize GPU SSBO's for mesh data.
+///
+/// This macro requires only two integer values:
+/// * `count` for the total mesh count available for mesh metadata,
+/// * `vertices` for the total *global* size of the vertex buffers SSBO's.
+///
+/// Note how the vertex count is *global* for all meshes, not for each.
+///
+/// # Examples
+/// ```rust,ignore
+/// layout_mesh_buffer!(count: 32; vertices: 10_000);
+/// ```
+///
+/// The above example will allocate two GPU buffers: the first for mesh
+/// metadata for 32 unique meshes; the second for vertex data for a total
+/// of 10,000 vertices (and normals) *globally*.
 #[macro_export]
 macro_rules! layout_mesh_buffer {
     (count: $mc:expr; vertices: $vc:expr) => {
@@ -140,10 +156,26 @@ macro_rules! layout_mesh_buffer {
     };
 }
 
+/// Mesh metadata and vertex storage SSBO interface.
+///
+/// Contains the SSBO declarations for drop-in integration with shader
+/// declarations using the [`crate::shader_glsl`] and
+/// [`crate::shader_glsl_compute`] macros.
+///
+/// These are made using [`crate::shader_glsl_ssbo`], like any other SSBO
+/// definition.
+/// Both SSBO's are dynamic arrays built with the macro's `dyn_array`
+/// attribute.
+///
+/// These are, respectively:
+/// * Vertex Storage Buffer, "VertexBuffer", on binding index `10` and field
+///   name `vertex_storage`.
+/// * Metadata Storage Buffer, "MeshMetadata", on binding index `11` and field
+///   name `metadata`.
 pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
     crate::shader_glsl_ssbo! {
         buf VertexBuffer on 10 => {
-            [dyn_array Vertex: vertex_buffer]
+            [dyn_array Vertex: vertex_storage]
         }
     },
     crate::shader_glsl_ssbo! {

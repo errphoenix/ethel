@@ -128,28 +128,6 @@ copy_type_name_glsl!([f32; 9] => "mat3");
 copy_type_name_glsl!(glam::Mat4 => "mat4");
 copy_type_name_glsl!([f32; 16] => "mat4");
 
-impl super::WriteValue for [f32; 2] {
-    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(to, "vec2({:.3}, {:.3})", self[0], self[1])
-    }
-}
-
-impl super::WriteValue for [f32; 3] {
-    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(to, "vec3({:.3}, {:.3}, {:.3})", self[0], self[1], self[2])
-    }
-}
-
-impl super::WriteValue for [f32; 4] {
-    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
-        write!(
-            to,
-            "vec4({:.3}, {:.3}, {:.3}, {:.3})",
-            self[0], self[1], self[2], self[3]
-        )
-    }
-}
-
 impl super::WriteValue for glam::Vec2 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "vec2({:.3}, {:.3})", self[0], self[1])
