@@ -56,6 +56,7 @@ pub(crate) use assert_tb_section;
 /// [`PartitionedTriBuffer`]: partitioned::PartitionedTriBuffer
 #[derive(Default, Debug)]
 pub struct TriBuffer<T: Sized + Clone + Copy> {
+    lengths: [u32; 3],
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
 
@@ -124,6 +125,7 @@ where
         }
 
         Self {
+            lengths: [0; 3],
             gl_obj,
             ptr,
             capacity,
@@ -132,11 +134,12 @@ where
     }
 
     /// Binds the specified `section` of the tri-buffer to the given
-    /// `ssbo_index`.
+    /// `ssbo_index`, with a custom `offset`.
     ///
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
-    pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize) {
+    /// Or if `offset` is greater or equal to the buffer's internal length.
+    pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize, offset: u32) {
         assert_tb_section!(section);
 
         #[cfg(debug_assertions)]
@@ -146,11 +149,21 @@ where
             assert_eq!(self.capacity % ssbo_align, 0)
         }
 
+        let base_length = self.lengths[section];
+
+        assert!(
+            offset < base_length,
+            "offset cannot be grater or equal to buffer length {base_length}"
+        );
+        let length = base_length - offset;
+
         unsafe {
-            janus::gl::BindBufferBase(
+            janus::gl::BindBufferRange(
                 janus::gl::SHADER_STORAGE_BUFFER,
                 ssbo_index as u32,
                 self.gl_obj[section],
+                offset as isize,
+                length as isize,
             );
         }
     }
@@ -163,7 +176,7 @@ where
         View {
             slice,
             offset: 0,
-            length: self.capacity as u32,
+            length: self.lengths[section],
             source: self.gl_obj[section],
         }
     }
@@ -176,7 +189,7 @@ where
         ViewMut {
             slice,
             offset: 0,
-            length: self.capacity as u32,
+            length: self.lengths[section],
             source: self.gl_obj[section],
         }
     }
@@ -189,10 +202,13 @@ where
     /// The given `offset` must be the amount of elements `T` to skip inside
     /// of the buffer, not bytes.
     ///
+    /// If the length of `data` exceeds the capacity of the buffer, it will be
+    /// automatically clamped and any exceeding elements will be ignored.
+    ///
     /// # Panics
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
-    pub fn blit_section(&self, section: usize, data: &[T], offset: usize) {
+    pub fn blit_section(&mut self, section: usize, data: &[T], offset: usize) {
         assert_tb_section!(section);
         assert!(
             self.capacity > offset,
@@ -203,6 +219,7 @@ where
         let src = data.as_ptr();
         let avail = self.capacity - offset;
         let len = avail.min(data.len());
+        self.lengths[section] = len as u32;
 
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
@@ -212,6 +229,9 @@ where
     /// Copy the given `data` into a `section` of the triple buffer at a given
     /// `offset` with a padding of `pad_lan` at the end of each
     /// element.
+    ///
+    /// If the length of `data` exceeds the capacity of the buffer, it will be
+    /// automatically clamped and any exceeding elements will be ignored.
     ///
     /// This function is intended for operations where the CPU and GPU data
     /// representations differ due to memory alignment requirements.
@@ -250,7 +270,7 @@ where
     ///
     /// [`blit_section`]: TriBuffer::blit_section
     pub fn blit_section_padded<S: Clone + Copy + Default>(
-        &self,
+        &mut self,
         section: usize,
         data: &[S],
         offset: usize,
@@ -283,6 +303,7 @@ where
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
+        self.lengths[section] = data_len as u32;
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
@@ -344,7 +365,7 @@ impl<'buf, T: Sized> View<'buf, T> {
         self.length
     }
 
-    /// The original OpenGL buffer object. this view belongs to.
+    /// The original OpenGL buffer object this view belongs to.
     pub const fn source(&self) -> u32 {
         self.source
     }
