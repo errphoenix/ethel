@@ -841,7 +841,7 @@ macro_rules! shader_glsl_compute {
                 )?
             }
 
-            impl [< Shader $name >] {
+            impl [< ComputeShader $name >] {
                 pub fn bind(&self) {
                     self.handle.bind();
                 }
@@ -863,7 +863,7 @@ macro_rules! shader_glsl_compute {
                 }
 
                 #[cfg(debug_assertions)]
-                pub fn build_sources() -> Vec<String> {
+                pub fn build_sources() -> String {
                     let version = $crate::shader::ShadingVersion::core($ver);
 
                     let mut composer = $crate::shader::ShaderComposer::new(version);
@@ -904,25 +904,16 @@ macro_rules! shader_glsl_compute {
 
                     composer.set_source(indoc::indoc! { $src });
 
-                    composer
+                    composer.build()
                 }
 
                 $(
                     $(
                         $crate::shader_glsl_build_uniform_interface! {
-                            $c_u_gl_name: $c_u_gl_type => $c_u_r_type
+                            $u_gl_name: $u_gl_type => $u_r_type
                         }
                     )+
                 )?
-                $(
-                    $(
-                        $(
-                            $crate::shader_glsl_build_uniform_interface! {
-                                $u_gl_name: $u_gl_type => $u_r_type
-                            }
-                        )+
-                    )?
-                )+
 
                 pub fn new_compiled() -> Self {
                     let version = $crate::shader::ShadingVersion::core($ver);
@@ -970,10 +961,10 @@ macro_rules! shader_glsl_compute {
                     let shader_unit = $crate::shader::compile_shader_unit(&full_source, $crate::shader::ShaderKind::Compute)
                         .expect(concat!("failed to compile Compute shader: see logs for details."));
 
-                    let handle = $crate::shader::generate_blank();
-                    $crate::shader::attach_shader_units(&handle, &units);
+                    let handle = $crate::shader::ComputeShaderHandle::new($crate::shader::generate_blank());
+                    $crate::shader::attach_shader_units(&handle, &[shader_unit]);
                     $crate::shader::link_shader_program(&handle);
-                    $crate::shader::delete_shader_units(&mut units);
+                    $crate::shader::delete_shader_units(&mut [shader_unit]);
 
                     $(
                         $(
