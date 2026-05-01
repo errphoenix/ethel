@@ -4,7 +4,12 @@ pub mod uniform;
 pub use crate::shader_glsl_ssbo;
 use crate::state::data;
 
-use std::{hash::Hash, ops::Deref, str::FromStr};
+use std::{
+    hash::Hash,
+    ops::Deref,
+    str::FromStr,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
@@ -394,12 +399,12 @@ pub fn unbind() {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug)]
 pub struct ComputeShaderHandle {
     inner: ShaderHandle,
-    workgroups_x: u32,
-    workgroups_y: u32,
-    workgroups_z: u32,
+    workgroups_x: AtomicU32,
+    workgroups_y: AtomicU32,
+    workgroups_z: AtomicU32,
 }
 
 impl Default for ComputeShaderHandle {
@@ -412,25 +417,29 @@ impl ComputeShaderHandle {
     pub const fn new(handle: ShaderHandle) -> Self {
         Self {
             inner: handle,
-            workgroups_x: 1,
-            workgroups_y: 1,
-            workgroups_z: 1,
+            workgroups_x: AtomicU32::new(1),
+            workgroups_y: AtomicU32::new(1),
+            workgroups_z: AtomicU32::new(1),
         }
     }
 
-    pub const fn set_workgroups_size(&mut self, x: u32, y: u32, z: u32) {
-        self.workgroups_x = x;
-        self.workgroups_y = y;
-        self.workgroups_z = z;
+    pub fn set_workgroups_size(&self, x: u32, y: u32, z: u32) {
+        self.workgroups_x.store(x, Ordering::Relaxed);
+        self.workgroups_y.store(y, Ordering::Relaxed);
+        self.workgroups_z.store(z, Ordering::Relaxed);
     }
 
-    pub const fn workgroups_size(&self) -> (u32, u32, u32) {
-        (self.workgroups_x, self.workgroups_y, self.workgroups_z)
+    pub fn workgroups_size(&self) -> (u32, u32, u32) {
+        let wg_x = self.workgroups_x.load(Ordering::Relaxed);
+        let wg_y = self.workgroups_y.load(Ordering::Relaxed);
+        let wg_z = self.workgroups_z.load(Ordering::Relaxed);
+        (wg_x, wg_y, wg_z)
     }
 
     pub fn dispatch_compute(&self) {
+        let (x, y, z) = self.workgroups_size();
         unsafe {
-            janus::gl::DispatchCompute(self.workgroups_x, self.workgroups_y, self.workgroups_z);
+            janus::gl::DispatchCompute(x, y, z);
         }
     }
 }
@@ -830,7 +839,7 @@ macro_rules! shader_glsl_compute {
         }
     ) => {
         paste::paste! {
-            #[derive(Debug, PartialEq, Eq, Hash, Default)]
+            #[derive(Debug, Default)]
             pub struct [< ComputeShader $name >] {
                 handle: $crate::shader::ComputeShaderHandle,
 
@@ -850,7 +859,7 @@ macro_rules! shader_glsl_compute {
                     $crate::shader::unbind();
                 }
 
-                pub const fn set_workgroups_size(&mut self, x: u32, y: u32, z: u32) {
+                pub fn set_workgroups_size(&self, x: u32, y: u32, z: u32) {
                     self.handle.set_workgroups_size(x, y, z);
                 }
 
@@ -999,6 +1008,15 @@ mod tests {
         }
     }
 
+    macro_rules! ssbo_binding {
+        (POD_Positions) => {
+            1
+        };
+        (IMap_Entity) => {
+            2
+        };
+    }
+
     shader_glsl! {
         struct Debug > [460] {
             common {
@@ -1012,13 +1030,13 @@ mod tests {
 
                 ssbo {
                     crate::shader_glsl_ssbo! {
-                        buf POD_Positions on 1 => {
+                        buf POD_Positions => {
                             [dyn_array vec4: pod_positions]
                         }
                     }
 
                     crate::shader_glsl_ssbo! {
-                        buf IMap_Entity on 2 => {
+                        buf IMap_Entity => {
                             [dyn_array DirectIndex: imap_entity]
                         }
                     }

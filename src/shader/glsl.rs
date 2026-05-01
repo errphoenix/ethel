@@ -418,10 +418,38 @@ macro_rules! shader_glsl_struct {
     };
 }
 
+/// The macro requires access to a `ssbo_binding` macro mapping the SSBO name
+/// defined in this macro (after the `buf` keyword) to its binding index.
+///
+/// This macro must be created by the programmer using `macro_rules!`.
+///
+/// # Example
+/// ```rust,ignore
+/// macro_rules! ssbo_binding {
+//     (POD_BindPose) => {
+//         2
+//     };
+//     (POD_Weights) => {
+//         3
+//     };
+// }
+//
+// let _macro_1 = shader_glsl_ssbo! {
+//     buf POD_BindPose => {
+//         [dyn_array vec4: pod_bind_pose]
+//     }
+// };
+//
+// let _macro_2 = shader_glsl_ssbo! {
+//     buf POD_Weights => {
+//         [dyn_array float: pod_weights => each 2]
+//     }
+// };
+/// ```
 #[macro_export]
 macro_rules! shader_glsl_ssbo {
     (
-        buf $ssbo:ident on $index:expr => {
+        buf $ssbo:ident => {
             $(
                 $t:ident : $n:ident;
             )*
@@ -431,7 +459,7 @@ macro_rules! shader_glsl_ssbo {
         }
     ) => {
         $crate::shader::glsl::GlslStorage::new(
-            concat!("layout(std430, binding = ", stringify!($index), ") buffer ",
+            concat!("layout(std430, binding = ", ssbo_binding!($ssbo), ") buffer ",
                 stringify!($ssbo), "\n{\n",
                 $("    ", stringify!($t), " ", stringify!($n), ";\n",)*
                 $("    ", stringify!($dat), " ", stringify!($dan), "[]",
@@ -506,8 +534,17 @@ mod tests {
         const TEST: &str =
             "layout(std430, binding = 2) buffer POD_BindPose\n{\n    vec4 pod_bind_pose[];\n};\n";
 
+        macro_rules! ssbo_binding {
+            (POD_BindPose) => {
+                2
+            };
+            (POD_Weights) => {
+                3
+            };
+        }
+
         let generated = shader_glsl_ssbo! {
-            buf POD_BindPose on 2 => {
+            buf POD_BindPose => {
                 [dyn_array vec4: pod_bind_pose]
             }
         };
@@ -518,7 +555,7 @@ mod tests {
             "layout(std430, binding = 3) buffer POD_Weights\n{\n    float pod_weights[][2];\n};\n";
 
         let generated = shader_glsl_ssbo! {
-            buf POD_Weights on 3 => {
+            buf POD_Weights => {
                 [dyn_array float: pod_weights => each 2]
             }
         };
