@@ -194,6 +194,22 @@ where
         }
     }
 
+    pub fn set_section_length(&mut self, section: usize, length: u32) {
+        assert_tb_section!(section);
+        assert!(
+            self.capacity as u32 > length,
+            "attempted to set length of section {section} to {length} but with capacity {}",
+            self.capacity
+        );
+
+        self.lengths[section] = length as u32;
+    }
+
+    pub fn section_length(&self, section: usize) -> u32 {
+        assert_tb_section!(section);
+        self.lengths[section]
+    }
+
     /// Copy the given `data` into a `section` of the triple buffer at a given
     /// `offset`.
     ///
@@ -212,7 +228,7 @@ where
         assert_tb_section!(section);
         assert!(
             self.capacity > offset,
-            "attempted to blit at offset {offset} with section length {}",
+            "attempted to blit at offset {offset} with section capacity {}",
             self.capacity
         );
 

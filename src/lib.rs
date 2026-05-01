@@ -27,8 +27,6 @@ pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::
 pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 
 pub trait StateHandler<FrameData: Sized> {
-    const COMMAND_QUEUE_LENGTH: usize;
-
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameData>,
@@ -134,7 +132,7 @@ where
         let (producer, consumer) = cross::create(frame_data);
         *state.boundary_mut() = producer;
         *renderer.boundary_mut() = consumer;
-        *state.command_queue_mut() = GpuCommandQueue::new(Sh::COMMAND_QUEUE_LENGTH);
+        *state.command_queue_mut() = GpuCommandQueue::new();
 
         (self.gl_state_init)();
 

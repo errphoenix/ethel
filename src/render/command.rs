@@ -56,15 +56,20 @@ impl DrawCmd for DrawElementsIndirectCommand {
 pub struct GpuCommandQueue<C: DrawCmd + Clone + Copy> {
     queue: Vec<C>,
     upload_head: AtomicUsize,
-    fixed_buffer_len: usize,
 }
 
 impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
-    pub fn new(buffer_len: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            queue: Vec::with_capacity(buffer_len),
+            queue: Vec::new(),
             upload_head: AtomicUsize::new(0),
-            fixed_buffer_len: buffer_len,
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            queue: Vec::with_capacity(capacity),
+            upload_head: AtomicUsize::new(0),
         }
     }
 
@@ -105,7 +110,7 @@ impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
 
         let head = self.upload_head.load(Ordering::Acquire);
         let remaining = count - head;
-        let upload_size = remaining.min(self.fixed_buffer_len);
+        let upload_size = remaining.min(buffer.len());
 
         let mut i = 0;
         for j in head..(head + upload_size) {
