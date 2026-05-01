@@ -426,25 +426,25 @@ macro_rules! shader_glsl_struct {
 /// # Example
 /// ```rust,ignore
 /// macro_rules! ssbo_binding {
-//     (POD_BindPose) => {
-//         2
-//     };
-//     (POD_Weights) => {
-//         3
-//     };
-// }
-//
-// let _macro_1 = shader_glsl_ssbo! {
-//     buf POD_BindPose => {
-//         [dyn_array vec4: pod_bind_pose]
-//     }
-// };
-//
-// let _macro_2 = shader_glsl_ssbo! {
-//     buf POD_Weights => {
-//         [dyn_array float: pod_weights => each 2]
-//     }
-// };
+///     (POD_BindPose) => {
+///         2
+///     };
+///    (POD_Weights) => {
+///         3
+///     };
+/// }
+///
+/// let _macro_1 = shader_glsl_ssbo! {
+///     buf POD_BindPose => {
+///         [dyn_array vec4: pod_bind_pose]
+///     }
+/// };
+///
+/// let _macro_2 = shader_glsl_ssbo! {
+///     buf POD_Weights => {
+///         [dyn_array float: pod_weights => each 2]
+///     }
+/// };
 /// ```
 #[macro_export]
 macro_rules! shader_glsl_ssbo {
