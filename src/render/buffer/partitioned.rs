@@ -160,13 +160,15 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     ///
     /// The data will be bound to the SSBO specified by the given index
     /// `ssbo_index` if provided. Otherwise, the SSBO binding index will
-    /// correspond to the one specified in this buffer's [`layout`](Layout).
+    /// correspond to the one specified in this buffer's [`Layout`].
+    ///
+    /// This function is a no-op if `ssbo_index` is `None` and the given
+    /// `partition` does not have an SSBO binding index in this buffer's
+    /// [`Layout`].
     ///
     /// # Panic
     /// * If `section` is not a value within the range (0, 2).
     /// * If `partition` does not correspond to a valid partition index.
-    /// * If `ssbo_index` is not provided and this buffer's [`layout`](Layout)
-    ///   does not specify an SSBO index for `partition`.
     pub fn bind_shader_storage_single(
         &self,
         section: usize,
@@ -176,21 +178,20 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         assert_tb_section!(section);
         assert_partition!(PARTS, partition);
 
-        let base_offset = (self.layout.len() * section) as isize;
-        let binding = ssbo_index
-            .or_else(|| self.layout.ssbo_of(partition))
-            .expect("unspecified ssbo binding index");
+        if let Some(binding) = ssbo_index.or_else(|| self.layout.ssbo_of(partition)) {
+            let base_offset = (self.layout.len() * section) as isize;
 
-        let offset = self.layout.offset_at(partition) as isize;
-        let length = self.layout.length_at(partition) as isize;
-        unsafe {
-            janus::gl::BindBufferRange(
-                janus::gl::SHADER_STORAGE_BUFFER,
-                binding,
-                self.gl_obj,
-                base_offset + offset,
-                length,
-            );
+            let offset = self.layout.offset_at(partition) as isize;
+            let length = self.layout.length_at(partition) as isize;
+            unsafe {
+                janus::gl::BindBufferRange(
+                    janus::gl::SHADER_STORAGE_BUFFER,
+                    binding,
+                    self.gl_obj,
+                    base_offset + offset,
+                    length,
+                );
+            }
         }
     }
 
@@ -205,21 +206,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     pub fn bind_shader_storage(&self, section: usize) {
         assert_tb_section!(section);
 
-        let base_offset = (self.layout.len() * section) as isize;
         for part in 0..PARTS {
-            if let Some(binding) = self.layout.ssbo_of(part) {
-                let offset = self.layout.offset_at(part) as isize;
-                let length = self.layout.length_at(part) as isize;
-                unsafe {
-                    janus::gl::BindBufferRange(
-                        janus::gl::SHADER_STORAGE_BUFFER,
-                        binding,
-                        self.gl_obj,
-                        base_offset + offset,
-                        length,
-                    );
-                }
-            }
+            self.bind_shader_storage_single(section, part, None);
         }
     }
 

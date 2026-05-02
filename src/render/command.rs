@@ -1,5 +1,3 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-
 use crate::render::buffer::View;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -55,26 +53,20 @@ impl DrawCmd for DrawElementsIndirectCommand {
 #[derive(Debug, Default)]
 pub struct GpuCommandQueue<C: DrawCmd + Clone + Copy> {
     queue: Vec<C>,
-    upload_head: AtomicUsize,
 }
 
 impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
     pub fn new() -> Self {
-        Self {
-            queue: Vec::new(),
-            upload_head: AtomicUsize::new(0),
-        }
+        Self { queue: Vec::new() }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             queue: Vec::with_capacity(capacity),
-            upload_head: AtomicUsize::new(0),
         }
     }
 
     pub fn clear(&mut self) {
-        self.upload_head.store(0, Ordering::Release);
         self.queue.clear();
     }
 
@@ -90,41 +82,19 @@ impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
         self.queue.len()
     }
 
-    /// Perform an uploading operation onto a command `buffer`.
-    ///
-    /// One upload operation can only upload up to the buffer size initially
-    /// set when creating the command queue, which corresponds to the size of
-    /// the command buffer on the GPU.
-    ///
-    /// It may be required to perform this operation multiple times per frame
-    /// if the total command count in the queue surpasses the buffer capacity.
-    /// The command queue keeps track of the last uploaded command, so this
-    /// can be done safely from the caller.
-    ///
-    /// Although, since a second upload operation will begin drawing at the
-    /// beginning of the command buffer, dispatching the draw call in-between
-    /// uploads is required or the commands will be lost.
-    ///
-    /// # Returns
-    /// * `Ok` if the operation was successful and all commands were uploaded
-    /// * `Err` with the amount of left-over commands to upload if not all
-    ///   commands were uploaded.
     pub fn upload(&self, buffer: &mut [C]) -> Result<(), usize> {
         let count = self.queue.len();
+        let cap = buffer.len();
 
-        let head = self.upload_head.load(Ordering::Acquire);
-        let remaining = count - head;
-        let upload_size = remaining.min(buffer.len());
+        let safe_size = count.min(cap);
+        let exceed = count.saturating_sub(cap);
 
-        let mut i = 0;
-        for j in head..(head + upload_size) {
-            buffer[i] = self.queue[j];
-            i += 1;
+        unsafe {
+            let dst = buffer.as_ptr() as *mut C;
+            let src = self.queue.as_ptr();
+            std::ptr::copy_nonoverlapping(src, dst, safe_size);
         }
-        let new_head = head + i;
-        self.upload_head.store(new_head, Ordering::Release);
 
-        let exceed = count.saturating_sub(new_head);
         if exceed != 0 {
             return Err(exceed);
         }

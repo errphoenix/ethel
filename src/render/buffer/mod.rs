@@ -2,8 +2,6 @@ pub mod immutable;
 pub mod layout;
 pub mod partitioned;
 
-use std::sync::atomic::{AtomicU32, Ordering};
-
 pub use immutable::{ImmutableBuffer, UninitImmutableBuffer};
 pub use layout::Layout;
 pub use partitioned::PartitionedTriBuffer;
@@ -58,7 +56,6 @@ pub(crate) use assert_tb_section;
 /// [`PartitionedTriBuffer`]: partitioned::PartitionedTriBuffer
 #[derive(Default, Debug)]
 pub struct TriBuffer<T: Sized + Clone + Copy> {
-    lengths: [AtomicU32; 3],
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
 
@@ -127,7 +124,6 @@ where
         }
 
         Self {
-            lengths: [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)],
             gl_obj,
             ptr,
             capacity,
@@ -151,7 +147,7 @@ where
             assert_eq!(self.capacity % ssbo_align, 0)
         }
 
-        let base_length = self.lengths[section].load(Ordering::Relaxed);
+        let base_length = self.capacity as u32;
 
         assert!(
             base_length >= offset,
@@ -176,13 +172,12 @@ where
         assert_tb_section!(section);
 
         let ptr = self.ptr[section];
-        let len = self.lengths[section].load(Ordering::Relaxed);
-        let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+        let slice = unsafe { std::slice::from_raw_parts(ptr, self.capacity) };
 
         View {
             slice,
             offset: 0,
-            length: len,
+            length: self.capacity as u32,
             source: self.gl_obj[section],
         }
     }
@@ -191,31 +186,18 @@ where
         assert_tb_section!(section);
 
         let ptr = self.ptr[section];
-        let len = self.lengths[section].load(Ordering::Relaxed);
-        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, len as usize) };
+        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.capacity) };
 
         ViewMut {
             slice,
             offset: 0,
-            length: len,
+            length: self.capacity as u32,
             source: self.gl_obj[section],
         }
     }
 
-    pub fn set_section_length(&self, section: usize, length: u32) {
-        assert_tb_section!(section);
-        assert!(
-            self.capacity as u32 > length,
-            "attempted to set length of section {section} to {length} but with capacity {}",
-            self.capacity
-        );
-
-        self.lengths[section].store(length, Ordering::Release);
-    }
-
-    pub fn section_length(&self, section: usize) -> u32 {
-        assert_tb_section!(section);
-        self.lengths[section].load(Ordering::Relaxed)
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 
     /// Copy the given `data` into a `section` of the triple buffer at a given
@@ -243,7 +225,6 @@ where
         let src = data.as_ptr();
         let avail = self.capacity - offset;
         let len = avail.min(data.len());
-        self.lengths[section].store(len as u32, Ordering::Release);
 
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
@@ -327,7 +308,6 @@ where
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
-        self.lengths[section].store(data_len as u32, Ordering::Release);
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
