@@ -152,8 +152,8 @@ where
         let base_length = self.lengths[section];
 
         assert!(
-            offset < base_length,
-            "offset cannot be grater or equal to buffer length {base_length}"
+            base_length >= offset,
+            "offset cannot be greater or equal to buffer length {base_length}"
         );
         let length = base_length - offset;
 
