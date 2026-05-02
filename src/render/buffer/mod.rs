@@ -384,7 +384,7 @@ impl<'buf, T: Sized> View<'buf, T> {
         self.offset
     }
 
-    /// The length in bytes.
+    /// The length of this view as number of elements `T`.
     pub const fn length(&self) -> u32 {
         self.length
     }

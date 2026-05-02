@@ -584,27 +584,27 @@ macro_rules! shader_glsl {
                         let mut composer = $crate::shader::ShaderComposer::new(version);
                         $(
                             $(
-                                composer.add_uniform($crate::shader_glsl_uniform!($c_u_gl_name: $c_u_gl_type));
+                                let _ = composer.add_uniform($crate::shader_glsl_uniform!($c_u_gl_name: $c_u_gl_type));
                             )+
                         )?
                         $(
                             $(
-                                composer.inject_header(&$c_type_glsl);
+                                let _ = composer.inject_header(&$c_type_glsl);
                             )+
                         )?
                         $(
                             $(
-                                composer.inject_header(&$c_ssbo_glsl);
+                                let _ = composer.inject_header(&$c_ssbo_glsl);
                             )+
                         )?
                         $(
                             $(
-                                composer.add_constant(&$c_const_a);
+                                let _ = composer.add_constant(&$c_const_a);
                             )+
                         )?
                         $(
                             $(
-                                composer.inject_body(&$c_lib);
+                                let _ = composer.inject_body(&$c_lib);
                             )+
                         )?
 
@@ -615,32 +615,32 @@ macro_rules! shader_glsl {
                         let mut composer = $crate::shader::ShaderComposer::new(version);
                         $(
                             $(
-                                composer.inject_header(&$attrib_glsl);
+                                let _ = composer.inject_header(&$attrib_glsl);
                             )+
                         )?
                         $(
                             $(
-                                composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                                let _ = composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
                             )+
                         )?
                         $(
                             $(
-                                composer.inject_header(&$type_glsl);
+                                let _ = composer.inject_header(&$type_glsl);
                             )+
                         )?
                         $(
                             $(
-                                composer.inject_header(&$ssbo_glsl);
+                                let _ = composer.inject_header(&$ssbo_glsl);
                             )+
                         )?
                         $(
                             $(
-                                composer.add_constant(&$const_a);
+                                let _ = composer.add_constant(&$const_a);
                             )+
                         )?
                         $(
                             $(
-                                composer.inject_body(&$lib);
+                                let _ = composer.inject_body(&$lib);
                             )+
                         )?
                         composer.copy_from(&common);
@@ -679,27 +679,27 @@ macro_rules! shader_glsl {
                             let mut composer = $crate::shader::ShaderComposer::new(version);
                             $(
                                 $(
-                                    composer.add_uniform($crate::shader_glsl_uniform!($c_u_gl_name: $c_u_gl_type));
+                                    let _ = composer.add_uniform($crate::shader_glsl_uniform!($c_u_gl_name: $c_u_gl_type));
                                 )+
                             )?
                             $(
                                 $(
-                                    composer.inject_header(&$c_type_glsl);
+                                    let _ = composer.inject_header(&$c_type_glsl);
                                 )+
                             )?
                             $(
                                 $(
-                                    composer.inject_header(&$c_ssbo_glsl);
+                                    let _ = composer.inject_header(&$c_ssbo_glsl);
                                 )+
                             )?
                             $(
                                 $(
-                                    composer.add_constant(&$c_const_a);
+                                    let _ = composer.add_constant(&$c_const_a);
                                 )+
                             )?
                             $(
                                 $(
-                                    composer.inject_body(&$c_lib);
+                                    let _ = composer.inject_body(&$c_lib);
                                 )+
                             )?
 
@@ -711,32 +711,32 @@ macro_rules! shader_glsl {
                                 let mut composer = $crate::shader::ShaderComposer::new(version);
                                 $(
                                     $(
-                                        composer.inject_header(&$attrib_glsl);
+                                        let _ = composer.inject_header(&$attrib_glsl);
                                     )+
                                 )?
                                 $(
                                     $(
-                                        composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                                        let _ = composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
                                     )+
                                 )?
                                 $(
                                     $(
-                                        composer.inject_header(&$type_glsl);
+                                        let _ = composer.inject_header(&$type_glsl);
                                     )+
                                 )?
                                 $(
                                     $(
-                                        composer.inject_header(&$ssbo_glsl);
+                                        let _ = composer.inject_header(&$ssbo_glsl);
                                     )+
                                 )?
                                 $(
                                     $(
-                                        composer.add_constant(&$const_a);
+                                        let _ = composer.add_constant(&$const_a);
                                     )+
                                 )?
                                 $(
                                     $(
-                                        composer.inject_body(&$lib);
+                                        let _ = composer.inject_body(&$lib);
                                     )+
                                 )?
                                 composer.copy_from(&common);
@@ -882,32 +882,32 @@ macro_rules! shader_glsl_compute {
                             ", local_size_y = ", $wg_y,
                             ", local_size_z = ", $wg_z, ") in;\n"
                         );
-                        composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
+                        let _ = composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
                     }
 
                     $(
                         $(
-                            composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                            let _ = composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
                         )+
                     )?
                     $(
                         $(
-                            composer.inject_header(&$type_glsl);
+                            let _ = composer.inject_header(&$type_glsl);
                         )+
                     )?
                     $(
                         $(
-                            composer.inject_header(&$ssbo_glsl);
+                            let _ = composer.inject_header(&$ssbo_glsl);
                         )+
                     )?
                     $(
                         $(
-                            composer.add_constant(&$const_a);
+                            let _ = composer.add_constant(&$const_a);
                         )+
                     )?
                     $(
                         $(
-                            composer.inject_body(&$lib);
+                            let _ = composer.inject_body(&$lib);
                         )+
                     )?
 
@@ -935,32 +935,32 @@ macro_rules! shader_glsl_compute {
                             ", local_size_y = ", $wg_y,
                             ", local_size_z = ", $wg_z, ") in;\n"
                         );
-                        composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
+                        let _ = composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
                     }
 
                     $(
                         $(
-                            composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                            let _ = composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
                         )+
                     )?
                     $(
                         $(
-                            composer.inject_header(&$type_glsl);
+                            let _ = composer.inject_header(&$type_glsl);
                         )+
                     )?
                     $(
                         $(
-                            composer.inject_header(&$ssbo_glsl);
+                            let _ = composer.inject_header(&$ssbo_glsl);
                         )+
                     )?
                     $(
                         $(
-                            composer.add_constant(&$const_a);
+                            let _ = composer.add_constant(&$const_a);
                         )+
                     )?
                     $(
                         $(
-                            composer.inject_body(&$lib);
+                            let _ = composer.inject_body(&$lib);
                         )+
                     )?
 
