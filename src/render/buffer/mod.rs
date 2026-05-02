@@ -172,11 +172,13 @@ where
         assert_tb_section!(section);
 
         let ptr = self.ptr[section];
-        let slice = unsafe { std::slice::from_raw_parts(ptr, self.capacity) };
+        let len = self.lengths[section];
+        let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+
         View {
             slice,
             offset: 0,
-            length: self.lengths[section],
+            length: len,
             source: self.gl_obj[section],
         }
     }
@@ -185,16 +187,18 @@ where
         assert_tb_section!(section);
 
         let ptr = self.ptr[section];
-        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.capacity) };
+        let len = self.lengths[section];
+        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, len as usize) };
+
         ViewMut {
             slice,
             offset: 0,
-            length: self.lengths[section],
+            length: len,
             source: self.gl_obj[section],
         }
     }
 
-    pub fn set_section_length(&mut self, section: usize, length: u32) {
+    pub fn set_section_length(&self, section: usize, length: u32) {
         assert_tb_section!(section);
         assert!(
             self.capacity as u32 > length,
@@ -202,7 +206,13 @@ where
             self.capacity
         );
 
-        self.lengths[section] = length as u32;
+        // SAFETY:
+        // TriBuffer is triple buffered, so we assume the given `section` index
+        // is currently not being written to.
+        unsafe {
+            let ptr = self.lengths.as_ptr().add(section);
+            *(ptr as *mut u32) = length as u32;
+        }
     }
 
     pub fn section_length(&self, section: usize) -> u32 {

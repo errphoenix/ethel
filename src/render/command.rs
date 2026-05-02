@@ -86,6 +86,10 @@ impl<C: DrawCmd + Clone + Copy> GpuCommandQueue<C> {
         self.queue.push(command);
     }
 
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
     /// Perform an uploading operation onto a command `buffer`.
     ///
     /// One upload operation can only upload up to the buffer size initially
