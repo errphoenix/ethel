@@ -156,6 +156,15 @@ macro_rules! layout_mesh_buffer {
     };
 }
 
+macro_rules! ssbo_binding {
+    (VertexBuffer) => {
+        10
+    };
+    (MeshMetadata) => {
+        11
+    };
+}
+
 /// Mesh metadata and vertex storage SSBO interface.
 ///
 /// Contains the SSBO declarations for drop-in integration with shader
@@ -168,18 +177,17 @@ macro_rules! layout_mesh_buffer {
 /// attribute.
 ///
 /// These are, respectively:
-/// * Vertex Storage Buffer, "VertexBuffer", on binding index `10` and field
-///   name `vertex_storage`.
-/// * Metadata Storage Buffer, "MeshMetadata", on binding index `11` and field
-///   name `metadata`.
+/// * Vertex Storage Buffer, "VertexBuffer", with a dynamic array
+///   of `Vertex` field name `vertex_storage`, on binding index 10.
+/// * Metadata Storage Buffer, with field name `metadata`, on binding index 11.
 pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
     crate::shader_glsl_ssbo! {
-        buf VertexBuffer on 10 => {
+        buf VertexBuffer => {
             [dyn_array Vertex: vertex_storage]
         }
     },
     crate::shader_glsl_ssbo! {
-        buf MeshMetadata on 11 => {
+        buf MeshMetadata => {
             [dyn_array Metadata: metadata]
         }
     },
