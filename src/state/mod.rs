@@ -29,6 +29,10 @@ pub struct State<D: Sized, T: StateHandler<D>> {
 pub(crate) const DEFAULT_STEP: std::time::Duration = std::time::Duration::from_millis(8);
 
 impl<D: Sized, T: StateHandler<D>> State<D, T> {
+    pub fn handler_init_callback<F: FnOnce(&mut T)>(&mut self, callback: F) {
+        callback(&mut self.handler)
+    }
+
     pub fn boundary(&self) -> &Cross<Producer, D> {
         &self.boundary
     }

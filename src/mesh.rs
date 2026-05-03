@@ -116,6 +116,18 @@ crate::shader_glsl_struct! {
     }
 }
 
+macro_rules! ssbo_binding {
+    (VertexBuffer) => {
+        10
+    };
+    (MeshMetadata) => {
+        11
+    };
+}
+
+pub const SHADER_BINDING_VERTEX_BUFFER: u32 = ssbo_binding!(VertexBuffer);
+pub const SHADER_BINDING_MESH_METADATA: u32 = ssbo_binding!(MeshMetadata);
+
 /// Helper macro to initialize GPU SSBO's for mesh data.
 ///
 /// This macro requires only two integer values:
@@ -153,15 +165,6 @@ macro_rules! layout_mesh_buffer {
                 };
             }
         }
-    };
-}
-
-macro_rules! ssbo_binding {
-    (VertexBuffer) => {
-        10
-    };
-    (MeshMetadata) => {
-        11
     };
 }
 
