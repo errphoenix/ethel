@@ -20,6 +20,9 @@ impl Cell {
     pub const NEG_YZ: Cell = Cell::new(0, -1, 1);
     pub const NEG_ZX: Cell = Cell::new(1, 0, -1);
 
+    pub const MAX: Cell = Cell::new(i32::MAX, i32::MAX, i32::MAX);
+    pub const MIN: Cell = Cell::new(i32::MIN, i32::MIN, i32::MIN);
+
     pub const fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
     }
@@ -132,6 +135,9 @@ pub struct FxSpatialHash<T: Clone + Copy> {
 
     /// The amount of cells in a 'unit' of space for each axis
     pub resolution: SpatialResolution,
+
+    min: Cell,
+    max: Cell,
 }
 
 impl<T: Default + Clone + Copy> Default for FxSpatialHash<T> {
@@ -139,6 +145,8 @@ impl<T: Default + Clone + Copy> Default for FxSpatialHash<T> {
         Self {
             resolution: Default::default(),
             map: Default::default(),
+            min: Cell::MAX,
+            max: Cell::MIN,
         }
     }
 }
@@ -148,6 +156,8 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         Self {
             resolution,
             map: HashMap::default(),
+            min: Cell::MAX,
+            max: Cell::MIN,
         }
     }
 
@@ -155,6 +165,8 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         Self {
             resolution,
             map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
+            min: Cell::MAX,
+            max: Cell::MIN,
         }
     }
 
@@ -166,11 +178,25 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
         self.map.values()
     }
 
+    pub fn axis_extents(&self) -> Cell {
+        self.max - self.min
+    }
+
+    pub fn min(&self) -> Cell {
+        self.min
+    }
+
+    pub fn max(&self) -> Cell {
+        self.max
+    }
+
     /// Add an `element` to the spatial hash to a specific `cell`.
     ///
     /// # Returns
     /// The previous element present in `cell`, if any.
     pub fn put(&mut self, cell: Cell, element: T) -> Option<T> {
+        self.min = self.min.min(cell);
+        self.max = self.max.max(cell);
         self.map.insert(cell, element)
     }
 
@@ -193,6 +219,8 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     }
 
     pub fn clear(&mut self) {
+        self.min = Cell::MAX;
+        self.max = Cell::MIN;
         self.map.clear();
     }
 
@@ -342,6 +370,9 @@ pub struct FxLsSpatialHash<T: Clone + Copy> {
     map: HashMap<Cell, Vec<T>>,
 
     pub resolution: SpatialResolution,
+
+    min: Cell,
+    max: Cell,
 }
 
 impl<T: Default + Clone + Copy> Default for FxLsSpatialHash<T> {
@@ -349,6 +380,8 @@ impl<T: Default + Clone + Copy> Default for FxLsSpatialHash<T> {
         Self {
             resolution: Default::default(),
             map: Default::default(),
+            min: Cell::MAX,
+            max: Cell::MAX,
         }
     }
 }
@@ -358,6 +391,8 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
         Self {
             resolution,
             map: HashMap::default(),
+            min: Cell::MAX,
+            max: Cell::MAX,
         }
     }
 
@@ -365,6 +400,8 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
         Self {
             resolution,
             map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
+            min: Cell::MAX,
+            max: Cell::MAX,
         }
     }
 
@@ -376,8 +413,22 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
         self.map.values()
     }
 
+    pub fn axis_extents(&self) -> Cell {
+        self.max - self.min
+    }
+
+    pub fn min(&self) -> Cell {
+        self.min
+    }
+
+    pub fn max(&self) -> Cell {
+        self.max
+    }
+
     /// Add an `element` to the spatial hash to a specific `cell`.
     pub fn put(&mut self, cell: Cell, element: T) {
+        self.min = self.min.min(cell);
+        self.max = self.max.max(cell);
         let vec = self.map.entry(cell).or_insert_with(|| Vec::new());
         vec.push(element);
     }
@@ -404,11 +455,15 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
     ///
     /// Useful when updating the spatial hash every frame.
     pub fn clear(&mut self) {
+        self.min = Cell::MAX;
+        self.max = Cell::MIN;
         self.map.values_mut().for_each(Vec::clear);
     }
 
     /// Completely trashes all data, deallocating all buckets.
     pub fn empty(&mut self) {
+        self.min = Cell::MAX;
+        self.max = Cell::MIN;
         self.map.clear();
     }
 

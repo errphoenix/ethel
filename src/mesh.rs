@@ -4,14 +4,21 @@ use crate::shader::glsl::GlslStorage;
 
 /// The ID that represents a Mesh present on GPU memory, from the CPU.
 ///
+/// An ID of `0` represents a `null` mesh: this is currently an empty mesh, but
+/// it could be changed to a "debug" mesh in the future.
+///
 /// It is used to link objects or "renderables" to a mesh that is present on
 /// the GPU through its [`Metadata`].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Id(pub(crate) u32);
 
 impl Id {
-    pub unsafe fn from_value(index: u32) -> Self {
+    pub const unsafe fn from_value(index: u32) -> Self {
         Self(index)
+    }
+
+    pub const fn is_null(self) -> bool {
+        self.0 == 0
     }
 }
 
@@ -44,19 +51,22 @@ const INITIAL_VERTEX_ALLOC: usize = INITIAL_MESH_ALLOC * 8;
 #[derive(Default, Clone, Debug)]
 pub struct Meshadata {
     metadata: Vec<Metadata>,
+
+    /// Vertex offset
     head: u32,
 }
 
 impl Meshadata {
     pub fn new() -> Self {
-        Self {
-            metadata: Vec::with_capacity(INITIAL_MESH_ALLOC),
-            head: 0,
-        }
+        let mut metadata = Vec::with_capacity(INITIAL_MESH_ALLOC + 1);
+        metadata.push(Metadata::default());
+
+        Self { metadata, head: 0 }
     }
 
     pub fn clear(&mut self) {
         self.metadata.clear();
+        self.metadata.push(Metadata::default());
         self.head = 0;
     }
 
@@ -74,7 +84,7 @@ impl Meshadata {
         &self.metadata[id.0 as usize]
     }
 
-    /// The current head of the vertex buffer.
+    /// The current head (offset) of the vertex buffer.
     pub fn head(&self) -> u32 {
         self.head
     }
