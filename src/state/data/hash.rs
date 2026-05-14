@@ -122,9 +122,9 @@ impl SpatialResolution {
     #[inline]
     pub const fn approx_point(&self, cell: Cell) -> glam::Vec3 {
         glam::vec3(
-            (cell.x as f32 / self.0) + self.0 * 0.5,
-            (cell.y as f32 / self.0) + self.0 * 0.5,
-            (cell.z as f32 / self.0) + self.0 * 0.5,
+            (cell.x as f32 * self.0) + self.0 * 0.5,
+            (cell.y as f32 * self.0) + self.0 * 0.5,
+            (cell.z as f32 * self.0) + self.0 * 0.5,
         )
     }
 }
