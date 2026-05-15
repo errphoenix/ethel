@@ -342,7 +342,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct View<'buf, T: Sized> {
     slice: &'buf [T],
     offset: u32,

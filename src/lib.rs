@@ -13,7 +13,7 @@ use crate::{
     render::{
         Renderer, Resolution, ScreenSpace,
         buffer::{self, Layout, StorageSection},
-        command::GpuCommandQueue,
+        command::{DrawGroups, GpuCommandQueue},
     },
     state::{
         State,
@@ -26,11 +26,11 @@ pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::
 
 pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 
-pub trait StateHandler<FrameData: Sized> {
+pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameData>,
-        command_queue: &mut GpuCommandQueue<crate::DrawCommand>,
+        command_queue: &mut GpuCommandQueue<crate::DrawCommand, RG>,
     );
 
     fn step(
@@ -95,15 +95,17 @@ impl<FrameData: Sized> StartupHandler<FrameData> {
     }
 }
 
-impl<Fd, Sh, Rh> janus::context::Setup<State<Fd, Sh>, Renderer<Fd, Rh>> for StartupHandler<Fd>
+impl<Fd, Sh, Rh, RG> janus::context::Setup<State<Fd, Sh, RG>, Renderer<Fd, Rh>>
+    for StartupHandler<Fd>
 where
     Fd: Sized + Default,
-    Sh: StateHandler<Fd> + Default,
+    Sh: StateHandler<Fd, RG> + Default,
     Rh: RenderHandler<Fd> + Default,
+    RG: DrawGroups,
 {
     fn init(
         self,
-        state: &mut State<Fd, Sh>,
+        state: &mut State<Fd, Sh, RG>,
         renderer: &mut Renderer<Fd, Rh>,
     ) -> Result<(), &'static str>
     where

@@ -2,7 +2,10 @@ use janus::sync::Mirror;
 
 use crate::{
     StateHandler,
-    render::{ScreenSpace, command::GpuCommandQueue},
+    render::{
+        ScreenSpace,
+        command::{DrawGroups, GpuCommandQueue},
+    },
     state::{
         camera::ViewPoint,
         cross::{Cross, Producer},
@@ -14,8 +17,8 @@ pub mod cross;
 pub mod data;
 pub mod time;
 
-#[derive(Debug, Default)]
-pub struct State<D: Sized, T: StateHandler<D>> {
+#[derive(Debug)]
+pub struct State<D: Sized, T: StateHandler<D, RG>, RG: DrawGroups> {
     input: crate::InputSystem,
 
     screen: Mirror<ScreenSpace>,
@@ -23,12 +26,35 @@ pub struct State<D: Sized, T: StateHandler<D>> {
     handler: T,
 
     boundary: Cross<Producer, D>,
-    cmd_queue: GpuCommandQueue<crate::DrawCommand>,
+    cmd_queue: GpuCommandQueue<crate::DrawCommand, RG>,
+}
+
+impl<D, T, RG> Default for State<D, T, RG>
+where
+    D: Sized + Default,
+    T: StateHandler<D, RG> + Default,
+    RG: DrawGroups,
+{
+    fn default() -> Self {
+        Self {
+            input: Default::default(),
+            screen: Default::default(),
+            view: Default::default(),
+            handler: Default::default(),
+            boundary: Default::default(),
+            cmd_queue: GpuCommandQueue::new(),
+        }
+    }
 }
 
 pub(crate) const DEFAULT_STEP: std::time::Duration = std::time::Duration::from_millis(8);
 
-impl<D: Sized, T: StateHandler<D>> State<D, T> {
+impl<D, T, RG> State<D, T, RG>
+where
+    D: Sized,
+    T: StateHandler<D, RG>,
+    RG: DrawGroups,
+{
     pub fn handler_init_callback<F: FnOnce(&mut T)>(&mut self, callback: F) {
         callback(&mut self.handler)
     }
@@ -45,11 +71,11 @@ impl<D: Sized, T: StateHandler<D>> State<D, T> {
         self.handler.upload_gpu(&self.boundary, &mut self.cmd_queue);
     }
 
-    pub fn command_queue(&self) -> &GpuCommandQueue<crate::DrawCommand> {
+    pub fn command_queue(&self) -> &GpuCommandQueue<crate::DrawCommand, RG> {
         &self.cmd_queue
     }
 
-    pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<crate::DrawCommand> {
+    pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<crate::DrawCommand, RG> {
         &mut self.cmd_queue
     }
 
@@ -82,7 +108,12 @@ impl<D: Sized, T: StateHandler<D>> State<D, T> {
     }
 }
 
-impl<D: Sized, T: StateHandler<D>> janus::context::Update for State<D, T> {
+impl<D, T, RG> janus::context::Update for State<D, T, RG>
+where
+    D: Sized,
+    T: StateHandler<D, RG>,
+    RG: DrawGroups,
+{
     #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
         self.input.poll_key_events();
