@@ -162,13 +162,11 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// `ssbo_index` if provided. Otherwise, the SSBO binding index will
     /// correspond to the one specified in this buffer's [`Layout`].
     ///
-    /// This function is a no-op if `ssbo_index` is `None` and the given
-    /// `partition` does not have an SSBO binding index in this buffer's
-    /// [`Layout`].
-    ///
     /// # Panic
     /// * If `section` is not a value within the range (0, 2).
     /// * If `partition` does not correspond to a valid partition index.
+    /// * If `ssbo_index` is `None` and the buffer's layout does not specify
+    ///   an ssbo index for the specified `partition` to fallback to.
     pub fn bind_shader_storage_single(
         &self,
         section: usize,
@@ -178,20 +176,22 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         assert_tb_section!(section);
         assert_partition!(PARTS, partition);
 
-        if let Some(binding) = ssbo_index.or_else(|| self.layout.ssbo_of(partition)) {
-            let base_offset = (self.layout.len() * section) as isize;
+        let binding = ssbo_index
+            .or_else(|| self.layout.ssbo_of(partition))
+            .unwrap();
 
-            let offset = self.layout.offset_at(partition) as isize;
-            let length = self.layout.length_at(partition) as isize;
-            unsafe {
-                janus::gl::BindBufferRange(
-                    janus::gl::SHADER_STORAGE_BUFFER,
-                    binding,
-                    self.gl_obj,
-                    base_offset + offset,
-                    length,
-                );
-            }
+        let base_offset = (self.layout.len() * section) as isize;
+
+        let offset = self.layout.offset_at(partition) as isize;
+        let length = self.layout.length_at(partition) as isize;
+        unsafe {
+            janus::gl::BindBufferRange(
+                janus::gl::SHADER_STORAGE_BUFFER,
+                binding,
+                self.gl_obj,
+                base_offset + offset,
+                length,
+            );
         }
     }
 
