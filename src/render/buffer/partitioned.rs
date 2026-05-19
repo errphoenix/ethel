@@ -207,7 +207,9 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         assert_tb_section!(section);
 
         for part in 0..PARTS {
-            self.bind_shader_storage_single(section, part, None);
+            if self.layout.ssbo_of(part).is_some() {
+                self.bind_shader_storage_single(section, part, None);
+            }
         }
     }
 
