@@ -58,6 +58,7 @@ pub(crate) use assert_tb_section;
 pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
+    lengths: [u32; 3],
 
     /// Capacity per each section. This is number of elements.
     capacity: usize,
@@ -123,9 +124,12 @@ where
             }
         }
 
+        let lengths = [0u32; 3];
+
         Self {
             gl_obj,
             ptr,
+            lengths,
             capacity,
             _marker: std::marker::PhantomData,
         }
@@ -196,6 +200,18 @@ where
         }
     }
 
+    pub fn set_length(&self, section: usize, length: u32) {
+        let p = self.lengths.as_ptr() as *mut u32;
+        unsafe {
+            std::ptr::copy_nonoverlapping(&length, p.add(section), 1);
+        }
+    }
+
+    pub fn length(&self, section: usize) -> usize {
+        assert_tb_section!(section);
+        self.lengths[section] as usize
+    }
+
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -225,6 +241,7 @@ where
         let src = data.as_ptr();
         let avail = self.capacity - offset;
         let len = avail.min(data.len());
+        self.lengths[section] = len as u32;
 
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
@@ -308,6 +325,7 @@ where
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
+        self.lengths[section] = data_len as u32;
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
