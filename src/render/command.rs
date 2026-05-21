@@ -153,6 +153,10 @@ impl<C: DrawCmd, G: DrawGroups> GpuCommandQueue<C, G> {
         self.queue.len()
     }
 
+    pub fn index(&self) -> u32 {
+        self.head.load(Ordering::Relaxed)
+    }
+
     fn get_head(&self) -> Option<Instruction<C, G>> {
         let head = self.head.load(Ordering::Acquire);
         let instr = self.queue.get(head as usize);

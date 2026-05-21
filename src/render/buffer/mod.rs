@@ -2,6 +2,8 @@ pub mod immutable;
 pub mod layout;
 pub mod partitioned;
 
+use std::cell::UnsafeCell;
+
 pub use immutable::{ImmutableBuffer, UninitImmutableBuffer};
 pub use layout::Layout;
 pub use partitioned::PartitionedTriBuffer;
@@ -58,7 +60,7 @@ pub(crate) use assert_tb_section;
 pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
-    lengths: [u32; 3],
+    lengths: [UnsafeCell<u32>; 3],
 
     /// Capacity per each section. This is number of elements.
     capacity: usize,
@@ -124,7 +126,7 @@ where
             }
         }
 
-        let lengths = [0u32; 3];
+        let lengths = [UnsafeCell::new(0), UnsafeCell::new(0), UnsafeCell::new(0)];
 
         Self {
             gl_obj,
@@ -177,11 +179,12 @@ where
 
         let ptr = self.ptr[section];
         let slice = unsafe { std::slice::from_raw_parts(ptr, self.capacity) };
+        let length = unsafe { *self.lengths[section].get() };
 
         View {
             slice,
+            length,
             offset: 0,
-            length: self.capacity as u32,
             source: self.gl_obj[section],
         }
     }
@@ -191,25 +194,26 @@ where
 
         let ptr = self.ptr[section];
         let slice = unsafe { std::slice::from_raw_parts_mut(ptr, self.capacity) };
+        let length = unsafe { *self.lengths[section].get() };
 
         ViewMut {
             slice,
+            length,
             offset: 0,
-            length: self.capacity as u32,
             source: self.gl_obj[section],
         }
     }
 
     pub fn set_length(&self, section: usize, length: u32) {
-        let p = self.lengths.as_ptr() as *mut u32;
+        let p = self.lengths[section].get() as *mut u32;
         unsafe {
-            std::ptr::copy_nonoverlapping(&length, p.add(section), 1);
+            *p = length;
         }
     }
 
     pub fn length(&self, section: usize) -> usize {
         assert_tb_section!(section);
-        self.lengths[section] as usize
+        (unsafe { *self.lengths[section].get() }) as usize
     }
 
     pub fn capacity(&self) -> usize {
@@ -241,7 +245,7 @@ where
         let src = data.as_ptr();
         let avail = self.capacity - offset;
         let len = avail.min(data.len());
-        self.lengths[section] = len as u32;
+        *(self.lengths[section].get_mut()) = len as u32;
 
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
@@ -325,7 +329,7 @@ where
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
-        self.lengths[section] = data_len as u32;
+        *(self.lengths[section].get_mut()) = data_len as u32;
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
@@ -380,6 +384,13 @@ impl<'buf, T: Sized> View<'buf, T> {
     /// The original offset of the data in the buffer it belongs to.
     pub const fn offset(&self) -> u32 {
         self.offset
+    }
+
+    /// The total capacity of this view of elements `T`.
+    ///
+    /// This is basically the length of the inner slice.
+    pub const fn capacity(&self) -> u32 {
+        self.slice.len() as u32
     }
 
     /// The length of this view as number of elements `T`.
@@ -461,6 +472,13 @@ impl<'buf, T: Sized> ViewMut<'buf, T> {
     /// The original offset of the data in the buffer it belongs to.
     pub const fn offset(&self) -> u32 {
         self.offset
+    }
+
+    /// The total capacity of this view of elements `T`.
+    ///
+    /// This is basically the length of the inner slice.
+    pub const fn capacity(&self) -> u32 {
+        self.slice.len() as u32
     }
 
     /// The length in bytes.
