@@ -216,10 +216,7 @@ impl<'buf, C: DrawCmd + Clone + Copy> GpuCommandDispatch<'buf, C> {
     }
 
     pub fn dispatch(&self) {
-        // todo: pass count, somehow; maybe read from shared buffer
-        // would require making the command tri buffer a partitioned tri buffer
-
-        let len = self.command_buffer.len() as i32;
+        let len = self.command_buffer.length() as i32;
         let gl_obj = self.command_buffer.source();
 
         unsafe {
