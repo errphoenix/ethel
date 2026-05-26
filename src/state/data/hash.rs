@@ -127,6 +127,33 @@ impl SpatialResolution {
             (cell.z as f32 * self.0) + self.0 * 0.5,
         )
     }
+
+    #[inline]
+    pub fn aligned_adjacent_cells(&self, point: glam::Vec3) -> [Cell; 8] {
+        let half_res = SpatialResolution::new(self.0 * 0.5);
+        let half_cell = half_res.encode_point(point);
+
+        let qx = (half_cell.x % 2) * 2 - 1;
+        let qy = (half_cell.y % 2) * 2 - 1;
+        let qz = (half_cell.z % 2) * 2 - 1;
+
+        let cx = Cell::new(-qx, 0, 0);
+        let cy = Cell::new(0, -qy, 0);
+        let cz = Cell::new(0, 0, -qz);
+
+        let cell_000 = self.encode_point(point);
+        let cell_010 = self.encode_point(point) + cx;
+        let cell_100 = self.encode_point(point) + cz;
+        let cell_110 = self.encode_point(point) + cz + cz;
+        let cell_001 = self.encode_point(point) + cy;
+        let cell_011 = self.encode_point(point) + cy + cx;
+        let cell_101 = self.encode_point(point) + cy + cz;
+        let cell_111 = self.encode_point(point) + cy + cx + cz;
+
+        [
+            cell_000, cell_010, cell_100, cell_110, cell_001, cell_011, cell_101, cell_111,
+        ]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -243,6 +270,11 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     #[inline]
     pub fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
         self.resolution.approx_point(cell)
+    }
+
+    #[inline]
+    pub fn aligned_adjacent_cells(&self, point: glam::Vec3) -> [Cell; 8] {
+        self.resolution.aligned_adjacent_cells(point)
     }
 
     pub fn dump_soa(&mut self, positions: &[glam::Vec3], elements: &[T]) {
@@ -484,6 +516,11 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
     }
 
     #[inline]
+    pub fn aligned_adjacent_cells(&self, point: glam::Vec3) -> [Cell; 8] {
+        self.resolution.aligned_adjacent_cells(point)
+    }
+
+    #[inline]
     pub fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
         self.resolution.approx_point(cell)
     }
@@ -504,5 +541,22 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
             let cell = self.cell_at(point);
             self.put(cell, element);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adjacent_bounding_cells() {
+        let hash = FxLsSpatialHash::<()>::new(SpatialResolution::new(1.0));
+
+        const POINT: glam::Vec3 = glam::vec3(0.8, 0.35, 1.0);
+        const CELL_M: Cell = Cell::new(2, 1, 2);
+
+        let ac = hash.aligned_adjacent_cells(POINT);
+
+        assert_eq!(ac.last().copied().unwrap(), CELL_M);
     }
 }
