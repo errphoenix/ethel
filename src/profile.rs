@@ -218,6 +218,20 @@ impl Profiler {
         func_return
     }
 
+    pub fn log_explicit(&mut self, name: &'static str, start: Instant, end: Instant) {
+        let page = self.page;
+        let time_offset = self.page_time;
+
+        self.stack.push(Frame {
+            name,
+            page,
+            timestamp: (start - self.init_time).as_micros() as u64,
+            start: (start - time_offset).as_nanos() as u64,
+            end: (end - time_offset).as_nanos() as u64,
+            trace_handle: self.frame_trace_current,
+        });
+    }
+
     pub fn page(&mut self) {
         self.page += 1;
         self.page_time = Instant::now();
