@@ -1,3 +1,5 @@
+use std::cell::UnsafeCell;
+
 use crate::render::buffer::{InitStrategy, View, ViewMut, assert_tb_section, layout::Layout};
 
 macro_rules! assert_partition {
@@ -69,11 +71,24 @@ macro_rules! assert_partition {
 /// [`Cross`]: crate::state::cross::Cross
 /// [`Producer`]: crate::state::cross::Producer
 /// [`Consumer`]: crate::state::cross::Consumer
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct PartitionedTriBuffer<const PARTS: usize> {
     gl_obj: u32,
     layout: Layout<PARTS>,
     ptr: *mut u8,
+    lengths: [[UnsafeCell<u32>; PARTS]; 3],
+}
+
+impl<const PARTS: usize> Default for PartitionedTriBuffer<PARTS> {
+    fn default() -> Self {
+        let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(0)));
+        Self {
+            gl_obj: Default::default(),
+            layout: Default::default(),
+            ptr: Default::default(),
+            lengths,
+        }
+    }
 }
 
 unsafe impl<const PARTS: usize> Sync for PartitionedTriBuffer<PARTS> {}
@@ -102,10 +117,12 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
             janus::gl::MapBufferRange(janus::gl::COPY_WRITE_BUFFER, 0, total_length, flags)
         } as *mut u8;
 
+        let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(0)));
         Self {
             gl_obj,
             layout,
             ptr,
+            lengths,
         }
     }
 
@@ -211,6 +228,18 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
                 self.bind_shader_storage_single(section, part, None);
             }
         }
+    }
+
+    pub fn set_length(&self, section: usize, part: usize, length: u32) {
+        let p = self.lengths[section][part].get() as *mut u32;
+        unsafe {
+            *p = length;
+        }
+    }
+
+    pub fn length(&self, section: usize, part: usize) -> usize {
+        assert_tb_section!(section);
+        (unsafe { *self.lengths[section][part].get() }) as usize
     }
 
     /// Copy the given `data` in a `section` of the storage buffer at a given
@@ -340,12 +369,12 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(partition);
-        let length = self.layout.length_at(partition);
-        let len = length / size_of::<T>();
+        let cap = self.layout.length_at(partition) / size_of::<T>();
+        let len = self.length(section, partition);
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *const T;
-            let slice = std::slice::from_raw_parts(ptr, len);
+            let slice = std::slice::from_raw_parts(ptr, cap);
             View {
                 slice,
                 offset: offset as u32,
@@ -398,16 +427,16 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         let base_offset = section * self.layout.len();
         let offset = self.layout.offset_at(partition);
-        let length = self.layout.length_at(partition);
-        let len = length / size_of::<T>();
+        let cap = self.layout.length_at(partition) / size_of::<T>();
+        let len = self.length(section, partition);
 
         unsafe {
             let ptr = self.ptr.add(base_offset + offset) as *mut T;
-            let slice = std::slice::from_raw_parts_mut(ptr, len);
+            let slice = std::slice::from_raw_parts_mut(ptr, cap);
             ViewMut {
                 slice,
                 offset: offset as u32,
-                length: length as u32,
+                length: len as u32,
                 source: self.gl_obj,
             }
         }
@@ -452,6 +481,9 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         // safe length of data, in bytes
         let data_len = avail.min(data_bytes);
+
+        let total_len = data_len / size_of::<T>();
+        self.set_length(section, partition, total_len as u32);
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
@@ -553,6 +585,8 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
+        let total_len = data_len / size_of::<T>();
+        self.set_length(section, partition, total_len as u32);
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
