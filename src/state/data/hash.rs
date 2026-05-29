@@ -133,9 +133,9 @@ impl SpatialResolution {
         let half_res = SpatialResolution::new(self.0 * 0.5);
         let half_cell = half_res.encode_point(point);
 
-        let qx = (half_cell.x % 2) * 2 - 1;
-        let qy = (half_cell.y % 2) * 2 - 1;
-        let qz = (half_cell.z % 2) * 2 - 1;
+        let qx = (half_cell.x.abs() % 2) * 2 - 1;
+        let qy = (half_cell.y.abs() % 2) * 2 - 1;
+        let qz = (half_cell.z.abs() % 2) * 2 - 1;
 
         let cx = Cell::new(-qx, 0, 0);
         let cy = Cell::new(0, -qy, 0);
@@ -144,7 +144,7 @@ impl SpatialResolution {
         let cell_000 = self.encode_point(point);
         let cell_010 = self.encode_point(point) + cx;
         let cell_100 = self.encode_point(point) + cz;
-        let cell_110 = self.encode_point(point) + cz + cz;
+        let cell_110 = self.encode_point(point) + cx + cz;
         let cell_001 = self.encode_point(point) + cy;
         let cell_011 = self.encode_point(point) + cy + cx;
         let cell_101 = self.encode_point(point) + cy + cz;
