@@ -1,5 +1,8 @@
 use std::collections::hash_map::{Keys, Values};
 
+#[cfg(feature = "rayon")]
+use rayon::collections::hash_map::Iter;
+
 use rustc_hash::FxHashMap as HashMap;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -165,6 +168,15 @@ pub struct FxSpatialHash<T: Clone + Copy> {
 
     min: Cell,
     max: Cell,
+}
+
+#[cfg(feature = "rayon")]
+impl<T: Clone + Copy + Sync> FxSpatialHash<T> {
+    pub fn par_iter(&self) -> Iter<'_, Cell, T> {
+        use rayon::iter::IntoParallelRefIterator;
+
+        self.map.par_iter()
+    }
 }
 
 impl<T: Default + Clone + Copy> Default for FxSpatialHash<T> {
@@ -405,6 +417,15 @@ pub struct FxLsSpatialHash<T: Clone + Copy> {
 
     min: Cell,
     max: Cell,
+}
+
+#[cfg(feature = "rayon")]
+impl<T: Clone + Copy + Sync> FxLsSpatialHash<T> {
+    pub fn par_iter(&self) -> Iter<'_, Cell, Vec<T>> {
+        use rayon::iter::IntoParallelRefIterator;
+
+        self.map.par_iter()
+    }
 }
 
 impl<T: Default + Clone + Copy> Default for FxLsSpatialHash<T> {
