@@ -124,16 +124,17 @@ where
             let mds = mesh::BUFFER_MESH_META_INDEX;
             mesh_buf.fill_partition(mds, &metadata);
 
-            *renderer.mesh_buffer_mut() = mesh_buf.finish();
+            renderer.mesh_buffer = mesh_buf.finish();
         }
 
-        let m_vp = state.viewpoint_mirror().clone();
-        *renderer.viewpoint_mirror_mut() = m_vp;
+        let m_vp = state.viewpoint_shared().clone();
+        renderer.viewpoint = m_vp;
 
         let frame_data = (self.frame_data_init)();
         let (producer, consumer) = cross::create(frame_data);
+
+        renderer.boundary = consumer;
         *state.boundary_mut() = producer;
-        *renderer.boundary_mut() = consumer;
         *state.command_queue_mut() = GpuCommandQueue::new();
 
         (self.gl_state_init)();
