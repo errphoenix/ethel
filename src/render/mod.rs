@@ -2,6 +2,8 @@ pub mod buffer;
 pub mod command;
 pub mod sync;
 
+use std::sync::Arc;
+
 use glam::Vec4Swizzles;
 
 use crate::{
@@ -164,16 +166,16 @@ pub struct Renderer<D: Sized, T: RenderHandler<D>> {
     // without a vao bound during draw calls
     render_vao: u32,
 
-    mesh_buffer: ImmutableBuffer<2>,
-    metadata: Meshadata,
+    pub mesh_buffer: ImmutableBuffer<2>,
+    pub metadata: Meshadata,
 
-    screen: janus::sync::Mirror<ScreenSpace>,
-    view: janus::sync::Mirror<ViewPoint>,
+    pub screen_space: janus::sync::Mirror<ScreenSpace>,
+    pub viewpoint: Arc<janus::sync::TriCell<ViewPoint>>,
 
     pub(crate) handler: T,
 
     sync_barrier: SyncBarrier,
-    boundary: Cross<Consumer, D>,
+    pub boundary: Cross<Consumer, D>,
 }
 
 impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
@@ -181,48 +183,28 @@ impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
         &self.mesh_buffer
     }
 
-    pub fn mesh_buffer_mut(&mut self) -> &mut ImmutableBuffer<2> {
-        &mut self.mesh_buffer
-    }
-
     pub fn screen_space(&self) -> &ScreenSpace {
-        &self.screen
+        &self.screen_space
     }
 
     pub fn screen_space_mirror(&self) -> &janus::sync::Mirror<ScreenSpace> {
-        &self.screen
-    }
-
-    pub fn screen_space_mirror_mut(&mut self) -> &mut janus::sync::Mirror<ScreenSpace> {
-        &mut self.screen
+        &self.screen_space
     }
 
     pub fn metadata(&self) -> &Meshadata {
         &self.metadata
     }
 
-    pub fn metadata_mut(&mut self) -> &mut Meshadata {
-        &mut self.metadata
-    }
-
     pub fn boundary(&self) -> &Cross<Consumer, D> {
         &self.boundary
     }
 
-    pub fn boundary_mut(&mut self) -> &mut Cross<Consumer, D> {
-        &mut self.boundary
-    }
-
     pub fn view(&self) -> &ViewPoint {
-        &self.view
+        &self.viewpoint
     }
 
-    pub fn viewpoint_mirror(&self) -> &janus::sync::Mirror<ViewPoint> {
-        &self.view
-    }
-
-    pub fn viewpoint_mirror_mut(&mut self) -> &mut janus::sync::Mirror<ViewPoint> {
-        &mut self.view
+    pub fn viewpoint_shared(&self) -> &Arc<janus::sync::TriCell<ViewPoint>> {
+        &self.viewpoint
     }
 }
 
@@ -235,11 +217,11 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
             }
         }
         {
-            if self.screen.check_sync_status() {
-                self.screen.sync().unwrap();
-                let resolution = self.screen.resolution;
+            if self.screen_space.check_sync_status() {
+                self.screen_space.sync().unwrap();
+                let resolution = self.screen_space.resolution;
                 if resolution.is_changed() {
-                    self.screen.publish_with(|screen| {
+                    self.screen_space.publish_with(|screen| {
                         let fov = screen.fov();
                         let w = resolution.width;
                         let h = resolution.height;
@@ -257,7 +239,8 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
             }
         }
 
-        self.handler.pre_frame(&mut self.screen, &mut self.view, dt);
+        self.handler
+            .pre_frame(&mut self.screen_space, &self.viewpoint, dt);
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
                 self.mesh_buffer.bind_shader_storage();
@@ -286,7 +269,7 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
     }
 
     fn set_resolution(&mut self, (w, h): (f32, f32)) {
-        self.screen.publish_with(|screen| {
+        self.screen_space.publish_with(|screen| {
             screen.resolution = Resolution {
                 dirty: true,
                 width: w,

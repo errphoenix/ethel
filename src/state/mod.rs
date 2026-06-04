@@ -1,4 +1,6 @@
-use janus::sync::Mirror;
+use std::sync::Arc;
+
+use janus::sync;
 
 use crate::{
     StateHandler,
@@ -21,8 +23,8 @@ pub mod time;
 pub struct State<D: Sized, T: StateHandler<D, RG>, RG: DrawGroups> {
     input: crate::InputSystem,
 
-    screen: Mirror<ScreenSpace>,
-    view: Mirror<ViewPoint>,
+    screen: sync::Mirror<ScreenSpace>,
+    view: Arc<sync::TriCell<ViewPoint>>,
     handler: T,
 
     boundary: Cross<Producer, D>,
@@ -87,23 +89,23 @@ where
         &mut self.input
     }
 
-    pub fn viewpoint_mirror(&self) -> &Mirror<ViewPoint> {
+    pub fn viewpoint(&self) -> &ViewPoint {
         &self.view
     }
 
-    pub fn viewpoint_mirror_mut(&mut self) -> &mut Mirror<ViewPoint> {
-        &mut self.view
+    pub fn viewpoint_shared(&self) -> &Arc<sync::TriCell<ViewPoint>> {
+        &self.view
     }
 
     pub fn screen_space(&self) -> &ScreenSpace {
         &self.screen
     }
 
-    pub fn screen_space_mirror(&self) -> &Mirror<ScreenSpace> {
+    pub fn screen_space_mirror(&self) -> &sync::Mirror<ScreenSpace> {
         &self.screen
     }
 
-    pub fn screen_space_mirror_mut(&mut self) -> &mut Mirror<ScreenSpace> {
+    pub fn screen_space_mirror_mut(&mut self) -> &mut sync::Mirror<ScreenSpace> {
         &mut self.screen
     }
 }
@@ -118,7 +120,7 @@ where
     fn update(&mut self, delta: janus::context::DeltaTime) {
         self.input.poll_key_events();
         self.handler
-            .step(&mut self.input, &mut self.screen, &mut self.view, delta);
+            .step(&mut self.input, &mut self.screen, &self.view, delta);
         self.upload();
     }
 

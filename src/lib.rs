@@ -6,7 +6,10 @@ pub mod state;
 #[cfg(feature = "profile")]
 pub mod profile;
 
-use janus::{input::InputState, sync::Mirror};
+use janus::{
+    input::InputState,
+    sync::{Mirror, TriCell},
+};
 
 use crate::{
     mesh::MeshStaging,
@@ -37,7 +40,7 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
         &mut self,
         input: &mut crate::InputSystem,
         screen: &mut Mirror<ScreenSpace>,
-        view_point: &mut Mirror<ViewPoint>,
+        view_point: &TriCell<ViewPoint>,
         delta: janus::context::DeltaTime,
     );
 
@@ -54,7 +57,7 @@ pub trait RenderHandler<FrameData: Sized> {
     fn pre_frame(
         &mut self,
         screen: &mut Mirror<ScreenSpace>,
-        view: &mut Mirror<ViewPoint>,
+        view: &TriCell<ViewPoint>,
         delta: janus::context::DeltaTime,
     );
 
