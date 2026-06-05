@@ -6,6 +6,9 @@ pub mod state;
 #[cfg(feature = "profile")]
 pub mod profile;
 
+#[cfg(feature = "assets")]
+pub mod assets;
+
 use janus::{
     input::InputState,
     sync::{Mirror, TriCell},

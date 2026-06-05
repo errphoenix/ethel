@@ -26,3 +26,4 @@ harness = false
 default = []
 profile = [ "dep:serde", "dep:postcard", "dep:sysinfo"]
 rayon = ["dep:rayon"]
+assets = ["janus/textures"]
