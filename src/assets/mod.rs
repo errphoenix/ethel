@@ -1,5 +1,6 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
 
+use image::DynamicImage;
 use janus::{
     StringHash,
     texture::{Texture, TextureView},
@@ -32,11 +33,59 @@ macro_rules! hashet {
     };
 }
 
-pub trait ImportAsset<T: HasAsset> {
+pub trait ProcessResource<T: HasAsset> {
+    fn process_resource(&self) -> Option<T>;
+}
+
+pub trait Import<E: Error + 'static> {
+    fn import_from_dir<P: AsRef<Path> + Debug>(path: P, recursive: bool) -> Vec<Self>
+    where
+        Self: Sized,
+    {
+        Self::try_import_from_dir(&path, recursive).expect(&format!(
+            "unexpected error while importing assets from dir {path:?} [recursive: {recursive}]"
+        ))
+    }
+
+    fn try_import_from_dir<P: AsRef<Path>>(
+        path: P,
+        recursive: bool,
+    ) -> Result<Vec<Self>, Box<dyn std::error::Error>>
+    where
+        Self: Sized,
+    {
+        let dir = std::fs::read_dir(path)?;
+        let mut buffer = Vec::new();
+
+        for entry in dir {
+            let entry = entry?;
+            let path = entry.path();
+
+            if entry.file_type()?.is_dir() {
+                if !recursive {
+                    continue;
+                }
+
+                let from_dir = Self::try_import_from_dir(path, true)?;
+                buffer.extend(from_dir);
+            } else {
+                let from_file = Self::try_import_from_file(path)?;
+                buffer.push(from_file);
+            }
+        }
+
+        Ok(buffer)
+    }
+
     /// Import the asset from a file `path` or panic.
-    fn import_from_file<P: AsRef<Path>>(path: P) -> T {
-        Self::try_import_from_file(path)
-            .expect("unexpected file open error when trying to read file path {path}")
+    fn import_from_file<P: AsRef<Path>>(path: P) -> Self
+    where
+        Self: Sized,
+    {
+        let bytes = std::fs::read(path)
+            .expect("unexpected file open error when trying to read file path {path}");
+
+        Self::import(&bytes)
     }
 
     /// Attempts to import the asset from a file `path`.
@@ -45,42 +94,27 @@ pub trait ImportAsset<T: HasAsset> {
     ///
     /// # Returns
     /// This function will return an error according to
-    /// [`std::fs::OpenOptions::open`].
-    fn try_import_from_file<P: AsRef<Path>>(path: P) -> Result<T, std::io::Error> {
-        std::fs::read(path).map(|bytes| Self::import(&bytes))
+    /// [`std::fs::OpenOptions::open`] and [`image::ImageReader::open`].
+    fn try_import_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        Self: Sized,
+    {
+        let bytes = std::fs::read(path)?;
+        let result = Self::try_import(&bytes)?;
+        Ok(result)
     }
 
-    fn import(bytes: &[u8]) -> T;
+    fn import(bytes: &[u8]) -> Self
+    where
+        Self: Sized,
+    {
+        Self::try_import(bytes).expect("unexpected import error")
+    }
+
+    fn try_import(bytes: &[u8]) -> Result<Self, E>
+    where
+        Self: Sized;
 }
-
-#[derive(Debug, Eq)]
-pub struct RawAsset<T> {
-    id: AssetId,
-    inner: T,
-}
-
-impl<T> PartialEq for RawAsset<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<T> RawAsset<T> {
-    pub const fn new(id: AssetId, value: T) -> Self {
-        Self { id, inner: value }
-    }
-
-    pub const fn id(&self) -> AssetId {
-        self.id
-    }
-
-    pub const fn asset(&self) -> &T {
-        &self.inner
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TextureId(pub AssetId);
 
 pub trait HasAsset {}
 
@@ -138,6 +172,9 @@ where
 {
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextureId(pub AssetId);
+
 #[derive(Debug, Default)]
 pub struct TextureManager {
     map: HashMap<TextureId, Texture>,
@@ -172,5 +209,37 @@ impl HasAsset for Texture {}
 impl ViewAsset<TextureView> for Texture {
     fn view(&self) -> TextureView {
         Texture::view(&self)
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RawTexture(DynamicImage);
+
+impl RawTexture {
+    pub const fn new(image: DynamicImage) -> Self {
+        Self(image)
+    }
+
+    pub const fn image(&self) -> &DynamicImage {
+        &self.0
+    }
+}
+
+impl ProcessResource<Texture> for RawTexture {
+    fn process_resource(&self) -> Option<Texture> {
+        assert!(janus::gl::has_gl_init());
+        Some(
+            Texture::from_image(&self.0)
+                .expect("cannot process texture resource: unsupported image format"),
+        )
+    }
+}
+
+impl Import<image::ImageError> for RawTexture {
+    fn try_import(bytes: &[u8]) -> Result<Self, image::ImageError>
+    where
+        Self: Sized,
+    {
+        image::load_from_memory(bytes).map(RawTexture::new)
     }
 }

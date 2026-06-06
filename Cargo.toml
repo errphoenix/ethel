@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 glam = "=0.31.0"
+image = { version = "0.25.10", optional = true }
 indoc = "2.0.7"
 janus = { path = "../janus", features = ["expose_gl", "render", "input"] }
 paste = "1.0.15"
@@ -26,4 +27,4 @@ harness = false
 default = []
 profile = [ "dep:serde", "dep:postcard", "dep:sysinfo"]
 rayon = ["dep:rayon"]
-assets = ["janus/textures"]
+assets = ["janus/textures", "dep:image"]
