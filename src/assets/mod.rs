@@ -13,7 +13,17 @@ impl AssetId {
 
 #[macro_export]
 macro_rules! hashet {
-    ($s:literal) => {
-        $crate::assets::AssetId($crate::assets::strings::hash(s))
+    ($se:expr) => {
+        std::cell::LazyCell::new(|| {
+            let hashed = $crate::lazy_hash_str!($se);
+            $crate::assets::AssetId(*hashed)
+        })
+    };
+    ($sl:literal) => {
+        std::cell::LazyCell::new(|| {
+            let hashed = $crate::lazy_hash_str!($sl);
+            $crate::assets::AssetId(*hashed)
+        })
     };
 }
+
