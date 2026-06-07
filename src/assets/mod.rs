@@ -1,8 +1,12 @@
-use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    path::{Path, PathBuf},
+};
 
 use image::DynamicImage;
 use janus::{
-    StringHash,
+    GpuResource, StringHash,
     texture::{Texture, TextureView},
 };
 
@@ -13,6 +17,12 @@ pub struct AssetId(pub StringHash);
 
 impl AssetId {
     pub const fn hash(&self) -> StringHash {
+        self.0
+    }
+}
+
+impl Into<StringHash> for AssetId {
+    fn into(self) -> StringHash {
         self.0
     }
 }
@@ -33,187 +43,263 @@ macro_rules! hashet {
     };
 }
 
-pub trait ProcessResource<T: HasAsset> {
-    fn process_resource(&self) -> Option<T>;
-}
-
-pub trait Import<E: Error + 'static> {
-    fn import_from_dir<P: AsRef<Path> + Debug>(path: P, recursive: bool) -> Vec<Self>
-    where
-        Self: Sized,
-    {
-        Self::try_import_from_dir(&path, recursive).expect(&format!(
-            "unexpected error while importing assets from dir {path:?} [recursive: {recursive}]"
-        ))
-    }
-
-    fn try_import_from_dir<P: AsRef<Path>>(
-        path: P,
-        recursive: bool,
-    ) -> Result<Vec<Self>, Box<dyn std::error::Error>>
-    where
-        Self: Sized,
-    {
-        let dir = std::fs::read_dir(path)?;
-        let mut buffer = Vec::new();
-
-        for entry in dir {
-            let entry = entry?;
-            let path = entry.path();
-
-            if entry.file_type()?.is_dir() {
-                if !recursive {
-                    continue;
-                }
-
-                let from_dir = Self::try_import_from_dir(path, true)?;
-                buffer.extend(from_dir);
-            } else {
-                let from_file = Self::try_import_from_file(path)?;
-                buffer.push(from_file);
-            }
-        }
-
-        Ok(buffer)
-    }
-
-    /// Import the asset from a file `path` or panic.
-    fn import_from_file<P: AsRef<Path>>(path: P) -> Self
-    where
-        Self: Sized,
-    {
-        let bytes = std::fs::read(path)
-            .expect("unexpected file open error when trying to read file path {path}");
-
-        Self::import(&bytes)
-    }
-
-    /// Attempts to import the asset from a file `path`.
-    ///
-    /// This wraps a call to [`ImportAsset::import`].
-    ///
-    /// # Returns
-    /// This function will return an error according to
-    /// [`std::fs::OpenOptions::open`] and [`image::ImageReader::open`].
-    fn try_import_from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>>
-    where
-        Self: Sized,
-    {
-        let bytes = std::fs::read(path)?;
-        let result = Self::try_import(&bytes)?;
-        Ok(result)
-    }
-
-    fn import(bytes: &[u8]) -> Self
-    where
-        Self: Sized,
-    {
-        Self::try_import(bytes).expect("unexpected import error")
-    }
-
-    fn try_import(bytes: &[u8]) -> Result<Self, E>
-    where
-        Self: Sized;
-}
-
-pub trait HasAsset {}
-
-pub trait ViewAsset<V: Clone + Copy>: HasAsset {
-    fn view(&self) -> V;
-}
-
-pub trait ManageAssets<K, V>
-where
-    K: std::cmp::Eq + std::hash::Hash,
-    V: HasAsset,
-{
-    fn inner_map(&self) -> &HashMap<K, V>;
-
-    fn inner_map_mut(&mut self) -> &mut HashMap<K, V>;
-
-    fn iter(&self) -> std::collections::hash_map::Iter<'_, K, V> {
-        self.inner_map().iter()
-    }
-
-    fn take(&mut self, id: &K) -> Option<V> {
-        self.inner_map_mut().remove(id)
-    }
-
-    fn store(&mut self, id: K, asset: V) {
-        self.inner_map_mut().insert(id, asset);
-    }
-
-    fn contains(&self, id: &K) -> bool {
-        self.inner_map().contains_key(id)
-    }
-
-    fn get<'v>(&'v self, id: &'v K) -> Option<&'v V> {
-        self.inner_map().get(id)
-    }
-}
-
-pub trait ManageViews<K, V, L>: ManageAssets<K, V>
-where
-    K: std::cmp::Eq + std::hash::Hash,
-    L: Clone + Copy,
-    V: HasAsset + ViewAsset<L>,
-{
-    fn view(&self, id: &K) -> Option<L> {
-        self.inner_map().get(id).map(|asset| V::view(asset))
-    }
-}
-
-impl<T, K, V, L> ManageViews<K, V, L> for T
-where
-    K: std::cmp::Eq + std::hash::Hash,
-    L: Clone + Copy,
-    V: HasAsset + ViewAsset<L>,
-    T: ManageAssets<K, V>,
-{
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TextureId(pub AssetId);
-
 #[derive(Debug, Default)]
-pub struct TextureManager {
-    map: HashMap<TextureId, Texture>,
+pub struct AssetRegistry<T> {
+    assets: HashMap<StringHash, T, janus::StringHasher>,
 }
 
-impl TextureManager {
+impl<T> AssetRegistry<T> {
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            assets: HashMap::with_hasher(janus::StringHasher::default()),
         }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            map: HashMap::with_capacity(capacity),
+            assets: HashMap::with_capacity_and_hasher(capacity, janus::StringHasher::default()),
+        }
+    }
+
+    pub fn insert(&mut self, id: impl Into<StringHash>, asset: T) {
+        self.assets.insert(id.into(), asset);
+    }
+
+    pub fn remove(&mut self, id: impl Into<StringHash>) -> Option<T> {
+        self.assets.remove(&id.into())
+    }
+
+    pub fn get(&self, id: impl Into<StringHash>) -> Option<&T> {
+        self.assets.get(&id.into())
+    }
+}
+
+pub trait AsView {
+    type View;
+
+    fn as_view(&self) -> Self::View;
+}
+
+impl<T: AsView> AssetRegistry<T> {
+    pub fn get_view(&self, id: impl Into<StringHash>) -> Option<T::View> {
+        self.assets.get(&id.into()).map(AsView::as_view)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum ResourceState {
+    #[default]
+    Unloaded,
+    InMemory,
+    Processed,
+}
+
+impl std::fmt::Display for ResourceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceState::Unloaded => write!(f, "UNLOADED"),
+            ResourceState::InMemory => write!(f, "IN RAM"),
+            ResourceState::Processed => write!(f, "PROCESSED (GPU)"),
         }
     }
 }
 
-impl ManageAssets<TextureId, Texture> for TextureManager {
-    fn inner_map(&self) -> &HashMap<TextureId, Texture> {
-        &self.map
+#[derive(Debug, thiserror::Error)]
+pub enum AssetError {
+    #[error("invalid resource state for requested operation: expected {expected}, got {present}.")]
+    InvalidState {
+        present: ResourceState,
+        expected: ResourceState,
+    },
+
+    #[error("failed to load: file not found at path {0}")]
+    FileNotFound(PathBuf),
+
+    #[error("failed to load due to a file io error: {0}")]
+    FileIoError(std::io::Error),
+
+    #[error("failed to load image from memory: {0}")]
+    FileImageLoadError(image::ImageError),
+
+    #[error("failed to process resource for gpu: gl context unavailable")]
+    NoGlContext,
+}
+
+pub type AssetResult<T> = Result<T, AssetError>;
+
+#[derive(Debug)]
+pub struct Handle<T>
+where
+    T: Import + IntoGpu,
+{
+    state: ResourceState,
+    source: PathBuf,
+    raw_resource: Option<T>,
+    gpu_resource: Option<T::AsGpu>,
+}
+
+macro_rules! assert_state {
+    ($s:ident, $state:expr) => {
+        if $s.state != $state {
+            return Err(AssetError::InvalidState {
+                present: $s.state,
+                expected: $state,
+            });
+        }
+    };
+}
+
+impl<T> Handle<T>
+where
+    T: Import + IntoGpu,
+{
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        Self {
+            source: path.as_ref().to_path_buf(),
+            state: ResourceState::Unloaded,
+            raw_resource: None,
+            gpu_resource: None,
+        }
     }
 
-    fn inner_map_mut(&mut self) -> &mut HashMap<TextureId, Texture> {
-        &mut self.map
+    pub const fn state(&self) -> ResourceState {
+        self.state
+    }
+
+    pub fn file_source(&self) -> &Path {
+        &self.source
+    }
+
+    pub fn raw_resource(&self) -> Option<&T> {
+        self.raw_resource.as_ref()
+    }
+
+    pub fn gpu_resource(&self) -> Option<&T::AsGpu> {
+        self.gpu_resource.as_ref()
+    }
+
+    /// Attempt to load the raw resource from disk.
+    ///
+    /// This operation must only occur during the [`ResourceState::Unloaded`]
+    /// state.
+    ///
+    /// # Returns
+    /// The operation might return any of these errors under a specific
+    /// condition:
+    /// * [`InvalidState`] if the current state of the asset does not correpond
+    ///   to [`ResourceState::unloaded`].
+    /// * [`FileNotFound`] if this asset's `path` could not be located on the
+    ///   file system.
+    /// * [`FileIoError`] wrapping a [`std::io::Error`] type for any other IO
+    ///   as according to [`std::fs::OpenOptions::open`].
+    /// * [`FileImageLoadError`] wrapping a [`image::ImageError`] type for any
+    ///   image decode error as according to [`image::ImageDecoder::decode`].
+    ///
+    /// If the operation is successful, a borrow to the `C` raw resource that
+    /// was just loaded is returned.
+    ///
+    /// [`AssetError::InvalidState`]: InvalidState
+    /// [`AssetError::FileNotFound`]: FileNotFound
+    /// [`AssetError::FileIoError`]: FileIoError
+    /// [`AssetError::FileImageLoadError`]: FileImageLoadError
+    pub fn load_to_memory(&mut self) -> AssetResult<&T> {
+        assert_state!(self, ResourceState::Unloaded);
+
+        let path = &self.source;
+        if !path.is_file() {
+            return Err(AssetError::FileNotFound(path.to_path_buf()));
+        }
+
+        let loaded = T::from_file(path)?;
+
+        self.raw_resource = Some(loaded);
+        self.state = ResourceState::InMemory;
+
+        Ok(self.raw_resource.as_ref().unwrap())
+    }
+
+    /// Attempt to load the resource to the gpu.
+    ///
+    /// This operation must be called on the graphics/windowing thread, where
+    /// the GL context resides.
+    pub fn upload_to_gpu(&mut self) -> AssetResult<&T::AsGpu> {
+        assert_state!(self, ResourceState::InMemory);
+
+        if !janus::gl::has_gl_init() {
+            return Err(AssetError::NoGlContext);
+        }
+
+        let raw_resource = self.raw_resource.as_ref().unwrap();
+        let gpu_resource = raw_resource.upload_to_gpu()?;
+
+        self.gpu_resource = Some(gpu_resource);
+        self.state = ResourceState::Processed;
+
+        Ok(self.gpu_resource.as_ref().unwrap())
+    }
+
+    // /// Acquire ownership of the GPU resource
+    // pub fn take_from_gpu(&mut self) -> AssetResult<T::AsGpu> {
+    //     assert_state!(self, ResourceState::InMemory);
+
+    //     if !janus::gl::has_gl_init() {
+    //         return Err(AssetError::NoGlContext);
+    //     }
+    // }
+}
+
+pub trait Import {
+    fn from_file<P: AsRef<Path> + Debug>(path: P) -> AssetResult<Self>
+    where
+        Self: Sized,
+    {
+        let bytes = std::fs::read(&path).map_err(|io_err| AssetError::FileIoError(io_err))?;
+        Self::from_memory(&bytes)
+    }
+
+    fn from_memory(bytes: &[u8]) -> AssetResult<Self>
+    where
+        Self: Sized;
+}
+
+pub trait IntoGpu {
+    type AsGpu;
+
+    fn upload_to_gpu(&self) -> AssetResult<Self::AsGpu>;
+
+    fn into_gpu(self) -> AssetResult<Self::AsGpu>
+    where
+        Self: Sized,
+    {
+        Self::upload_to_gpu(&self)
     }
 }
 
-impl HasAsset for Texture {}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TextureId(AssetId);
 
-impl ViewAsset<TextureView> for Texture {
-    fn view(&self) -> TextureView {
-        Texture::view(&self)
+impl Into<StringHash> for TextureId {
+    fn into(self) -> StringHash {
+        self.0.0
     }
 }
 
-#[derive(Clone, Debug, Default)]
+impl AsView for Texture {
+    type View = TextureView;
+
+    fn as_view(&self) -> Self::View {
+        self.view()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct RawTexture(DynamicImage);
+
+impl From<DynamicImage> for RawTexture {
+    fn from(value: DynamicImage) -> Self {
+        Self::new(value)
+    }
+}
 
 impl RawTexture {
     pub const fn new(image: DynamicImage) -> Self {
@@ -225,21 +311,11 @@ impl RawTexture {
     }
 }
 
-impl ProcessResource<Texture> for RawTexture {
-    fn process_resource(&self) -> Option<Texture> {
-        assert!(janus::gl::has_gl_init());
-        Some(
-            Texture::from_image(&self.0)
-                .expect("cannot process texture resource: unsupported image format"),
-        )
-    }
-}
+impl Import for RawTexture {
+    fn from_memory(bytes: &[u8]) -> Result<RawTexture, AssetError> {
+        let image = image::load_from_memory(bytes)
+            .map_err(|img_err| AssetError::FileImageLoadError(img_err))?;
 
-impl Import<image::ImageError> for RawTexture {
-    fn try_import(bytes: &[u8]) -> Result<Self, image::ImageError>
-    where
-        Self: Sized,
-    {
-        image::load_from_memory(bytes).map(RawTexture::new)
+        Ok(Self(image))
     }
 }
