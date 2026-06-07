@@ -30,13 +30,13 @@ impl Into<StringHash> for AssetId {
 #[macro_export]
 macro_rules! hashet {
     ($se:expr) => {
-        std::cell::LazyCell::new(|| {
+        std::sync::LazyLock::new(|| {
             let hashed = $crate::lazy_hash_str!($se);
             $crate::assets::AssetId(*hashed)
         })
     };
     ($sl:literal) => {
-        std::cell::LazyCell::new(|| {
+        std::sync::LazyLock::new(|| {
             let hashed = $crate::lazy_hash_str!($sl);
             $crate::assets::AssetId(*hashed)
         })

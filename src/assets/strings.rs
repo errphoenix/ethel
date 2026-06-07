@@ -1,27 +1,27 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, sync::RwLock};
 
-use janus::StringHash;
+use janus::{StringHash, StringHasher};
 
-pub type StringMap = HashMap<StringHash, &'static str, janus::StringHasher>;
+pub type StringMap = HashMap<StringHash, &'static str, StringHasher>;
 
-static REGISTRY: Mutex<StringMap> = Mutex::new(StringMap::with_hasher(janus::StringHasher::new()));
+static REGISTRY: RwLock<StringMap> = RwLock::new(StringMap::with_hasher(StringHasher::new()));
 
 #[macro_export]
 macro_rules! lazy_hash_str {
     ($sl:literal) => {
-        std::cell::LazyCell::new(|| $crate::assets::strings::hash($sl))
+        std::sync::LazyLock::new(|| $crate::assets::strings::hash($sl))
     };
     ($se:expr) => {
-        std::cell::LazyCell::new(|| $crate::assets::strings::hash($se))
+        std::sync::LazyLock::new(|| $crate::assets::strings::hash($se))
     };
 }
 
 pub fn hash(string: &'static str) -> StringHash {
     let hashed = janus::hash_string(string);
-    REGISTRY.lock().unwrap().insert(hashed, string);
+    REGISTRY.write().unwrap().insert(hashed, string);
     hashed
 }
 
 pub fn fetch(hash: &StringHash) -> Option<&'static str> {
-    REGISTRY.lock().unwrap().get(hash).copied()
+    REGISTRY.read().unwrap().get(hash).copied()
 }
