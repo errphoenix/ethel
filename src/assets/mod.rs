@@ -6,8 +6,8 @@ use std::{
 
 use image::DynamicImage;
 use janus::{
-    GpuResource, StringHash,
-    texture::{Texture, TextureView},
+    StringHash,
+    texture::{Texture, TextureError, TextureView},
 };
 
 pub mod strings;
@@ -44,11 +44,11 @@ macro_rules! hashet {
 }
 
 #[derive(Debug, Default)]
-pub struct AssetRegistry<T> {
-    assets: HashMap<StringHash, T, janus::StringHasher>,
+pub struct AssetRegistry<T: Import + Upload> {
+    assets: HashMap<StringHash, Handle<T>, janus::StringHasher>,
 }
 
-impl<T> AssetRegistry<T> {
+impl<T: Import + Upload> AssetRegistry<T> {
     pub fn new() -> Self {
         Self {
             assets: HashMap::with_hasher(janus::StringHasher::default()),
@@ -61,16 +61,11 @@ impl<T> AssetRegistry<T> {
         }
     }
 
-    pub fn insert(&mut self, id: impl Into<StringHash>, asset: T) {
-        self.assets.insert(id.into(), asset);
-    }
-
-    pub fn remove(&mut self, id: impl Into<StringHash>) -> Option<T> {
-        self.assets.remove(&id.into())
-    }
-
-    pub fn get(&self, id: impl Into<StringHash>) -> Option<&T> {
-        self.assets.get(&id.into())
+    pub fn register<P: AsRef<Path>>(&mut self, id: impl Into<StringHash>, path: P) -> &Handle<T> {
+        let id = id.into();
+        let handle = Handle::new(path.as_ref().to_path_buf());
+        self.assets.insert(id, handle);
+        self.assets.get(&id).unwrap()
     }
 }
 
@@ -80,11 +75,11 @@ pub trait AsView {
     fn as_view(&self) -> Self::View;
 }
 
-impl<T: AsView> AssetRegistry<T> {
-    pub fn get_view(&self, id: impl Into<StringHash>) -> Option<T::View> {
-        self.assets.get(&id.into()).map(AsView::as_view)
-    }
-}
+// impl<T: AsView> AssetRegistry<T> {
+//     pub fn get_view(&self, id: impl Into<StringHash>) -> Option<T::View> {
+//         self.assets.get(&id.into()).map(AsView::as_view)
+//     }
+// }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum ResourceState {
@@ -123,6 +118,12 @@ pub enum AssetError {
 
     #[error("failed to process resource for gpu: gl context unavailable")]
     NoGlContext,
+
+    #[error("failed to upload texture onto gpu: unsupported image format for texture")]
+    TextureUnsupportedImageFormat,
+
+    #[error("failed to upload texture onto gpu: unknown texture upload error")]
+    TextureUnknownUploadError,
 }
 
 pub type AssetResult<T> = Result<T, AssetError>;
@@ -130,7 +131,7 @@ pub type AssetResult<T> = Result<T, AssetError>;
 #[derive(Debug)]
 pub struct Handle<T>
 where
-    T: Import + IntoGpu,
+    T: Import + Upload,
 {
     state: ResourceState,
     source: PathBuf,
@@ -151,7 +152,7 @@ macro_rules! assert_state {
 
 impl<T> Handle<T>
 where
-    T: Import + IntoGpu,
+    T: Import + Upload,
 {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
@@ -178,6 +179,27 @@ where
         self.gpu_resource.as_ref()
     }
 
+    /// Invalidates the asset's memory state to [`ResourceState::Unloaded`].
+    ///
+    /// This allows the asset's resource to be reloaded or replaced with
+    /// [`Self::load_to_memory`] and, if needed, [`Self::upload_to_gpu`] later.
+    ///
+    /// This can be useful if the data has changed on the disk, and needs to be
+    /// updated.
+    pub fn invalidate_disk(&mut self) {
+        self.state = ResourceState::Unloaded;
+    }
+
+    /// Invalidates the asset's gpu state to [`ResourceState::InMemory`].
+    ///
+    /// This allows the asset's resource to be reloaded or replaced with
+    /// [`Self::upload_to_gpu`] later.
+    /// This can be useful if the data has changed in memory, and needs to be
+    /// updated on the gpu.
+    pub fn invalidate_gpu(&mut self) {
+        self.state = ResourceState::InMemory;
+    }
+
     /// Attempt to load the raw resource from disk.
     ///
     /// This operation must only occur during the [`ResourceState::Unloaded`]
@@ -195,7 +217,7 @@ where
     /// * [`FileImageLoadError`] wrapping a [`image::ImageError`] type for any
     ///   image decode error as according to [`image::ImageDecoder::decode`].
     ///
-    /// If the operation is successful, a borrow to the `C` raw resource that
+    /// If the operation is successful, a borrow to the `T` raw resource that
     /// was just loaded is returned.
     ///
     /// [`AssetError::InvalidState`]: InvalidState
@@ -203,7 +225,9 @@ where
     /// [`AssetError::FileIoError`]: FileIoError
     /// [`AssetError::FileImageLoadError`]: FileImageLoadError
     pub fn load_to_memory(&mut self) -> AssetResult<&T> {
-        assert_state!(self, ResourceState::Unloaded);
+        if self.raw_resource.is_some() {
+            assert_state!(self, ResourceState::Unloaded);
+        }
 
         let path = &self.source;
         if !path.is_file() {
@@ -222,6 +246,11 @@ where
     ///
     /// This operation must be called on the graphics/windowing thread, where
     /// the GL context resides.
+    ///
+    /// # Returns
+    /// Any error as according to [`T::Upload::upload_to_gpu`], or
+    /// [`AssetError::NoGlContext`] is returned if the GL context is
+    /// unavailable on this thread.
     pub fn upload_to_gpu(&mut self) -> AssetResult<&T::AsGpu> {
         assert_state!(self, ResourceState::InMemory);
 
@@ -238,14 +267,69 @@ where
         Ok(self.gpu_resource.as_ref().unwrap())
     }
 
-    // /// Acquire ownership of the GPU resource
-    // pub fn take_from_gpu(&mut self) -> AssetResult<T::AsGpu> {
-    //     assert_state!(self, ResourceState::InMemory);
+    /// Destroy the gpu resource.
+    ///
+    /// This operation must be called on the graphics/windowing thread, where
+    /// the GL context resides.
+    ///
+    /// This assumed the `Drop` implementation for the `T::AsGpu` type handles
+    /// freeing and destroying the resource.
+    ///
+    /// If the resource is still loaded in memory, the asset's state is
+    /// reversed to [`ResourceState::InMemory`], so it can be uploaded to the
+    /// gpu again immediately after with [`Self::upload_to_gpu`].
+    /// Otherwise, the asset's state is invalidated to
+    /// [`ResourceState::Unloaded`].
+    ///
+    /// # Returns
+    /// [`AssetError::NoGlContext`] is returned if the GL context is
+    /// unavailable on this thread.
+    pub fn free_from_gpu(&mut self) -> AssetResult<()> {
+        assert_state!(self, ResourceState::InMemory);
 
-    //     if !janus::gl::has_gl_init() {
-    //         return Err(AssetError::NoGlContext);
-    //     }
-    // }
+        if !janus::gl::has_gl_init() {
+            return Err(AssetError::NoGlContext);
+        }
+
+        let gpu_resource = self.gpu_resource.take();
+        drop(gpu_resource);
+
+        if self.raw_resource.is_some() {
+            self.state = ResourceState::InMemory;
+        } else {
+            self.state = ResourceState::Unloaded;
+        }
+
+        Ok(())
+    }
+
+    /// Take ownership of the asset's resource in memory.
+    ///
+    /// This operation will invalidate the resource's state to
+    /// [`ResourceState::Unloaded`] if it is not loaded on the gpu.
+    pub fn take_from_memory(&mut self) -> AssetResult<T> {
+        if self.raw_resource.is_none() {
+            assert_state!(self, ResourceState::InMemory);
+        }
+
+        let raw_resource = self.raw_resource.take().unwrap();
+        if self.state == ResourceState::InMemory {
+            self.state = ResourceState::Unloaded;
+        }
+
+        Ok(raw_resource)
+    }
+
+    /// Free the asset's resource from memory.
+    ///
+    /// This operation takes ownership of the resource with
+    /// [`Self::take_from_memory`], then drops the acquired resource right
+    /// after.
+    pub fn free_from_memory(&mut self) -> AssetResult<()> {
+        let resource = self.take_from_memory()?;
+        drop(resource);
+        Ok(())
+    }
 }
 
 pub trait Import {
@@ -262,8 +346,8 @@ pub trait Import {
         Self: Sized;
 }
 
-pub trait IntoGpu {
-    type AsGpu;
+pub trait Upload {
+    type AsGpu: Debug;
 
     fn upload_to_gpu(&self) -> AssetResult<Self::AsGpu>;
 
@@ -317,5 +401,29 @@ impl Import for RawTexture {
             .map_err(|img_err| AssetError::FileImageLoadError(img_err))?;
 
         Ok(Self(image))
+    }
+}
+
+impl Upload for RawTexture {
+    type AsGpu = Texture;
+
+    /// Upload raw texture data to the gpu.
+    ///
+    /// # Returns
+    /// The [`Texture`] handle to the new gpu resource.
+    ///
+    /// This function will return [`AssetError::UnsupportedImageFormat`] if the
+    /// image format is not supported, or
+    /// [`AssetError::TextureUnknownUploadError`] for any other texture upload
+    /// errors.
+    ///
+    fn upload_to_gpu(&self) -> AssetResult<Self::AsGpu> {
+        let texture = Texture::from_image(&self.0).map_err(|tex_err| match tex_err {
+            TextureError::UnsupportedFormat => AssetError::TextureUnsupportedImageFormat,
+            TextureError::ImageLoadError(_) => unreachable!("image is already loaded"),
+            _ => AssetError::TextureUnknownUploadError,
+        })?;
+
+        Ok(texture)
     }
 }
