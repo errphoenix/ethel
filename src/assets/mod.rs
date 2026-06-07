@@ -67,6 +67,31 @@ impl<T: Import + Upload> AssetRegistry<T> {
         self.assets.insert(id, handle);
         self.assets.get(&id).unwrap()
     }
+
+    pub fn unregister(&mut self, id: impl Into<StringHash>) -> Option<Handle<T>> {
+        self.assets.remove(&id.into())
+    }
+
+    pub fn get(&self, id: impl Into<StringHash>) -> Option<&Handle<T>> {
+        self.assets.get(&id.into())
+    }
+
+    pub fn get_mut(&mut self, id: impl Into<StringHash>) -> Option<&mut Handle<T>> {
+        self.assets.get_mut(&id.into())
+    }
+
+    pub fn contains(&self, id: impl Into<StringHash>) -> bool {
+        self.assets.contains_key(&id.into())
+    }
+}
+
+impl<T: Import + Upload> AssetRegistry<T>
+where
+    <T as Upload>::AsGpu: AsView,
+{
+    pub fn get_gpu_view(&self, id: impl Into<StringHash>) -> Option<<T::AsGpu as AsView>::View> {
+        self.assets.get(&id.into()).map(Handle::gpu_view).flatten()
+    }
 }
 
 pub trait AsView {
@@ -74,12 +99,6 @@ pub trait AsView {
 
     fn as_view(&self) -> Self::View;
 }
-
-// impl<T: AsView> AssetRegistry<T> {
-//     pub fn get_view(&self, id: impl Into<StringHash>) -> Option<T::View> {
-//         self.assets.get(&id.into()).map(AsView::as_view)
-//     }
-// }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum ResourceState {
@@ -153,6 +172,18 @@ macro_rules! assert_state {
 impl<T> Handle<T>
 where
     T: Import + Upload,
+    <T as Upload>::AsGpu: AsView,
+{
+    pub fn gpu_view(&self) -> Option<<T::AsGpu as AsView>::View> {
+        self.gpu_resource
+            .as_ref()
+            .map(<T::AsGpu as AsView>::as_view)
+    }
+}
+
+impl<T> Handle<T>
+where
+    T: Import + Upload,
 {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
@@ -165,6 +196,14 @@ where
 
     pub const fn state(&self) -> ResourceState {
         self.state
+    }
+
+    pub const fn is_in_memory(&self) -> bool {
+        self.raw_resource.is_some()
+    }
+
+    pub const fn is_in_gpu(&self) -> bool {
+        self.gpu_resource.is_some()
     }
 
     pub fn file_source(&self) -> &Path {
