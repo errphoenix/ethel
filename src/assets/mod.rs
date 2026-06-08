@@ -9,6 +9,7 @@ use janus::{
     StringHash,
     texture::{Texture, TextureError, TextureView},
 };
+use tracing::{Level, event};
 
 pub mod strings;
 
@@ -61,15 +62,26 @@ impl<T: Import + Upload> AssetRegistry<T> {
         }
     }
 
-    pub fn register<P: AsRef<Path>>(&mut self, id: impl Into<StringHash>, path: P) -> &Handle<T> {
+    pub fn count(&self) -> usize {
+        self.assets.len()
+    }
+
+    pub fn register<P: AsRef<Path> + std::fmt::Display>(
+        &mut self,
+        id: impl Into<StringHash>,
+        path: P,
+    ) -> &Handle<T> {
         let id = id.into();
         let handle = Handle::new(path.as_ref().to_path_buf());
         self.assets.insert(id, handle);
+        event!(Level::INFO, "Register asset hash_id {id}, file path {path}");
         self.assets.get(&id).unwrap()
     }
 
     pub fn unregister(&mut self, id: impl Into<StringHash>) -> Option<Handle<T>> {
-        self.assets.remove(&id.into())
+        let id = id.into();
+        event!(Level::INFO, "Unregister asset hash_id {id}");
+        self.assets.remove(&id)
     }
 
     pub fn get(&self, id: impl Into<StringHash>) -> Option<&Handle<T>> {
@@ -462,7 +474,34 @@ impl Upload for RawTexture {
             TextureError::ImageLoadError(_) => unreachable!("image is already loaded"),
             _ => AssetError::TextureUnknownUploadError,
         })?;
-
         Ok(texture)
     }
+}
+
+#[macro_export]
+macro_rules! asset_manager {
+    (struct $asset:ty {
+        $($name:ident: $path:expr;)*
+    }) => {
+        paste::paste! {
+            $(
+                const [< $asset:upper _ $name:upper >]: std::sync::LazyLock<$crate::assets::AssetId> = $crate::hashet!(stringify!($name));
+                const [< $asset:upper _ $name:upper _PATH >]: &'static str = $path;
+            )*
+
+            const [< $asset:upper _MANAGER >]: std::cell::LazyCell<$crate::assets::AssetRegistry<$asset>> = std::cell::LazyCell::new(|| {
+                let mut asset_manager = $crate::assets::AssetRegistry::new();
+
+                {
+                    $(
+                        let hash_id = *[< $asset:upper _ $name:upper >];
+                        let path = [< $asset:upper _ $name:upper _PATH >];
+                        asset_manager.register(hash_id, path);
+                    )*
+                }
+
+                asset_manager
+            });
+        }
+    };
 }
