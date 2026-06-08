@@ -419,7 +419,7 @@ impl Upload for RawTexture {
 }
 
 #[macro_export]
-macro_rules! asset_manager {
+macro_rules! asset_registry {
     (struct $asset:ty {
         $($name:ident: $path:expr;)*
     }) => {
@@ -429,19 +429,23 @@ macro_rules! asset_manager {
                 const [< $asset:upper _ $name:upper _PATH >]: &'static str = $path;
             )*
 
-            const [< $asset:upper _MANAGER >]: std::cell::LazyCell<$crate::assets::AssetRegistry<$asset>> = std::cell::LazyCell::new(|| {
-                let mut asset_manager = $crate::assets::AssetRegistry::new();
+            pub struct [< $asset RegistryBuilder >];
 
-                {
-                    $(
-                        let hash_id = *[< $asset:upper _ $name:upper >];
-                        let path = [< $asset:upper _ $name:upper _PATH >];
-                        asset_manager.register(hash_id, path);
-                    )*
+            impl [< $asset RegistryBuilder >] {
+                pub fn build() -> $crate::assets::AssetRegistry<$asset> {
+                    let mut asset_manager = $crate::assets::AssetRegistry::new();
+
+                    {
+                        $(
+                            let hash_id = *[< $asset:upper _ $name:upper >];
+                            let path = [< $asset:upper _ $name:upper _PATH >];
+                            asset_manager.register(hash_id, path);
+                        )*
+                    }
+
+                    asset_manager
                 }
-
-                asset_manager
-            });
+            }
         }
     };
 }
