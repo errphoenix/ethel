@@ -18,35 +18,35 @@ pub struct DirectIndex {
 }
 
 impl IndirectIndex {
-    pub fn null(generation: u32) -> Self {
+    pub const fn null(generation: u32) -> Self {
         Self {
             index: 0,
             generation,
         }
     }
 
-    pub fn from_index(index: usize, generation: u32) -> Self {
+    pub const fn from_index(index: usize, generation: u32) -> Self {
         Self {
             index: index as u32,
             generation,
         }
     }
 
-    pub fn from_int(int: u32, generation: u32) -> Self {
+    pub const fn from_int(int: u32, generation: u32) -> Self {
         Self {
             index: int,
             generation,
         }
     }
 
-    pub fn next_generation(self) -> Self {
+    pub const fn next_generation(self) -> Self {
         Self {
             index: 0,
             generation: self.generation + 1,
         }
     }
 
-    pub fn related_to_direct(&self, direct: &DirectIndex) -> bool {
+    pub const fn related_to_direct(&self, direct: &DirectIndex) -> bool {
         self.generation == direct.generation
     }
 
@@ -54,49 +54,49 @@ impl IndirectIndex {
         self.eq(other)
     }
 
-    pub fn as_int(self) -> u32 {
+    pub const fn as_int(self) -> u32 {
         self.index
     }
 
-    pub fn as_index(self) -> usize {
+    pub const fn as_index(self) -> usize {
         self.index as usize
     }
 
-    pub fn generation(&self) -> u32 {
+    pub const fn generation(&self) -> u32 {
         self.generation
     }
 }
 
 impl DirectIndex {
-    pub fn null(generation: u32) -> Self {
+    pub const fn null(generation: u32) -> Self {
         Self {
             index: 0,
             generation,
         }
     }
 
-    pub fn from_index(index: usize, generation: u32) -> Self {
+    pub const fn from_index(index: usize, generation: u32) -> Self {
         Self {
             index: index as u32,
             generation,
         }
     }
 
-    pub fn from_int(int: u32, generation: u32) -> Self {
+    pub const fn from_int(int: u32, generation: u32) -> Self {
         Self {
             index: int,
             generation,
         }
     }
 
-    pub fn next_generation(self) -> Self {
+    pub const fn next_generation(self) -> Self {
         Self {
             index: 0,
             generation: self.generation + 1,
         }
     }
 
-    pub fn related_to_indirect(&self, indirect: &IndirectIndex) -> bool {
+    pub const fn related_to_indirect(&self, indirect: &IndirectIndex) -> bool {
         self.generation == indirect.generation
     }
 
@@ -104,15 +104,15 @@ impl DirectIndex {
         self.eq(other)
     }
 
-    pub fn as_int(self) -> u32 {
+    pub const fn as_int(self) -> u32 {
         self.index
     }
 
-    pub fn as_index(self) -> usize {
+    pub const fn as_index(self) -> usize {
         self.index as usize
     }
 
-    pub fn generation(&self) -> u32 {
+    pub const fn generation(&self) -> u32 {
         self.generation
     }
 }
