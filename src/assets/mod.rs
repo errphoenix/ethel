@@ -13,7 +13,7 @@ use tracing::{Level, event};
 
 pub mod strings;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct AssetId(pub StringHash);
 
 impl AssetId {
@@ -350,7 +350,7 @@ pub trait Upload {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TextureId(AssetId);
 
 impl Into<StringHash> for TextureId {
