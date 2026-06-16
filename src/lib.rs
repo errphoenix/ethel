@@ -32,13 +32,46 @@ pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::
 
 pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 
+/// Manages the simulation side state of the program, which contains multiple
+/// responsabilities.
+///
+/// It takes care, first and foremost, of the simulation itself through an
+/// obligatory implementation of the [`Self::step`] function. The step
+/// function may be called multiple times in one frame, depending on the
+/// simulation speed and the capabilities of the system to "keep up".
+///
+/// Another essential function is [`Self::upload_gpu`], which is the 'write'
+/// phase of the GPU synchronization routine. This must write to the provided
+/// `frame_boundary` any data that must be present on the gpu.
+///
+/// An optional but noteworthy function is [`Self::step_duration`], this is a
+/// getter function for a [`std::time::Duration`] type. This is already
+/// implemented by default, returning [`state::DEFAULT_STEP`] (8ms).
+/// This directly impacts the pacing of the [`Self::step`] function.
+///
+/// There is an optional [`Self::on_new_frame`] function, which is called
+/// exactly once for every new frame, differently from [`Self::step`] which
+/// is likely to be called multiple times. The default implementation is blank.
+///
+/// Finally, theres an optional [`Self::on_key_event`] function, which is fed
+/// every frame with new [`janus::input::KeyEvent`] with keyboard/mouse button
+/// down/release events. This is used to register the pressing of arbitrary
+/// keys (for example a text field) which cannot be done with the classic
+/// 'is_key_down' approach. The default implementation is blank.
 pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
+    /// The 'write' phase of the GPU synchronization routine.
+    ///
+    /// Write must occur to the given `frame_boundary` and `command_queue`.
+    ///
+    /// This is called in cohesion with the [`Self::step`] function immediately
+    /// after it returns.
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameData>,
         command_queue: &mut GpuCommandQueue<crate::DrawCommand, RG>,
     );
 
+    /// The simulation advance/step routine.
     fn step(
         &mut self,
         input: &mut crate::InputSystem,
