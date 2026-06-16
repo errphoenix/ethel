@@ -119,6 +119,11 @@ where
     #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
         self.input.poll_key_events();
+
+        while let Some(event) = self.input.pop_key_event() {
+            self.handler.on_key_event(event);
+        }
+
         self.handler
             .step(&mut self.input, &mut self.screen, &self.view, delta);
         self.upload();
