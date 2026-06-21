@@ -352,7 +352,11 @@ pub trait Upload {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TextureId(AssetId);
-
+impl From<AssetId> for TextureId {
+    fn from(value: AssetId) -> Self {
+        Self(value)
+    }
+}
 impl Into<StringHash> for TextureId {
     fn into(self) -> StringHash {
         self.0.0
