@@ -30,6 +30,13 @@ impl Into<StringHash> for AssetId {
 
 #[macro_export]
 macro_rules! hashet {
+    (
+        $($pv:vis const $n:ident = $v:expr;)+
+    ) => {
+        $(
+            $pv const $n: std::sync::LazyLock<$crate::assets::AssetId> = $crate::hashet!($v);
+        )+
+    };
     ($se:expr) => {
         std::sync::LazyLock::new(|| {
             let hashed = $crate::lazy_hash_str!($se);
@@ -351,7 +358,7 @@ pub trait Upload {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-pub struct TextureId(AssetId);
+pub struct TextureId(pub AssetId);
 impl From<AssetId> for TextureId {
     fn from(value: AssetId) -> Self {
         Self(value)
