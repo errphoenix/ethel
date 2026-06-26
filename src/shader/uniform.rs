@@ -67,6 +67,46 @@ impl UploadUniform for glam::Mat4 {
     }
 }
 
+impl UploadUniform for u32 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform1ui(*location, *self);
+        }
+    }
+}
+
+impl UploadUniform for i32 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform1i(*location, *self);
+        }
+    }
+}
+
+impl<const SIZE: usize> UploadUniform for [f32; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform1fv(*location, SIZE as i32, self.as_ptr());
+        }
+    }
+}
+
+impl<const SIZE: usize> UploadUniform for [u32; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform1uiv(*location, SIZE as i32, self.as_ptr());
+        }
+    }
+}
+
+impl<const SIZE: usize> UploadUniform for [i32; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform1iv(*location, SIZE as i32, self.as_ptr());
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct GlslUniform(&'static str);
 
@@ -94,12 +134,13 @@ impl super::Inject for GlslUniform {
 
 #[macro_export]
 macro_rules! shader_glsl_uniform {
-    ($gl_name:ident: $gl_type:ident) => {
+    ($($arr_n:literal,)? $gl_name:ident: $gl_type:ident) => {
         GlslUniform::new(concat!(
             "uniform ",
             stringify!($gl_type),
             " ",
             stringify!($gl_name),
+            $("[", $arr_n, "]",)?
             ";\n"
         ))
     };
@@ -112,6 +153,17 @@ macro_rules! shader_glsl_build_uniform_interface {
             pub fn [< uniform_ $gl_name _ $gl_type >] (&self, $gl_name: $r_type) {
                 let location = self.[< location_ $gl_name _ $gl_type >];
                 $crate::shader::uniform::UploadUniform::upload(&$gl_name, location);
+            }
+        }
+    };
+    (array $ac:literal, $gl_name:ident: $gl_type:ident => $r_type:ty) => {
+        paste::paste! {
+            pub fn [< uniform_ $gl_name _ $gl_type v >] (&self, $gl_name: [$r_type; $ac]) {
+                let location = self.[< location_ $gl_name _ $gl_type >];
+                for i in 0..$ac {
+                    let location = $crate::shader::UniformLocation(location.0 + i);
+                    $crate::shader::uniform::UploadUniform::upload(&$gl_name, location);
+                }
             }
         }
     };

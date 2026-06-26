@@ -88,6 +88,22 @@ macro_rules! copy_type_name_glsl {
     };
 }
 
+impl<const SIZE: usize> Glsl for [f32; SIZE] {
+    fn to_glsl() -> &'static str {
+        "float"
+    }
+}
+impl<const SIZE: usize> Glsl for [i32; SIZE] {
+    fn to_glsl() -> &'static str {
+        "int"
+    }
+}
+impl<const SIZE: usize> Glsl for [u32; SIZE] {
+    fn to_glsl() -> &'static str {
+        "uint"
+    }
+}
+
 impl WriteValue for f32 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "{:.3}", self)
@@ -117,16 +133,16 @@ copy_type_name_glsl!(i32 => "int");
 copy_type_name_glsl!(u32 => "uint");
 copy_type_name_glsl!(bool => "boolean");
 copy_type_name_glsl!(glam::Vec2 => "vec2");
-copy_type_name_glsl!([f32; 2] => "vec2");
+copy_type_name_glsl!((f32, f32) => "vec2");
 copy_type_name_glsl!(glam::Vec3 => "vec3");
-copy_type_name_glsl!([f32; 3] => "vec3");
+copy_type_name_glsl!((f32, f32, f32) => "vec3");
 copy_type_name_glsl!(glam::Vec4 => "vec4");
-copy_type_name_glsl!([f32; 4] => "vec4");
+copy_type_name_glsl!((f32, f32, f32, f32) => "vec4");
 copy_type_name_glsl!(glam::Mat2 => "mat2");
 copy_type_name_glsl!(glam::Mat3 => "mat3");
-copy_type_name_glsl!([f32; 9] => "mat3");
+copy_type_name_glsl!([(f32, f32, f32); 3] => "mat3");
 copy_type_name_glsl!(glam::Mat4 => "mat4");
-copy_type_name_glsl!([f32; 16] => "mat4");
+copy_type_name_glsl!([(f32, f32, f32, f32); 4] => "mat4");
 
 impl super::WriteValue for glam::Vec2 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {

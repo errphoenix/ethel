@@ -209,7 +209,7 @@ impl<T: Clone + Copy + WriteValue> Constant<T> {
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash, Default, Debug)]
-pub struct UniformLocation(i32);
+pub struct UniformLocation(pub i32);
 
 impl std::fmt::Display for UniformLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -463,7 +463,17 @@ impl Deref for ComputeShaderHandle {
 /// 1. Attributes (`attribs`), valid only for specific shader information.
 ///    See [`crate::shader_glsl_attribs`].
 /// 2. Uniforms (`uniform`), with the `shader_name: shader_type => RustType;`
-///    syntax.
+///    syntax. For [`ShaderKind::Pixel`], this can be followed by a `sampler`
+///    section to declare `sampler2D` uniforms.
+///
+///    Ex.:
+///    ```
+///       sampler { sampler2D tex_sample array 8; }
+///    ```
+///
+///    In the example above a `sampler2D` type named `tex_sample` is declared
+///    as an array of 8 samplers. This is not a texture array, and the `array`
+///    part is optional.
 /// 3. Custom types (`type`), to define custom types to be used in uniforms,
 ///    SSBO's, etc. See [`crate::shader_glsl_struct`].
 /// 4. Shader Storage Buffer Objects (`ssbo`), to define SSBO binding points
@@ -516,6 +526,11 @@ macro_rules! shader_glsl {
                             $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
                         )+
                     };)?
+                    $(sampler {
+                        $(
+                            sampler2D $u_s_gl_name:ident $(array $u_s_arr_n:literal)?;
+                        )+
+                    };)?
                     $(type {
                         $(
                             $type_glsl:expr
@@ -556,6 +571,11 @@ macro_rules! shader_glsl {
                     $(
                         $(
                             [< location_ $u_gl_name _ $u_gl_type >]: $crate::shader::UniformLocation,
+                        )+
+                    )?
+                    $(
+                        $(
+                            [< location_ $u_s_gl_name _sampler2D >]: $crate::shader::UniformLocation,
                         )+
                     )?
                 )+
@@ -625,6 +645,11 @@ macro_rules! shader_glsl {
                         )?
                         $(
                             $(
+                                let _ = composer.add_uniform($crate::shader_glsl_uniform!($($u_s_arr_n,)? $u_s_gl_name: sampler2D));
+                            )+
+                        )?
+                        $(
+                            $(
                                 let _ = composer.inject_header(&$type_glsl);
                             )+
                         )?
@@ -664,6 +689,13 @@ macro_rules! shader_glsl {
                         $(
                             $crate::shader_glsl_build_uniform_interface! {
                                 $u_gl_name: $u_gl_type => $u_r_type
+                            }
+                        )+
+                    )?
+                    $(
+                        $(
+                            $crate::shader_glsl_build_uniform_interface! {
+                                $(array $u_s_arr_n,)? $u_s_gl_name: sampler2D => u32
                             }
                         )+
                     )?
@@ -721,6 +753,11 @@ macro_rules! shader_glsl {
                                 )?
                                 $(
                                     $(
+                                        let _ = composer.add_uniform($crate::shader_glsl_uniform!($($u_s_arr_n,)? $u_s_gl_name: sampler2D));
+                                    )+
+                                )?
+                                $(
+                                    $(
                                         let _ = composer.inject_header(&$type_glsl);
                                     )+
                                 )?
@@ -768,6 +805,11 @@ macro_rules! shader_glsl {
                                 let [< location_ $u_gl_name _ $u_gl_type >] = handle.find_uniform_location(stringify!($u_gl_name));
                             )+
                         )?
+                        $(
+                            $(
+                                let [< location_ $u_s_gl_name _sampler2D >] = handle.find_uniform_location(stringify!($u_s_gl_name));
+                            )+
+                        )?
                     )+
 
                     Self {
@@ -782,6 +824,11 @@ macro_rules! shader_glsl {
                             $(
                                 $(
                                     [< location_ $u_gl_name _ $u_gl_type >],
+                                )+
+                            )?
+                            $(
+                                $(
+                                    [< location_ $u_s_gl_name _sampler2D >],
                                 )+
                             )?
                         )+
