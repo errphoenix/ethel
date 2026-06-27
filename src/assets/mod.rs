@@ -180,6 +180,22 @@ impl<T> Handle<T>
 where
     T: Import + Upload,
 {
+    pub fn from_resource(resource: T) -> Self {
+        Self {
+            source: PathBuf::new(),
+            raw_resource: Some(resource),
+            gpu_resource: None,
+        }
+    }
+
+    pub fn from_gpu_resource(resource: T::AsGpu) -> Self {
+        Self {
+            source: PathBuf::new(),
+            raw_resource: None,
+            gpu_resource: Some(resource),
+        }
+    }
+
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
             source: path.as_ref().to_path_buf(),
