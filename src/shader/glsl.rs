@@ -215,28 +215,62 @@ impl GlslAttribute {
 #[macro_export]
 macro_rules! shader_glsl_attribs {
     (
-        input $gl_n:ident: $gl_t:ident;
+        input $gl_n:ident: $gl_t:ident $(flat: $fvb:expr)?;
     ) => {
-        $crate::shader::glsl::GlslAttribute::new(concat!(
-            "in",
-            " ",
-            stringify!($gl_t),
-            " ",
-            stringify!($gl_n),
-            ";\n"
-        ))
+        {
+            let mut attr = $crate::shader::glsl::GlslAttribute::new(concat!(
+                "in",
+                " ",
+                stringify!($gl_t),
+                " ",
+                stringify!($gl_n),
+                ";\n"
+            ));
+
+            $(
+                if $fvb {
+                    attr = $crate::shader::glsl::GlslAttribute::new(concat!(
+                        "flat in",
+                        " ",
+                        stringify!($gl_t),
+                        " ",
+                        stringify!($gl_n),
+                        ";\n"
+                    ));
+                }
+            )?
+
+            attr
+        }
     };
     (
-        output $gl_n:ident: $gl_t:ident;
+        output $gl_n:ident: $gl_t:ident $(flat: $fvb:expr)?;
     ) => {
-        $crate::shader::glsl::GlslAttribute::new(concat!(
-            "out",
-            " ",
-            stringify!($gl_t),
-            " ",
-            stringify!($gl_n),
-            ";\n"
-        ))
+        {
+            let mut attr = $crate::shader::glsl::GlslAttribute::new(concat!(
+                "out",
+                " ",
+                stringify!($gl_t),
+                " ",
+                stringify!($gl_n),
+                ";\n"
+            ));
+
+            $(
+                if $fvb {
+                    attr = $crate::shader::glsl::GlslAttribute::new(concat!(
+                        "flat out",
+                        " ",
+                        stringify!($gl_t),
+                        " ",
+                        stringify!($gl_n),
+                        ";\n"
+                    ));
+                }
+            )?
+
+            attr
+        }
     };
     (
         $(input $i_gl_n:ident: $i_gl_t:ident;)*
