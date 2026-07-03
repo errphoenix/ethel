@@ -118,15 +118,8 @@ where
 {
     #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
-        self.input.poll_key_events();
-
-        while let Some(event) = self.input.pop_key_event() {
-            self.handler.on_key_event(event);
-        }
-
         self.handler
             .step(&mut self.input, &mut self.screen, &self.view, delta);
-        self.upload();
     }
 
     #[inline]
@@ -135,8 +128,19 @@ where
     }
 
     #[inline]
-    fn new_frame(&mut self) {
+    fn new_frame(&mut self, delta: janus::context::DeltaTime) {
         self.input.sync();
-        self.handler.on_new_frame();
+        self.input.poll_key_events();
+
+        while let Some(event) = self.input.pop_key_event() {
+            self.handler.on_key_event(event);
+        }
+
+        self.handler
+            .on_new_frame(&mut self.input, &mut self.screen, &self.view, delta);
+    }
+
+    fn finish_frame(&mut self) {
+        self.upload();
     }
 }

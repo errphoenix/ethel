@@ -72,6 +72,16 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     );
 
     /// The simulation advance/step routine.
+    ///
+    /// This runs from a delta accumulation loop, so some real-time operations
+    /// (such as input or once-per-frame operations) should not run here, but
+    /// rather in [`Self::on_new_frame`], which is independent from delta step
+    /// conditions and time.
+    ///
+    /// Ideal for contiuous simulation and integration, such as physics.
+    ///
+    /// Note that this is called **after** the [`Self::step`] delta
+    /// accumulated function.
     fn step(
         &mut self,
         input: &mut crate::InputSystem,
@@ -98,7 +108,26 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     /// then called only after all events have been exhausted.
     fn on_key_event(&mut self, _event: KeyEvent) {}
 
-    fn on_new_frame(&mut self) {}
+    /// Frame-delta independent "on every new frame" function.
+    ///
+    /// This is called for each new frame, independent from the delta
+    /// step/accumulation time, unlike [`Self::step`].
+    ///
+    /// Ideal for real-time operations such as input or interface.
+    ///
+    /// Note that this is called **before** the [`Self::step`] delta
+    /// accumulated function.
+    ///
+    /// The `total_delta` parameter indicates the total time passed since the
+    /// last [`Self::on_new_frame`] call.
+    fn on_new_frame(
+        &mut self,
+        _input: &mut crate::InputSystem,
+        _screen: &mut Mirror<ScreenSpace>,
+        _view_point: &TriCell<ViewPoint>,
+        _total_delta: janus::context::DeltaTime,
+    ) {
+    }
 }
 
 pub trait RenderHandler<FrameData: Sized> {
