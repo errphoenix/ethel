@@ -26,6 +26,7 @@ harness = false
 
 [features]
 default = []
-profile = [ "dep:serde", "dep:postcard", "dep:sysinfo"]
+profile = ["serde", "dep:postcard", "dep:sysinfo"]
 rayon = ["dep:rayon"]
 assets = ["janus/textures", "dep:image", "dep:thiserror"]
+serde = ["dep:serde", "janus/serde"]

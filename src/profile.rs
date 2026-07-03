@@ -3,6 +3,7 @@ use std::{
     u32,
 };
 
+use janus::StringHash;
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 
@@ -18,22 +19,16 @@ pub struct StackFrame<'a> {
     pub name: &'a str,
     pub trace: &'a str,
     pub page: u64,
-    pub timestamp: u64,
-    /// elapsed time local to page in nanoseconds
-    pub start: u64,
-    /// elapsed time local to page in nanoseconds
-    pub end: u64,
+    // page-local
+    pub duration: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize, Serialize)]
 pub struct Frame {
     name: &'static str,
     page: u64,
-    timestamp: u64,
-    // elapsed time local to page in nanoseconds
-    start: u64,
-    // elapsed time local to page in nanoseconds
-    end: u64,
+    // page-local
+    duration: u64,
     trace_handle: TraceId,
 }
 
@@ -117,7 +112,8 @@ impl SystemInformation {
 pub struct Profiler {
     sys_info: SystemInformation,
 
-    stack: Vec<Frame>,
+    stack: janus::StringMap<Frame>,
+    cached: Vec<Frame>,
 
     init_time: Instant,
 
@@ -132,18 +128,16 @@ pub struct Profiler {
     frame_traces: String,
     frame_trace_current: TraceId,
 }
-
 impl Default for Profiler {
     fn default() -> Self {
         Self::new()
     }
 }
-
 impl Profiler {
     pub fn new() -> Self {
         Self {
             sys_info: SystemInformation::new(),
-            stack: Vec::new(),
+            stack: janus::StringMap::default(),
             init_time: Instant::now(),
             page: 1,
             last_dump_page: 0,
@@ -153,7 +147,12 @@ impl Profiler {
             full_trace: String::new(),
             frame_traces: String::new(),
             frame_trace_current: TraceId::default(),
+            cached: Vec::new(),
         }
+    }
+
+    pub fn clear_cache(&mut self) {
+        self.cached.clear();
     }
 
     pub fn push_trace(&mut self, name: &'static str) {
@@ -200,49 +199,50 @@ impl Profiler {
     #[inline]
     pub fn capture_duration<R, F: FnMut() -> R>(&mut self, name: &'static str, mut func: F) -> R {
         let page = self.page;
-        let time_offset = self.page_time;
 
         let t0 = Instant::now();
         let func_return = func();
         let t1 = Instant::now();
 
-        self.stack.push(Frame {
+        let name_key = janus::hash_string(name);
+        let frame = self.stack.entry(name_key).or_insert(Frame {
             name,
             page,
-            timestamp: (t0 - self.init_time).as_micros() as u64,
-            start: (t0 - time_offset).as_nanos() as u64,
-            end: (t1 - time_offset).as_nanos() as u64,
+            duration: 0,
             trace_handle: self.frame_trace_current,
         });
+        frame.duration += (t1 - t0).as_nanos() as u64;
 
         func_return
     }
 
     pub fn log_explicit(&mut self, name: &'static str, start: Instant, end: Instant) {
         let page = self.page;
-        let time_offset = self.page_time;
 
-        self.stack.push(Frame {
+        let name_key = janus::hash_string(name);
+        let frame = self.stack.entry(name_key).or_insert(Frame {
             name,
             page,
-            timestamp: (start - self.init_time).as_micros() as u64,
-            start: (start - time_offset).as_nanos() as u64,
-            end: (end - time_offset).as_nanos() as u64,
+            duration: 0,
             trace_handle: self.frame_trace_current,
         });
+        frame.duration += (end - start).as_nanos() as u64;
     }
 
     pub fn page(&mut self) {
         self.page += 1;
         self.page_time = Instant::now();
+        self.stack.drain().for_each(|(_, frame)| {
+            self.cached.push(frame);
+        });
     }
 
     pub fn current_page(&self) -> u64 {
         self.page
     }
 
-    pub fn frames_stack(&self) -> &[Frame] {
-        &self.stack
+    pub fn frames_stack(&self) -> std::collections::hash_map::Values<'_, StringHash, Frame> {
+        self.stack.values()
     }
 
     fn build_stackframe(&self, frame: &Frame) -> StackFrame<'_> {
@@ -254,16 +254,14 @@ impl Profiler {
         StackFrame {
             name: frame.name,
             trace,
-            timestamp: frame.timestamp,
             page: frame.page,
-            start: frame.start,
-            end: frame.end,
+            duration: frame.duration,
         }
     }
 
     pub fn present_encoded<W: std::io::Write>(&mut self, out: &mut W) -> std::io::Result<()> {
         let stackframes = self
-            .stack
+            .cached
             .iter()
             .map(|frame| self.build_stackframe(&frame))
             .collect::<Vec<_>>();
@@ -299,7 +297,7 @@ impl Profiler {
         let mut frame_index_abs = 0;
         let mut frame_index_page = 0;
 
-        self.stack.drain(..).try_for_each(|frame| {
+        self.stack.drain().try_for_each(|(_, frame)| {
             let page = frame.page;
             if last_page != page {
                 writeln!(out, "+ New Page: {page}")?;
@@ -315,7 +313,7 @@ impl Profiler {
             write!(out, "[{frame_index_abs};{frame_index_page}] ")?;
             write!(out, "{trace}#{}", frame.name)?;
 
-            let d = Duration::from_nanos(frame.end - frame.start);
+            let d = Duration::from_nanos(frame.duration);
             writeln!(out, " = {} microseconds", d.as_micros())?;
 
             frame_index_abs += 1;

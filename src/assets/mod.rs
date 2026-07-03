@@ -9,10 +9,12 @@ use janus::{
     StringHash,
     texture::{Texture, TextureError, TextureView},
 };
+use serde::{Deserialize, Serialize};
 use tracing::{Level, event};
 
 pub mod strings;
 
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct AssetId(pub StringHash);
 
@@ -154,13 +156,16 @@ pub enum AssetError {
 
 pub type AssetResult<T> = Result<T, AssetError>;
 
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Debug)]
 pub struct Handle<T>
 where
     T: Import + Upload,
 {
     source: PathBuf,
+    #[serde(skip)]
     raw_resource: Option<T>,
+    #[serde(skip)]
     gpu_resource: Option<T::AsGpu>,
 }
 
@@ -373,6 +378,7 @@ pub trait Upload {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TextureId(pub AssetId);
 impl From<AssetId> for TextureId {
