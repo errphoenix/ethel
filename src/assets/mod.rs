@@ -190,6 +190,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AssetMetadataRegistry<M: Default + Clone + Copy> {
     mapping: janus::StringMap<M>,
     sync_rx: crossbeam::channel::Receiver<AssetSyncMessage<M>>,
