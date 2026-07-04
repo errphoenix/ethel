@@ -12,6 +12,9 @@ use janus::{
 use serde::{Deserialize, Serialize};
 use tracing::{Level, event};
 
+use crate::assets::pipe::{AssetMessage, AssetMessageRequest, AssetSyncMessage};
+
+pub mod pipe;
 pub mod strings;
 
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -53,51 +56,110 @@ macro_rules! hashet {
     };
 }
 
-#[derive(Debug, Default)]
-pub struct AssetRegistry<T: Import + Upload> {
-    assets: HashMap<StringHash, Handle<T>, janus::StringHasher>,
+#[derive(Debug)]
+pub struct AssetRegistry<T, M>
+where
+    T: Import + Upload + HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+    M: Default + Clone + Copy,
+{
+    assets: HashMap<StringHash, Handle<T, M>, janus::StringHasher>,
+    pipe_tx: crossbeam::channel::Sender<AssetMessage>,
+    pipe_rx: crossbeam::channel::Receiver<AssetMessage>,
+    sync_pipe_tx: Option<crossbeam::channel::Sender<AssetSyncMessage<M>>>,
 }
-
-impl<T: Import + Upload> AssetRegistry<T> {
+impl<T, M> Default for AssetRegistry<T, M>
+where
+    T: Import + Upload + HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+    M: Default + Clone + Copy,
+{
+    fn default() -> Self {
+        let (pipe_tx, pipe_rx) = crossbeam::channel::unbounded();
+        Self {
+            assets: Default::default(),
+            pipe_tx,
+            pipe_rx,
+            sync_pipe_tx: None,
+        }
+    }
+}
+impl<T, M> AssetRegistry<T, M>
+where
+    T: Import + Upload + HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+    M: Default + Clone + Copy,
+{
     pub fn new() -> Self {
         Self {
             assets: HashMap::with_hasher(janus::StringHasher::default()),
+            ..Default::default()
         }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             assets: HashMap::with_capacity_and_hasher(capacity, janus::StringHasher::default()),
+            ..Default::default()
         }
+    }
+
+    pub fn create_metadata_registry(&mut self) -> AssetMetadataRegistry<M> {
+        let mut registry = AssetMetadataRegistry::new();
+        self.assets.iter().for_each(|(&id, asset)| {
+            let meta = asset.metadata();
+            registry.mapping.insert(id, meta);
+        });
+        self.sync_pipe_tx = Some(registry.sync_pipe());
+        registry
     }
 
     pub fn count(&self) -> usize {
         self.assets.len()
     }
 
-    pub fn register<P: AsRef<Path> + std::fmt::Display>(
+    pub fn register<P: AsRef<Path>>(
         &mut self,
         id: impl Into<StringHash>,
         path: P,
-    ) -> &Handle<T> {
+    ) -> &Handle<T, M> {
         let id = id.into();
-        let handle = Handle::new(path.as_ref().to_path_buf());
+        let handle = Handle::new(id, path.as_ref().to_path_buf(), &self);
         self.assets.insert(id, handle);
-        event!(Level::INFO, "Register asset hash_id {id}, file path {path}");
+
+        if let Some(sync_pipe) = &self.sync_pipe_tx {
+            sync_pipe
+                .send(AssetSyncMessage::Register {
+                    id,
+                    data: Default::default(),
+                })
+                .unwrap();
+        }
+
+        event!(
+            Level::INFO,
+            "Register asset hash_id {id}, file path {}",
+            path.as_ref().display()
+        );
         self.assets.get(&id).unwrap()
     }
 
-    pub fn unregister(&mut self, id: impl Into<StringHash>) -> Option<Handle<T>> {
+    pub fn unregister(&mut self, id: impl Into<StringHash>) -> Option<Handle<T, M>> {
         let id = id.into();
+
+        if let Some(sync_pipe) = &self.sync_pipe_tx {
+            sync_pipe.send(AssetSyncMessage::Forget { id }).unwrap();
+        }
+
         event!(Level::INFO, "Unregister asset hash_id {id}");
         self.assets.remove(&id)
     }
 
-    pub fn get(&self, id: impl Into<StringHash>) -> Option<&Handle<T>> {
+    pub fn get(&self, id: impl Into<StringHash>) -> Option<&Handle<T, M>> {
         self.assets.get(&id.into())
     }
 
-    pub fn get_mut(&mut self, id: impl Into<StringHash>) -> Option<&mut Handle<T>> {
+    pub fn get_mut(&mut self, id: impl Into<StringHash>) -> Option<&mut Handle<T, M>> {
         self.assets.get_mut(&id.into())
     }
 
@@ -105,13 +167,70 @@ impl<T: Import + Upload> AssetRegistry<T> {
         self.assets.contains_key(&id.into())
     }
 }
-
-impl<T: Import + Upload> AssetRegistry<T>
+impl<T, M> AssetRegistry<T, M>
 where
+    T: Import + Upload + HasMetadata<M>,
+    M: Default + Clone + Copy,
+    <T as Upload>::AsGpu: HasMetadata<M>,
     <T as Upload>::AsGpu: AsView,
 {
     pub fn get_gpu_view(&self, id: impl Into<StringHash>) -> Option<<T::AsGpu as AsView>::View> {
         self.assets.get(&id.into()).map(Handle::gpu_view).flatten()
+    }
+}
+impl<T, M> AssetRegistry<T, M>
+where
+    T: Import + Upload + HasMetadata<M> + AsView,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+    M: Default + Clone + Copy,
+{
+    pub fn get_resource_view(&self, id: impl Into<StringHash>) -> Option<<T as AsView>::View> {
+        self.assets
+            .get(&id.into())
+            .map(Handle::resource_view)
+            .flatten()
+    }
+}
+
+pub struct AssetMetadataRegistry<M: Default + Clone + Copy> {
+    mapping: janus::StringMap<M>,
+    sync_rx: crossbeam::channel::Receiver<AssetSyncMessage<M>>,
+    sync_tx: crossbeam::channel::Sender<AssetSyncMessage<M>>,
+}
+impl<M: Default + Clone + Copy> AssetMetadataRegistry<M> {
+    pub fn new() -> Self {
+        let (sync_tx, sync_rx) = crossbeam::channel::unbounded();
+        Self {
+            mapping: janus::StringMap::default(),
+            sync_rx,
+            sync_tx,
+        }
+    }
+
+    pub fn sync_pipe(&self) -> crossbeam::channel::Sender<AssetSyncMessage<M>> {
+        self.sync_tx.clone()
+    }
+
+    pub fn pipe_sync_commands(&mut self) {
+        while let Ok(command) = self.sync_rx.recv() {
+            match command {
+                AssetSyncMessage::Register { id, data } => {
+                    self.mapping.insert(id, data);
+                }
+                AssetSyncMessage::Update { id, data } => {
+                    if let Some(meta) = self.mapping.get_mut(&id) {
+                        *meta = data;
+                    }
+                }
+                AssetSyncMessage::Forget { id } => {
+                    self.mapping.remove(&id);
+                }
+            }
+        }
+    }
+
+    pub fn get(&self, id: impl Into<StringHash>) -> Option<M> {
+        self.mapping.get(&id.into()).copied()
     }
 }
 
@@ -121,8 +240,21 @@ pub trait AsView {
     fn as_view(&self) -> Self::View;
 }
 
+pub trait HasMetadata<T: Default + Clone + Copy> {
+    fn metadata(&self) -> T {
+        let mut meta = T::default();
+        self.make_metadata(&mut meta);
+        meta
+    }
+
+    fn make_metadata(&self, metadata: &mut T);
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AssetError {
+    #[error("requested asset {0} not found in registry")]
+    AssetNotFound(StringHash),
+
     #[error("resource is not present in video memory")]
     NotProcessed,
 
@@ -153,26 +285,43 @@ pub enum AssetError {
     #[error("failed to upload texture onto gpu: unknown texture upload error")]
     TextureUnknownUploadError,
 }
+impl PartialEq for AssetError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::FileNotFound(l0), Self::FileNotFound(r0)) => l0 == r0,
+            (Self::FileIoError(l0), Self::FileIoError(r0)) => l0.kind() == r0.kind(),
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+impl Eq for AssetError {}
 
 pub type AssetResult<T> = Result<T, AssetError>;
 
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 #[derive(Debug)]
-pub struct Handle<T>
+pub struct Handle<T, M>
 where
-    T: Import + Upload,
+    T: Import + Upload + HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+    M: Default + Clone + Copy,
 {
+    id: StringHash,
     source: PathBuf,
     #[serde(skip)]
     raw_resource: Option<T>,
     #[serde(skip)]
     gpu_resource: Option<T::AsGpu>,
+    #[serde(skip)]
+    root_pipe: crossbeam::channel::Sender<AssetMessage>,
+    #[serde(skip)]
+    _marker_meta: std::marker::PhantomData<M>,
 }
-
-impl<T> Handle<T>
+impl<T, M> Handle<T, M>
 where
-    T: Import + Upload,
-    <T as Upload>::AsGpu: AsView,
+    T: Import + Upload + HasMetadata<M>,
+    M: Default + Clone + Copy,
+    <T as Upload>::AsGpu: AsView + HasMetadata<M>,
 {
     pub fn gpu_view(&self) -> Option<<T::AsGpu as AsView>::View> {
         self.gpu_resource
@@ -180,32 +329,72 @@ where
             .map(<T::AsGpu as AsView>::as_view)
     }
 }
-
-impl<T> Handle<T>
+impl<T, M> Handle<T, M>
+where
+    T: Import + Upload + AsView + HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+    M: Default + Clone + Copy,
+{
+    pub fn resource_view(&self) -> Option<<T as AsView>::View> {
+        self.raw_resource.as_ref().map(<T as AsView>::as_view)
+    }
+}
+impl<T, M> HasMetadata<M> for Handle<T, M>
 where
     T: Import + Upload,
+    M: Default + Clone + Copy,
+    T: HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
 {
-    pub fn from_resource(resource: T) -> Self {
+    fn make_metadata(&self, metadata: &mut M) {
+        if let Some(raw) = &self.raw_resource {
+            raw.make_metadata(metadata);
+        }
+        if let Some(gpu) = &self.gpu_resource {
+            gpu.make_metadata(metadata);
+        }
+    }
+}
+impl<T, M> Handle<T, M>
+where
+    M: Default + Clone + Copy,
+    T: Import + Upload + HasMetadata<M>,
+    <T as Upload>::AsGpu: HasMetadata<M>,
+{
+    pub fn from_resource(id: StringHash, resource: T, registry: &AssetRegistry<T, M>) -> Self {
         Self {
+            id,
             source: PathBuf::new(),
             raw_resource: Some(resource),
             gpu_resource: None,
+            root_pipe: registry.command_pipe(),
+            _marker_meta: std::marker::PhantomData,
         }
     }
 
-    pub fn from_gpu_resource(resource: T::AsGpu) -> Self {
+    pub fn from_gpu_resource(
+        id: StringHash,
+        resource: T::AsGpu,
+        registry: &AssetRegistry<T, M>,
+    ) -> Self {
         Self {
+            id,
             source: PathBuf::new(),
             raw_resource: None,
             gpu_resource: Some(resource),
+            root_pipe: registry.command_pipe(),
+            _marker_meta: std::marker::PhantomData,
         }
     }
 
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+    pub fn new<P: AsRef<Path>>(id: StringHash, path: P, registry: &AssetRegistry<T, M>) -> Self {
         Self {
+            id,
             source: path.as_ref().to_path_buf(),
             raw_resource: None,
             gpu_resource: None,
+            root_pipe: registry.command_pipe(),
+            _marker_meta: std::marker::PhantomData,
         }
     }
 
@@ -269,6 +458,14 @@ where
 
         let loaded = T::from_file(path)?;
         self.raw_resource = Some(loaded);
+
+        self.root_pipe
+            .send(AssetMessage::Success {
+                reference_id: self.id,
+                operation: AssetMessageRequest::LoadToMemory,
+            })
+            .unwrap();
+
         Ok(self.raw_resource.as_ref().unwrap())
     }
 
@@ -293,6 +490,14 @@ where
         let raw_resource = self.raw_resource.as_ref().unwrap();
         let gpu_resource = raw_resource.upload_to_gpu()?;
         self.gpu_resource = Some(gpu_resource);
+
+        self.root_pipe
+            .send(AssetMessage::Success {
+                reference_id: self.id,
+                operation: AssetMessageRequest::LoadToGpu,
+            })
+            .unwrap();
+
         Ok(self.gpu_resource.as_ref().unwrap())
     }
 
@@ -323,6 +528,14 @@ where
 
         let gpu_resource = self.gpu_resource.take();
         drop(gpu_resource);
+
+        self.root_pipe
+            .send(AssetMessage::Success {
+                reference_id: self.id,
+                operation: AssetMessageRequest::UnloadFromGpu,
+            })
+            .unwrap();
+
         Ok(())
     }
 
@@ -336,6 +549,14 @@ where
         }
 
         let raw_resource = self.raw_resource.take().unwrap();
+
+        self.root_pipe
+            .send(AssetMessage::Success {
+                reference_id: self.id,
+                operation: AssetMessageRequest::UnloadFromMemory,
+            })
+            .unwrap();
+
         Ok(raw_resource)
     }
 

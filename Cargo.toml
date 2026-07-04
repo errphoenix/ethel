@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"], optional = true }
 glam = "=0.31.0"
 image = { version = "0.25.10", optional = true }
 indoc = "2.0.7"
@@ -28,5 +29,5 @@ harness = false
 default = []
 profile = ["serde", "dep:postcard", "dep:sysinfo"]
 rayon = ["dep:rayon"]
-assets = ["janus/textures", "dep:image", "dep:thiserror"]
+assets = ["janus/textures", "dep:image", "dep:thiserror", "dep:crossbeam"]
 serde = ["dep:serde", "janus/serde"]
