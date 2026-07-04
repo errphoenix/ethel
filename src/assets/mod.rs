@@ -212,7 +212,7 @@ impl<M: Default + Clone + Copy> AssetMetadataRegistry<M> {
     }
 
     pub fn pipe_sync_commands(&mut self) {
-        while let Ok(command) = self.sync_rx.recv() {
+        while let Ok(command) = self.sync_rx.try_recv() {
             match command {
                 AssetSyncMessage::Register { id, data } => {
                     self.mapping.insert(id, data);

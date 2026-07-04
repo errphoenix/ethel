@@ -54,7 +54,7 @@ where
     }
 
     pub fn pipe_messages(&mut self) {
-        while let Ok(msg) = self.pipe_rx.recv() {
+        while let Ok(msg) = self.pipe_rx.try_recv() {
             match msg {
                 AssetMessage::Request { id, request } => match &request {
                     AssetMessageRequest::CreateNew { path } => {
