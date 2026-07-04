@@ -20,13 +20,11 @@ pub mod strings;
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct AssetId(pub StringHash);
-
 impl AssetId {
     pub const fn hash(&self) -> StringHash {
         self.0
     }
 }
-
 impl Into<StringHash> for AssetId {
     fn into(self) -> StringHash {
         self.0
