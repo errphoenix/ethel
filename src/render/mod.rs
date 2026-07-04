@@ -85,6 +85,7 @@ impl Resolution {
 pub struct ScreenSpace {
     resolution: Resolution,
     projection: glam::Mat4,
+    ortho_proj: glam::Mat4,
     fov: f32,
 }
 
@@ -98,11 +99,13 @@ impl ScreenSpace {
     pub const DEFAULT_FOV_DEG: f32 = 90.0;
 
     pub fn new(resolution: Resolution, fov_deg: f32) -> Self {
-        let proj_mat = projection_perspective(resolution.width, resolution.height(), fov_deg);
+        let proj_mat = projection_perspective(resolution.width, resolution.height, fov_deg);
+        let ortho_proj = projection_orthographic(resolution.width, resolution.height);
         Self {
             resolution,
             fov: fov_deg,
             projection: proj_mat,
+            ortho_proj,
         }
     }
 
@@ -128,6 +131,14 @@ impl ScreenSpace {
 
     pub fn projection_mut(&mut self) -> &mut glam::Mat4 {
         &mut self.projection
+    }
+
+    pub fn orto_projection(&self) -> &glam::Mat4 {
+        &self.ortho_proj
+    }
+
+    pub fn ortho_projection_mut(&mut self) -> &mut glam::Mat4 {
+        &mut self.ortho_proj
     }
 
     #[inline]
@@ -231,6 +242,7 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
                         let h = resolution.height;
 
                         screen.projection = projection_perspective(w, h, fov);
+                        screen.ortho_proj = projection_orthographic(w, h);
                         screen.resolution.dirty = false;
                     });
 
