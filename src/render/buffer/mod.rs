@@ -234,7 +234,7 @@ where
     /// # Panics
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
-    pub fn blit_section(&mut self, section: usize, data: &[T], offset: usize) {
+    pub fn blit_section(&self, section: usize, data: &[T], offset: usize) {
         assert_tb_section!(section);
         assert!(
             self.capacity > offset,
@@ -245,7 +245,7 @@ where
         let src = data.as_ptr();
         let avail = self.capacity - offset;
         let len = avail.min(data.len());
-        *(self.lengths[section].get_mut()) = len as u32;
+        unsafe { *(self.lengths[section].get()) = len as u32 };
 
         unsafe {
             std::ptr::copy_nonoverlapping(src, self.ptr[section].add(offset), len);
@@ -296,7 +296,7 @@ where
     ///
     /// [`blit_section`]: TriBuffer::blit_section
     pub fn blit_section_padded<S: Clone + Copy + Default>(
-        &mut self,
+        &self,
         section: usize,
         data: &[S],
         offset: usize,
@@ -329,7 +329,7 @@ where
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
-        *(self.lengths[section].get_mut()) = data_len as u32;
+        unsafe { *(self.lengths[section].get()) = data_len as u32 };
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
