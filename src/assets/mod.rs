@@ -6,8 +6,8 @@ use std::{
 
 use image::DynamicImage;
 use janus::{
-    StringHash,
-    texture::{Texture, TextureError, TextureView},
+    GpuResource, StringHash,
+    texture::{ImageFormat, ImageType, Texture, TextureError, TextureKey, TextureView},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{Level, event};
@@ -623,13 +623,11 @@ impl AsView for Texture {
 
 #[derive(Clone, Debug)]
 pub struct RawTexture(DynamicImage);
-
 impl From<DynamicImage> for RawTexture {
     fn from(value: DynamicImage) -> Self {
         Self::new(value)
     }
 }
-
 impl RawTexture {
     pub const fn new(image: DynamicImage) -> Self {
         Self(image)
@@ -639,7 +637,6 @@ impl RawTexture {
         &self.0
     }
 }
-
 impl Import for RawTexture {
     fn from_memory(bytes: &[u8]) -> Result<RawTexture, AssetError> {
         let image = image::load_from_memory(bytes)
@@ -648,7 +645,6 @@ impl Import for RawTexture {
         Ok(Self(image))
     }
 }
-
 impl Upload for RawTexture {
     type AsGpu = Texture;
 
@@ -671,10 +667,45 @@ impl Upload for RawTexture {
         Ok(texture)
     }
 }
+impl HasMetadata<TextureMetadata> for RawTexture {
+    fn make_metadata(&self, metadata: &mut TextureMetadata) {
+        let w = self.0.width();
+        let h = self.0.height();
+        metadata.size = Some((w, h));
+    }
+}
+impl HasMetadata<TextureMetadata> for Texture {
+    fn make_metadata(&self, metadata: &mut TextureMetadata) {
+        let image_format = self.metadata.format();
+        let pixel_format = self.metadata.pixel();
+        let gl_object = TextureKey(self.resource_id());
+        metadata.image_format = Some(image_format);
+        metadata.pixel_format = Some(pixel_format);
+        metadata.gl_object = Some(gl_object);
+    }
+}
+impl HasMetadata<TextureMetadata> for TextureView {
+    fn make_metadata(&self, metadata: &mut TextureMetadata) {
+        let image_format = self.metadata().image_format;
+        let pixel_format = self.metadata().pixel_format;
+        let gl_object = TextureKey(self.resource_id());
+        metadata.image_format = image_format;
+        metadata.pixel_format = pixel_format;
+        metadata.gl_object = Some(gl_object);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct TextureMetadata {
+    pub size: Option<(u32, u32)>,
+    pub image_format: Option<ImageFormat>,
+    pub pixel_format: Option<ImageType>,
+    pub gl_object: Option<TextureKey>,
+}
 
 #[macro_export]
 macro_rules! asset_registry {
-    (struct $asset:ty {
+    (struct $asset:ty: $meta:ty {
         $($name:ident: $path:expr;)*
     }) => {
         paste::paste! {
@@ -686,7 +717,7 @@ macro_rules! asset_registry {
             pub struct [< $asset RegistryBuilder >];
 
             impl [< $asset RegistryBuilder >] {
-                pub fn build() -> $crate::assets::AssetRegistry<$asset> {
+                pub fn build() -> $crate::assets::AssetRegistry<$asset, $meta> {
                     let mut asset_manager = $crate::assets::AssetRegistry::new();
 
                     {
