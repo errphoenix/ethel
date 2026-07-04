@@ -179,6 +179,10 @@ pub struct Renderer<D: Sized, T: RenderHandler<D>> {
 }
 
 impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
+    pub fn handler_init_callback<F: FnOnce(&mut T)>(&mut self, callback: F) {
+        callback(&mut self.handler)
+    }
+
     pub fn mesh_buffer(&self) -> &ImmutableBuffer<2> {
         &self.mesh_buffer
     }

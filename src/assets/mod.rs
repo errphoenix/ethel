@@ -713,6 +713,8 @@ macro_rules! asset_registry {
                 const [< $asset:upper _ $name:upper _PATH >]: &'static str = $path;
             )*
 
+            pub type [< $asset Registry >] = $crate::assets::AssetRegistry<$asset, $meta>;
+
             pub struct [< $asset RegistryBuilder >];
 
             impl [< $asset RegistryBuilder >] {

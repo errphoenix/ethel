@@ -4,6 +4,71 @@ use janus::StringHash;
 
 use crate::assets::{AssetError, AssetRegistry, HasMetadata, Import, Upload};
 
+pub type RegistryTx = crossbeam::channel::Sender<AssetMessage>;
+pub type RegistryRx = crossbeam::channel::Receiver<AssetMessage>;
+
+#[derive(Debug, Default)]
+pub struct RegistryPipe {
+    buffer: Vec<AssetMessage>,
+    pipe: Option<RegistryTx>,
+}
+impl Clone for RegistryPipe {
+    fn clone(&self) -> Self {
+        Self {
+            buffer: Vec::new(),
+            pipe: self.pipe.clone(),
+        }
+    }
+}
+impl RegistryPipe {
+    pub fn with_pipe(pipe: RegistryTx) -> Self {
+        Self {
+            buffer: Vec::new(),
+            pipe: Some(pipe),
+        }
+    }
+
+    /// Send a `message` to the channel pipe.
+    ///
+    /// This function will return `true` if the pipe was present and the
+    /// message has been sent.
+    ///
+    /// Otherwise, when `false` is returned, the `message` has been buffered
+    /// and will be sent as soon as a pipe is set.
+    pub fn send(&mut self, message: AssetMessage) -> bool {
+        if let Some(pipe) = &self.pipe {
+            pipe.send(message).unwrap();
+            true
+        } else {
+            self.buffer.push(message);
+            false
+        }
+    }
+
+    pub fn buffered(&self) -> &[AssetMessage] {
+        &self.buffer
+    }
+
+    /// Set the internal [`RegistryTx`] `pipe` to use to send messages.
+    ///
+    /// If theres any buffered messages (added while there was no pipe
+    /// present), they will be sent now.
+    ///
+    /// Subsequentally, the buffer will be deallocated through
+    /// [`Vec::shrink_to_fit`].
+    pub fn set_pipe(&mut self, pipe: RegistryTx) {
+        self.pipe = Some(pipe);
+        self.buffer.drain(..).for_each(|msg| {
+            self.pipe.as_ref().unwrap().send(msg).unwrap();
+        });
+        self.buffer.shrink_to_fit();
+    }
+
+    pub fn has_pipe_set(&self) -> bool {
+        self.pipe.is_some()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AssetMessageRequest {
     CreateNew { path: PathBuf },
