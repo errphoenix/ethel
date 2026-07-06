@@ -8,6 +8,23 @@ static REGISTRY: RwLock<StringMap> = RwLock::new(StringMap::with_hasher(StringHa
 
 #[macro_export]
 macro_rules! lazy_hash_str {
+    ($($pv:vis $pname:ident = $psl:literal;)+) => {
+        paste::paste! {
+            $(
+                $pv const [< $pname:upper >]: std::sync::LazyLock<StringHash> = $crate::lazy_hash_str!($psl);
+            )+
+        }
+    };
+    ($pv:vis $pname:ident = $psl:literal;) => {
+        paste::paste! {
+            $pv const [< $pname:upper >]: std::sync::LazyLock<StringHash> = $crate::lazy_hash_str!($psl);
+        }
+    };
+    ($pv:vis $pname:ident = $pse:literal;) => {
+        paste::paste! {
+            $pv const [< $pname:upper >]: std::sync::LazyLock<StringHash> = $crate::lazy_hash_str!($pse);
+        }
+    };
     ($sl:literal) => {
         std::sync::LazyLock::new(|| $crate::assets::strings::hash($sl))
     };
