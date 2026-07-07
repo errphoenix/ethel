@@ -116,6 +116,21 @@ where
         self.assets.len()
     }
 
+    pub fn add_handle(&mut self, handle: Handle<T, M>) {
+        let id = handle.id;
+        let metadata = handle.metadata();
+        self.assets.insert(id, handle);
+        if let Some(sync_pipe) = &self.sync_pipe_tx {
+            sync_pipe
+                .send(AssetSyncMessage::Register { id, data: metadata })
+                .unwrap();
+        }
+        event!(
+            Level::INFO,
+            "Register asset hash_id {id} from direct handle",
+        );
+    }
+
     pub fn register<P: AsRef<Path>>(
         &mut self,
         id: impl Into<StringHash>,
@@ -372,12 +387,12 @@ where
     }
 
     pub fn from_gpu_resource(
-        id: StringHash,
+        id: impl Into<StringHash>,
         resource: T::AsGpu,
         registry: &AssetRegistry<T, M>,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             source: PathBuf::new(),
             raw_resource: None,
             gpu_resource: Some(resource),
@@ -386,9 +401,13 @@ where
         }
     }
 
-    pub fn new<P: AsRef<Path>>(id: StringHash, path: P, registry: &AssetRegistry<T, M>) -> Self {
+    pub fn new<P: AsRef<Path>>(
+        id: impl Into<StringHash>,
+        path: P,
+        registry: &AssetRegistry<T, M>,
+    ) -> Self {
         Self {
-            id,
+            id: id.into(),
             source: path.as_ref().to_path_buf(),
             raw_resource: None,
             gpu_resource: None,
