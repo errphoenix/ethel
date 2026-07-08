@@ -162,7 +162,7 @@ macro_rules! shader_glsl_build_uniform_interface {
                 let location = self.[< location_ $gl_name _ $gl_type >];
                 for i in 0..$ac {
                     let location = $crate::shader::UniformLocation(location.0 + i);
-                    $crate::shader::uniform::UploadUniform::upload(&$gl_name, location);
+                    $crate::shader::uniform::UploadUniform::upload(&$gl_name[i as usize], location);
                 }
             }
         }
