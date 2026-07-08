@@ -83,6 +83,12 @@ impl UploadUniform for i32 {
     }
 }
 
+impl UploadUniform for bool {
+    fn upload(&self, location: UniformLocation) {
+        UploadUniform::upload(&(*self as u32), location);
+    }
+}
+
 impl<const SIZE: usize> UploadUniform for [f32; SIZE] {
     fn upload(&self, location: UniformLocation) {
         unsafe {
