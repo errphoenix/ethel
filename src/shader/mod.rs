@@ -695,7 +695,7 @@ macro_rules! shader_glsl {
                     $(
                         $(
                             $crate::shader_glsl_build_uniform_interface! {
-                                $(array $u_s_arr_n,)? $u_s_gl_name: sampler2D => u32
+                                $(array $u_s_arr_n,)? $u_s_gl_name: sampler2D => i32
                             }
                         )+
                     )?
