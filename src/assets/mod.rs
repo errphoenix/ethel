@@ -14,6 +14,9 @@ use tracing::{Level, event};
 
 use crate::assets::pipe::{AssetMessage, AssetMessageRequest, AssetSyncMessage};
 
+#[allow(unused_imports)]
+pub use strings::{CachedStringHash, StringCache};
+
 pub mod pipe;
 pub mod strings;
 
