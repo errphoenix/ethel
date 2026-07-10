@@ -22,15 +22,20 @@ pub mod strings;
 
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-pub struct AssetId(pub StringHash);
+pub struct AssetId(pub CachedStringHash);
 impl AssetId {
-    pub const fn hash(&self) -> StringHash {
+    pub const fn hash(&self) -> CachedStringHash {
+        self.0
+    }
+}
+impl Into<CachedStringHash> for AssetId {
+    fn into(self) -> CachedStringHash {
         self.0
     }
 }
 impl Into<StringHash> for AssetId {
     fn into(self) -> StringHash {
-        self.0
+        self.0.inner()
     }
 }
 
@@ -628,9 +633,14 @@ impl From<AssetId> for TextureId {
         Self(value)
     }
 }
+impl Into<CachedStringHash> for TextureId {
+    fn into(self) -> CachedStringHash {
+        self.0.0
+    }
+}
 impl Into<StringHash> for TextureId {
     fn into(self) -> StringHash {
-        self.0.0
+        self.0.0.inner()
     }
 }
 
