@@ -9,6 +9,9 @@ pub mod profile;
 #[cfg(feature = "assets")]
 pub mod assets;
 
+#[allow(unused_imports)]
+pub use state::data;
+
 use janus::{
     input::{InputState, KeyEvent},
     sync::{Mirror, TriCell},
