@@ -216,7 +216,7 @@ impl Profiler {
         func_return
     }
 
-    pub fn log_explicit(&mut self, name: &'static str, start: Instant, end: Instant) {
+    pub fn log_explicit(&mut self, name: &'static str, duration: Duration) {
         let page = self.page;
 
         let name_key = janus::hash_string(name);
@@ -226,7 +226,7 @@ impl Profiler {
             duration: 0,
             trace_handle: self.frame_trace_current,
         });
-        frame.duration += (end - start).as_nanos() as u64;
+        frame.duration += duration.as_nanos() as u64;
     }
 
     pub fn page(&mut self) {
