@@ -154,7 +154,9 @@ impl<Storage> Cross<Producer, Storage> {
     {
         let section = self.boundary.current_section().next();
 
-        while self.boundary.sync_cache().has_lock(section) {}
+        while self.boundary.sync_cache().has_lock(section) {
+            std::hint::spin_loop();
+        }
         op(section, self.boundary.storage());
         self.boundary.advance_section();
     }
