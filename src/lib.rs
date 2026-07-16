@@ -39,7 +39,7 @@ pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 /// responsabilities.
 ///
 /// It takes care, first and foremost, of the simulation itself through an
-/// obligatory implementation of the [`Self::step`] function. The step
+/// obligatory implementation of the [`Self::fixed_step`] function. The fixed_step
 /// function may be called multiple times in one frame, depending on the
 /// simulation speed and the capabilities of the system to "keep up".
 ///
@@ -53,8 +53,8 @@ pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 /// This directly impacts the pacing of the [`Self::step`] function.
 ///
 /// There is an optional [`Self::on_new_frame`] function, which is called
-/// exactly once for every new frame, differently from [`Self::step`] which
-/// is likely to be called multiple times. The default implementation is blank.
+/// exactly once for every new frame, differently from [`Self::fixed_step`] which
+/// may be called multiple times. The default implementation is blank.
 ///
 /// Finally, theres an optional [`Self::on_key_event`] function, which is fed
 /// every frame with new [`janus::input::KeyEvent`] with keyboard/mouse button
@@ -64,10 +64,10 @@ pub type DrawCommand = render::command::DrawArraysIndirectCommand;
 pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     /// The 'write' phase of the GPU synchronization routine.
     ///
-    /// Write must occur to the given `frame_boundary` and `command_queue`.
+    /// Write must occur to the passed `frame_boundary` and `command_queue`.
     ///
-    /// This is called in cohesion with the [`Self::step`] function immediately
-    /// after it returns.
+    /// This is called after the [`Self::fixed_step`] has finished, even multiple
+    /// times depending on delta accumulation.
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameData>,
@@ -82,10 +82,7 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     /// conditions and time.
     ///
     /// Ideal for contiuous simulation and integration, such as physics.
-    ///
-    /// Note that this is called **after** the [`Self::step`] delta
-    /// accumulated function.
-    fn step(
+    fn fixed_step(
         &mut self,
         input: &mut crate::InputSystem,
         screen: &mut Mirror<ScreenSpace>,
@@ -107,18 +104,18 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     /// between the last frame and the current frame, in the same order as
     /// they were registered.
     ///
-    /// This function is called before the [`Self::step`] function, which is
+    /// This function is called before the [`Self::fixed_step`] function, which is
     /// then called only after all events have been exhausted.
     fn on_key_event(&mut self, _event: KeyEvent) {}
 
     /// Frame-delta independent "on every new frame" function.
     ///
     /// This is called for each new frame, independent from the delta
-    /// step/accumulation time, unlike [`Self::step`].
+    /// step/accumulation time, unlike [`Self::fixed_step`].
     ///
     /// Ideal for real-time operations such as input or interface.
     ///
-    /// Note that this is called **before** the [`Self::step`] delta
+    /// Note that this is called **before** the [`Self::fixed_step`] delta
     /// accumulated function.
     ///
     /// The `total_delta` parameter indicates the total time passed since the
