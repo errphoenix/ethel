@@ -119,7 +119,7 @@ where
     #[inline]
     fn update(&mut self, delta: janus::context::DeltaTime) {
         self.handler
-            .step(&mut self.input, &mut self.screen, &self.view, delta);
+            .fixed_step(&mut self.input, &mut self.screen, &self.view, delta);
     }
 
     #[inline]
