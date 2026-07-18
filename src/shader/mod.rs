@@ -4,12 +4,7 @@ pub mod uniform;
 pub use crate::shader_glsl_ssbo;
 use crate::state::data;
 
-use std::{
-    hash::Hash,
-    ops::Deref,
-    str::FromStr,
-    sync::atomic::{AtomicU32, Ordering},
-};
+use std::{hash::Hash, str::FromStr};
 
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
@@ -63,7 +58,7 @@ impl janus::GlProperty for ShaderKind {
 
 pub fn generate_blank() -> ShaderHandle {
     let program = unsafe { janus::gl::CreateProgram() };
-    ShaderHandle { prog_obj: program }
+    ShaderHandle { program }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -129,14 +124,14 @@ pub fn attach_shader_units(program: &ShaderHandle, units: &[ShaderUnit]) {
     units
         .iter()
         .for_each(|&ShaderUnit { shader_obj, .. }| unsafe {
-            janus::gl::AttachShader(program.prog_obj, shader_obj);
+            janus::gl::AttachShader(program.program, shader_obj);
         });
 }
 
 pub fn link_shader_program(program: &ShaderHandle) {
     unsafe {
-        janus::gl::LinkProgram(program.prog_obj);
-        janus::gl::ValidateProgram(program.prog_obj);
+        janus::gl::LinkProgram(program.program);
+        janus::gl::ValidateProgram(program.program);
     }
 }
 
@@ -347,110 +342,125 @@ impl ShaderSource {
     }
 }
 
-pub trait ShaderProgram: janus::GpuResource {
-    fn shader_program(&self) -> u32 {
-        self.resource_id()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct ShaderHandle {
-    prog_obj: u32,
-}
-
-impl janus::GpuResource for ShaderHandle {
-    fn resource_id(&self) -> u32 {
-        self.prog_obj
-    }
-}
-
-impl ShaderProgram for ShaderHandle {}
-
-impl ShaderHandle {
-    pub fn bind(&self) {
-        unsafe {
-            gl::UseProgram(self.prog_obj);
-        }
-    }
-
-    pub fn unbind() {
-        self::unbind();
-    }
-
-    pub fn find_uniform_location(&self, uniform_name: &str) -> UniformLocation {
-        let c_string = std::ffi::CString::from_str(uniform_name).unwrap();
-        let location = unsafe { janus::gl::GetUniformLocation(self.prog_obj, c_string.as_ptr()) };
-        UniformLocation(location)
-    }
-}
-
-impl Drop for ShaderHandle {
-    fn drop(&mut self) {
-        if self.prog_obj == 0 {
-            return;
-        }
-        unsafe { gl::DeleteProgram(self.prog_obj) }
-    }
-}
-
 pub fn unbind() {
     unsafe {
         gl::UseProgram(0);
     }
 }
 
-#[derive(Debug)]
+pub trait ShaderProgram: janus::GpuResource {
+    fn shader_program(&self) -> u32 {
+        self.resource_id()
+    }
+
+    fn bind(&self) {
+        unsafe {
+            gl::UseProgram(self.shader_program());
+        }
+    }
+
+    fn unbind() {
+        self::unbind();
+    }
+
+    fn find_uniform_location(&self, uniform_name: &str) -> UniformLocation {
+        let program = self.shader_program();
+        let c_string = std::ffi::CString::from_str(uniform_name).unwrap();
+        let location = unsafe { janus::gl::GetUniformLocation(program, c_string.as_ptr()) };
+        UniformLocation(location)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct ShaderHandle {
+    program: u32,
+}
+impl janus::GpuResource for ShaderHandle {
+    fn resource_id(&self) -> u32 {
+        self.program
+    }
+}
+impl ShaderProgram for ShaderHandle {}
+impl ShaderHandle {
+    pub fn view(&self) -> ShaderHandleView {
+        ShaderHandleView {
+            program: self.program,
+        }
+    }
+}
+impl Drop for ShaderHandle {
+    fn drop(&mut self) {
+        if self.program == 0 {
+            return;
+        }
+        unsafe { gl::DeleteProgram(self.program) }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ComputeShaderHandle {
     inner: ShaderHandle,
-    workgroups_x: AtomicU32,
-    workgroups_y: AtomicU32,
-    workgroups_z: AtomicU32,
 }
-
-impl Default for ComputeShaderHandle {
-    fn default() -> Self {
-        Self::new(Default::default())
-    }
-}
-
 impl ComputeShaderHandle {
     pub const fn new(handle: ShaderHandle) -> Self {
-        Self {
-            inner: handle,
-            workgroups_x: AtomicU32::new(1),
-            workgroups_y: AtomicU32::new(1),
-            workgroups_z: AtomicU32::new(1),
-        }
+        Self { inner: handle }
     }
 
-    pub fn set_workgroups_size(&self, x: u32, y: u32, z: u32) {
-        self.workgroups_x.store(x, Ordering::Relaxed);
-        self.workgroups_y.store(y, Ordering::Relaxed);
-        self.workgroups_z.store(z, Ordering::Relaxed);
-    }
-
-    pub fn workgroups_size(&self) -> (u32, u32, u32) {
-        let wg_x = self.workgroups_x.load(Ordering::Relaxed);
-        let wg_y = self.workgroups_y.load(Ordering::Relaxed);
-        let wg_z = self.workgroups_z.load(Ordering::Relaxed);
-        (wg_x, wg_y, wg_z)
-    }
-
-    pub fn dispatch_compute(&self) {
-        let (x, y, z) = self.workgroups_size();
+    pub fn dispatch_compute(&self, workgroups: [u32; 3]) {
         unsafe {
-            janus::gl::DispatchCompute(x, y, z);
+            janus::gl::DispatchCompute(workgroups[0], workgroups[1], workgroups[2]);
         }
     }
-}
 
-impl Deref for ComputeShaderHandle {
-    type Target = ShaderHandle;
-
-    fn deref(&self) -> &Self::Target {
+    pub fn inner_handle(&self) -> &ShaderHandle {
         &self.inner
     }
+
+    pub fn view(&self) -> ComputeShaderHandleView {
+        ComputeShaderHandleView {
+            inner: self.inner.view(),
+        }
+    }
 }
+impl janus::GpuResource for ComputeShaderHandle {
+    fn resource_id(&self) -> u32 {
+        self.inner.program
+    }
+}
+impl ShaderProgram for ComputeShaderHandle {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ShaderHandleView {
+    program: u32,
+}
+impl janus::GpuResource for ShaderHandleView {
+    fn resource_id(&self) -> u32 {
+        self.program
+    }
+}
+impl ShaderProgram for ShaderHandleView {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ComputeShaderHandleView {
+    inner: ShaderHandleView,
+}
+impl ComputeShaderHandleView {
+    pub fn dispatch_compute(&self, workgroups: [u32; 3]) {
+        unsafe {
+            janus::gl::DispatchCompute(workgroups[0], workgroups[1], workgroups[2]);
+        }
+    }
+
+    pub fn inner_view(&self) -> ShaderHandleView {
+        self.inner
+    }
+}
+impl janus::GpuResource for ComputeShaderHandleView {
+    fn resource_id(&self) -> u32 {
+        self.inner.program
+    }
+}
+impl ShaderProgram for ComputeShaderHandleView {}
 
 /// Compose a complete shader program pass from just one macro invocation.
 ///
@@ -899,15 +909,15 @@ macro_rules! shader_glsl_compute {
                     $crate::shader::unbind();
                 }
 
-                pub fn set_workgroups_size(&self, x: u32, y: u32, z: u32) {
-                    self.handle.set_workgroups_size(x, y, z);
-                }
-
-                pub fn dispatch(&self) {
-                    self.handle.dispatch_compute();
+                pub fn dispatch(&self, workgroups: [u32; 3]) {
+                    self.handle.dispatch_compute(workgroups);
                 }
 
                 pub fn handle(&self) -> &$crate::shader::ShaderHandle {
+                    self.handle.inner_handle()
+                }
+
+                pub fn compute_handle(&self) -> &$crate::shader::ComputeShaderHandle {
                     &self.handle
                 }
 
