@@ -120,18 +120,20 @@ pub fn compile_shader_unit(
     })
 }
 
-pub fn attach_shader_units(program: &ShaderHandle, units: &[ShaderUnit]) {
+pub fn attach_shader_units(shader: &impl ShaderProgram, units: &[ShaderUnit]) {
+    let program = shader.shader_program();
     units
         .iter()
         .for_each(|&ShaderUnit { shader_obj, .. }| unsafe {
-            janus::gl::AttachShader(program.program, shader_obj);
+            janus::gl::AttachShader(program, shader_obj);
         });
 }
 
-pub fn link_shader_program(program: &ShaderHandle) {
+pub fn link_shader_program(shader: &impl ShaderProgram) {
+    let program = shader.shader_program();
     unsafe {
-        janus::gl::LinkProgram(program.program);
-        janus::gl::ValidateProgram(program.program);
+        janus::gl::LinkProgram(program);
+        janus::gl::ValidateProgram(program);
     }
 }
 
