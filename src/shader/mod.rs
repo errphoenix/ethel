@@ -915,11 +915,11 @@ macro_rules! shader_glsl_compute {
                     self.handle.dispatch_compute(workgroups);
                 }
 
-                pub fn handle(&self) -> &$crate::shader::ShaderHandle {
+                pub const fn handle(&self) -> &$crate::shader::ShaderHandle {
                     self.handle.inner_handle()
                 }
 
-                pub fn compute_handle(&self) -> &$crate::shader::ComputeShaderHandle {
+                pub const fn compute_handle(&self) -> &$crate::shader::ComputeShaderHandle {
                     &self.handle
                 }
 

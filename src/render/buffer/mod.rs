@@ -143,7 +143,7 @@ where
     /// # Panic
     /// If `section` is not a value within the range (0, 2).
     /// Or if `offset` is greater or equal to the buffer's internal length.
-    pub fn bind_shader_storage(&self, section: usize, ssbo_index: usize, offset: u32) {
+    pub fn bind_shader_storage(&self, section: usize, ssbo_index: u32, offset: u32) {
         assert_tb_section!(section);
 
         #[cfg(debug_assertions)]
@@ -166,7 +166,7 @@ where
         unsafe {
             janus::gl::BindBufferRange(
                 janus::gl::SHADER_STORAGE_BUFFER,
-                ssbo_index as u32,
+                ssbo_index,
                 self.gl_obj[section],
                 offset_bytes as isize,
                 length_bytes as isize,
