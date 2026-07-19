@@ -384,7 +384,7 @@ impl janus::GpuResource for ShaderHandle {
 }
 impl ShaderProgram for ShaderHandle {}
 impl ShaderHandle {
-    pub fn view(&self) -> ShaderHandleView {
+    pub const fn view(&self) -> ShaderHandleView {
         ShaderHandleView {
             program: self.program,
         }
@@ -414,11 +414,11 @@ impl ComputeShaderHandle {
         }
     }
 
-    pub fn inner_handle(&self) -> &ShaderHandle {
+    pub const fn inner_handle(&self) -> &ShaderHandle {
         &self.inner
     }
 
-    pub fn view(&self) -> ComputeShaderHandleView {
+    pub const fn view(&self) -> ComputeShaderHandleView {
         ComputeShaderHandleView {
             inner: self.inner.view(),
         }
@@ -453,7 +453,7 @@ impl ComputeShaderHandleView {
         }
     }
 
-    pub fn inner_view(&self) -> ShaderHandleView {
+    pub const fn inner_view(&self) -> ShaderHandleView {
         self.inner
     }
 }
