@@ -582,7 +582,7 @@ macro_rules! shader_glsl {
                     $crate::shader::unbind();
                 }
 
-                pub fn handle(&self) -> &$crate::shader::ShaderHandle {
+                pub const fn handle(&self) -> &$crate::shader::ShaderHandle {
                     &self.handle
                 }
 

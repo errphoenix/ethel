@@ -6,13 +6,13 @@ use std::{
 
 use image::DynamicImage;
 use janus::{
-    GpuResource, StringHash,
-    texture::{ImageFormat, ImageType, Texture, TextureError, TextureKey, TextureView},
+    StringHash,
+    texture::{ImageFormat, ImageType, Tex, Texture, TextureError, TextureView},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{Level, event};
 
-use crate::assets::pipe::{AssetMessage, AssetMessageRequest, AssetSyncMessage};
+use crate::assets::pipe::{AssetMessage, AssetMessageRequestKind, AssetSyncMessage};
 
 #[allow(unused_imports)]
 pub use strings::{CachedStringHash, StringCache};
@@ -70,8 +70,8 @@ where
     M: Default + Clone + Copy,
 {
     assets: HashMap<StringHash, Handle<T, M>, janus::StringHasher>,
-    pipe_tx: crossbeam::channel::Sender<AssetMessage>,
-    pipe_rx: crossbeam::channel::Receiver<AssetMessage>,
+    pipe_tx: crossbeam::channel::Sender<AssetMessage<T>>,
+    pipe_rx: crossbeam::channel::Receiver<AssetMessage<T>>,
     sync_pipe_tx: Option<crossbeam::channel::Sender<AssetSyncMessage<M>>>,
 }
 impl<T, M> Default for AssetRegistry<T, M>
@@ -335,7 +335,7 @@ where
     #[serde(skip)]
     gpu_resource: Option<T::AsGpu>,
     #[serde(skip)]
-    root_pipe: crossbeam::channel::Sender<AssetMessage>,
+    root_pipe: crossbeam::channel::Sender<AssetMessage<T>>,
     #[serde(skip)]
     _marker_meta: std::marker::PhantomData<M>,
 }
@@ -472,7 +472,7 @@ where
     /// [`AssetError::FileNotFound`]: FileNotFound
     /// [`AssetError::FileIoError`]: FileIoError
     /// [`AssetError::FileImageLoadError`]: FileImageLoadError
-    pub fn load_to_memory(&mut self) -> AssetResult<&T> {
+    pub fn load_to_memory(&mut self, params: &<T as Import>::AdditionalParams) -> AssetResult<&T> {
         if self.raw_resource.is_some() {
             return Err(AssetError::AlreadyInMemory);
         }
@@ -482,13 +482,13 @@ where
             return Err(AssetError::FileNotFound(path.to_path_buf()));
         }
 
-        let loaded = T::from_file(path)?;
+        let loaded = T::from_file(path, params)?;
         self.raw_resource = Some(loaded);
 
         self.root_pipe
             .send(AssetMessage::Success {
                 reference_id: self.id,
-                operation: AssetMessageRequest::LoadToMemory,
+                operation: AssetMessageRequestKind::LoadToMemory,
             })
             .unwrap();
 
@@ -504,7 +504,10 @@ where
     /// Any error as according to [`T::Upload::upload_to_gpu`], or
     /// [`AssetError::NoGlContext`] is returned if the GL context is
     /// unavailable on this thread.
-    pub fn upload_to_gpu(&mut self) -> AssetResult<&T::AsGpu> {
+    pub fn upload_to_gpu(
+        &mut self,
+        params: &<T as Upload>::AdditionalParams,
+    ) -> AssetResult<&T::AsGpu> {
         if self.raw_resource.is_none() {
             return Err(AssetError::NotInMemory);
         }
@@ -514,13 +517,13 @@ where
         }
 
         let raw_resource = self.raw_resource.as_ref().unwrap();
-        let gpu_resource = raw_resource.upload_to_gpu()?;
+        let gpu_resource = raw_resource.upload_to_gpu(params)?;
         self.gpu_resource = Some(gpu_resource);
 
         self.root_pipe
             .send(AssetMessage::Success {
                 reference_id: self.id,
-                operation: AssetMessageRequest::LoadToGpu,
+                operation: AssetMessageRequestKind::LoadToGpu,
             })
             .unwrap();
 
@@ -558,7 +561,7 @@ where
         self.root_pipe
             .send(AssetMessage::Success {
                 reference_id: self.id,
-                operation: AssetMessageRequest::UnloadFromGpu,
+                operation: AssetMessageRequestKind::UnloadFromGpu,
             })
             .unwrap();
 
@@ -579,7 +582,7 @@ where
         self.root_pipe
             .send(AssetMessage::Success {
                 reference_id: self.id,
-                operation: AssetMessageRequest::UnloadFromMemory,
+                operation: AssetMessageRequestKind::UnloadFromMemory,
             })
             .unwrap();
 
@@ -599,29 +602,35 @@ where
 }
 
 pub trait Import {
-    fn from_file<P: AsRef<Path> + Debug>(path: P) -> AssetResult<Self>
+    type AdditionalParams: Clone + Debug;
+
+    fn from_file<P: AsRef<Path> + Debug>(
+        path: P,
+        params: &Self::AdditionalParams,
+    ) -> AssetResult<Self>
     where
         Self: Sized,
     {
         let bytes = std::fs::read(&path).map_err(|io_err| AssetError::FileIoError(io_err))?;
-        Self::from_memory(&bytes)
+        Self::from_memory(&bytes, params)
     }
 
-    fn from_memory(bytes: &[u8]) -> AssetResult<Self>
+    fn from_memory(bytes: &[u8], params: &Self::AdditionalParams) -> AssetResult<Self>
     where
         Self: Sized;
 }
 
 pub trait Upload {
+    type AdditionalParams: Clone + Debug;
     type AsGpu: Debug;
 
-    fn upload_to_gpu(&self) -> AssetResult<Self::AsGpu>;
+    fn upload_to_gpu(&self, params: &Self::AdditionalParams) -> AssetResult<Self::AsGpu>;
 
-    fn into_gpu(self) -> AssetResult<Self::AsGpu>
+    fn into_gpu(self, params: &Self::AdditionalParams) -> AssetResult<Self::AsGpu>
     where
         Self: Sized,
     {
-        Self::upload_to_gpu(&self)
+        Self::upload_to_gpu(&self, params)
     }
 }
 
@@ -669,7 +678,9 @@ impl RawTexture {
     }
 }
 impl Import for RawTexture {
-    fn from_memory(bytes: &[u8]) -> Result<RawTexture, AssetError> {
+    type AdditionalParams = ();
+
+    fn from_memory(bytes: &[u8], _params: &()) -> Result<RawTexture, AssetError> {
         let image = image::load_from_memory(bytes)
             .map_err(|img_err| AssetError::FileImageLoadError(img_err))?;
 
@@ -677,6 +688,7 @@ impl Import for RawTexture {
     }
 }
 impl Upload for RawTexture {
+    type AdditionalParams = i32; // mipmaps
     type AsGpu = Texture;
 
     /// Upload raw texture data to the gpu.
@@ -689,12 +701,13 @@ impl Upload for RawTexture {
     /// [`AssetError::TextureUnknownUploadError`] for any other texture upload
     /// errors.
     ///
-    fn upload_to_gpu(&self) -> AssetResult<Self::AsGpu> {
-        let texture = Texture::from_image(&self.0).map_err(|tex_err| match tex_err {
-            TextureError::UnsupportedFormat => AssetError::TextureUnsupportedImageFormat,
-            TextureError::ImageLoadError(_) => unreachable!("image is already loaded"),
-            _ => AssetError::TextureUnknownUploadError,
-        })?;
+    fn upload_to_gpu(&self, mipmaps: &i32) -> AssetResult<Self::AsGpu> {
+        let texture =
+            Texture::from_2d_image(&self.0, *mipmaps).map_err(|tex_err| match tex_err {
+                TextureError::UnsupportedFormat => AssetError::TextureUnsupportedImageFormat,
+                TextureError::ImageLoadError(_) => unreachable!("image is already loaded"),
+                _ => AssetError::TextureUnknownUploadError,
+            })?;
         Ok(texture)
     }
 }
@@ -707,22 +720,20 @@ impl HasMetadata<TextureMetadata> for RawTexture {
 }
 impl HasMetadata<TextureMetadata> for Texture {
     fn make_metadata(&self, metadata: &mut TextureMetadata) {
-        let image_format = self.metadata.format();
-        let pixel_format = self.metadata.pixel();
-        let gl_object = TextureKey(self.resource_id());
+        let image_format = Tex::metadata(self).format();
+        let pixel_format = Tex::metadata(self).pixel();
         metadata.image_format = Some(image_format);
         metadata.pixel_format = Some(pixel_format);
-        metadata.gl_object = Some(gl_object);
+        metadata.view = Some(self.view());
     }
 }
 impl HasMetadata<TextureMetadata> for TextureView {
     fn make_metadata(&self, metadata: &mut TextureMetadata) {
-        let image_format = self.metadata().image_format;
-        let pixel_format = self.metadata().pixel_format;
-        let gl_object = TextureKey(self.resource_id());
+        let image_format = HasMetadata::metadata(self).image_format;
+        let pixel_format = HasMetadata::metadata(self).pixel_format;
         metadata.image_format = image_format;
         metadata.pixel_format = pixel_format;
-        metadata.gl_object = Some(gl_object);
+        metadata.view = Some(*self);
     }
 }
 
@@ -731,7 +742,7 @@ pub struct TextureMetadata {
     pub size: Option<(u32, u32)>,
     pub image_format: Option<ImageFormat>,
     pub pixel_format: Option<ImageType>,
-    pub gl_object: Option<TextureKey>,
+    pub view: Option<TextureView>,
 }
 
 #[macro_export]
