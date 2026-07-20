@@ -7,13 +7,24 @@ use crate::assets::{AssetError, AssetRegistry, HasMetadata, Import, Upload};
 pub type RegistryTx<T> = crossbeam::channel::Sender<AssetMessage<T>>;
 pub type RegistryRx<T> = crossbeam::channel::Receiver<AssetMessage<T>>;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RegistryPipe<T>
 where
     T: Import + Upload,
 {
     buffer: Vec<AssetMessage<T>>,
     pipe: Option<RegistryTx<T>>,
+}
+impl<T> Default for RegistryPipe<T>
+where
+    T: Import + Upload,
+{
+    fn default() -> Self {
+        Self {
+            buffer: Default::default(),
+            pipe: Default::default(),
+        }
+    }
 }
 impl<T> Clone for RegistryPipe<T>
 where
