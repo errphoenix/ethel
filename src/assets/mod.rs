@@ -7,7 +7,7 @@ use std::{
 use image::DynamicImage;
 use janus::{
     StringHash,
-    texture::{ImageFormat, ImageType, Tex, Texture, TextureError, TextureView},
+    texture::{ImageFormat, ImageType, MipLevels, Tex, Texture, TextureError, TextureView},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{Level, event};
@@ -688,7 +688,7 @@ impl Import for RawTexture {
     }
 }
 impl Upload for RawTexture {
-    type AdditionalParams = i32; // mipmaps
+    type AdditionalParams = MipLevels;
     type AsGpu = Texture;
 
     /// Upload raw texture data to the gpu.
@@ -701,7 +701,7 @@ impl Upload for RawTexture {
     /// [`AssetError::TextureUnknownUploadError`] for any other texture upload
     /// errors.
     ///
-    fn upload_to_gpu(&self, mipmaps: &i32) -> AssetResult<Self::AsGpu> {
+    fn upload_to_gpu(&self, mipmaps: &MipLevels) -> AssetResult<Self::AsGpu> {
         let texture =
             Texture::from_2d_image(&self.0, *mipmaps).map_err(|tex_err| match tex_err {
                 TextureError::UnsupportedFormat => AssetError::TextureUnsupportedImageFormat,
