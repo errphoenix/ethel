@@ -1,5 +1,5 @@
 use std::{
-    ops::{Add, AddAssign, Div, DivAssign},
+    ops::{Add, AddAssign},
     time::{Duration, Instant},
 };
 
@@ -45,26 +45,47 @@ impl<const LENGTH: usize, T: AccumValue> AccumulationWindow<LENGTH, T> {
     }
 }
 impl<const LENGTH: usize, T: AverageValue> AccumulationWindow<LENGTH, T> {
-    /// Get the average value within the [`total duration`](AccumulationWindow::total_duration)
-    /// of the accumulation window.
-    pub fn average_per_sec(&self) -> T {
-        let duration = self.total_duration().as_secs_f32();
-        self.accumulated() / duration
-    }
-
-    /// Get the average value within the [`total duration`](AccumulationWindow::total_duration)
-    /// of the accumulation window.
-    pub fn average_per_millis(&self) -> T {
-        let duration = self.total_duration().as_millis() as f32;
-        self.accumulated() / duration
+    pub fn average(&self) -> T {
+        let total_samples = self
+            .buffer
+            .iter()
+            .fold(0, |accum, bucket| accum + bucket.sample_count);
+        self.accumulated().average(total_samples)
     }
 }
 
-pub trait AccumValue: Default + Clone + Copy + Add<Self> + AddAssign<Self> {}
-impl<T> AccumValue for T where T: Default + Clone + Copy + Add<T> + AddAssign<T> {}
+pub trait AccumValue: Default + Clone + Copy + Add<Self, Output = Self> + AddAssign<Self> {}
+impl<T> AccumValue for T where T: Default + Clone + Copy + Add<Self, Output = Self> + AddAssign<Self>
+{}
 
-pub trait AverageValue: AccumValue + Div<f32, Output = Self> + DivAssign<f32> {}
-impl<T> AverageValue for T where T: AccumValue + Div<f32, Output = T> + DivAssign<f32> {}
+pub trait AverageValue: AccumValue {
+    fn average(self, sample_count: u32) -> Self;
+}
+impl AverageValue for u32 {
+    fn average(self, sample_count: u32) -> Self {
+        self / sample_count
+    }
+}
+impl AverageValue for i32 {
+    fn average(self, sample_count: u32) -> Self {
+        self / sample_count as i32
+    }
+}
+impl AverageValue for u64 {
+    fn average(self, sample_count: u32) -> Self {
+        self / sample_count as u64
+    }
+}
+impl AverageValue for i64 {
+    fn average(self, sample_count: u32) -> Self {
+        self / sample_count as i64
+    }
+}
+impl AverageValue for f32 {
+    fn average(self, sample_count: u32) -> Self {
+        self / sample_count as f32
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AccumulationBucket<T: AccumValue> {
@@ -72,8 +93,8 @@ pub struct AccumulationBucket<T: AccumValue> {
     start: Instant,
     last_update: Instant,
     accumulated: T,
+    sample_count: u32,
 }
-
 impl<T: AccumValue> AccumulationBucket<T> {
     pub fn new(target_size: Duration) -> Self {
         Self {
@@ -81,6 +102,7 @@ impl<T: AccumValue> AccumulationBucket<T> {
             start: Instant::now(),
             last_update: Instant::now(),
             accumulated: T::default(),
+            sample_count: 0,
         }
     }
 
@@ -95,6 +117,7 @@ impl<T: AccumValue> AccumulationBucket<T> {
             self.accumulated += value;
         }
         self.last_update = time;
+        self.sample_count += 1;
         self.accumulated
     }
 
@@ -110,5 +133,10 @@ impl<T: AccumValue> AccumulationBucket<T> {
     /// The target (or max) duration of the slice of time representable.
     pub fn target_size(&self) -> Duration {
         self.target_size
+    }
+}
+impl<T: AverageValue> AccumulationBucket<T> {
+    pub fn average(&self) -> T {
+        self.value().average(self.sample_count)
     }
 }
