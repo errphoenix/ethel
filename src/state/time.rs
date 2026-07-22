@@ -1,5 +1,5 @@
 use std::{
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, Div, DivAssign},
     time::{Duration, Instant},
 };
 
@@ -9,7 +9,6 @@ pub struct AccumulationWindow<const LENGTH: usize, T: AccumValue> {
     buffer: [AccumulationBucket<T>; LENGTH],
     index: usize,
 }
-
 impl<const LENGTH: usize, T: AccumValue> AccumulationWindow<LENGTH, T> {
     pub fn new(bucket_size: Duration) -> Self {
         Self {
@@ -40,11 +39,32 @@ impl<const LENGTH: usize, T: AccumValue> AccumulationWindow<LENGTH, T> {
     pub fn bucket_size(&self) -> Duration {
         self.bucket_size
     }
+
+    pub fn total_duration(&self) -> Duration {
+        self.bucket_size.mul_f32(LENGTH as f32)
+    }
+}
+impl<const LENGTH: usize, T: AverageValue> AccumulationWindow<LENGTH, T> {
+    /// Get the average value within the [`total duration`](AccumulationWindow::total_duration)
+    /// of the accumulation window.
+    pub fn average_per_sec(&self) -> T {
+        let duration = self.total_duration().as_secs_f32();
+        self.accumulated() / duration
+    }
+
+    /// Get the average value within the [`total duration`](AccumulationWindow::total_duration)
+    /// of the accumulation window.
+    pub fn average_per_millis(&self) -> T {
+        let duration = self.total_duration().as_millis() as f32;
+        self.accumulated() / duration
+    }
 }
 
 pub trait AccumValue: Default + Clone + Copy + Add<Self> + AddAssign<Self> {}
+impl<T> AccumValue for T where T: Default + Clone + Copy + Add<T> + AddAssign<T> {}
 
-impl<T> AccumValue for T where T: Default + Clone + Copy + std::ops::Add<T> + std::ops::AddAssign<T> {}
+pub trait AverageValue: AccumValue + Div<f32, Output = Self> + DivAssign<f32> {}
+impl<T> AverageValue for T where T: AccumValue + Div<f32, Output = T> + DivAssign<f32> {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AccumulationBucket<T: AccumValue> {
