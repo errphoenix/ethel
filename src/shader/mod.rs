@@ -798,12 +798,17 @@ impl ShaderProgram for ComputeShaderHandleView {}
 ///    and types. See [`crate::shader_glsl_ssbo`].
 /// 5. Constants (`const`), to define constant variables directly form Rust
 ///    source doe. See [`crate::shader::Constant`].
-/// 6. Utility/library functions (`lib`), to define utility or auxiliary shader
+/// 6. Shader variants (`variants`), to define alternative variants of this
+///    shader, allowing for dynamic shader source pre-processing. This is only
+///    allowed in the `common` section.
+/// 7. Utility/library functions (`lib`), to define utility or auxiliary shader
 ///    functions with a custom syntax. See [`crate::shader::shader_glsl_lib`].
+///    Can also be selected dynamically depending on the selected shader
+///    variant with the `on VARIANT_PATTERN => `expr` syntax.
 #[macro_export]
 macro_rules! shader_glsl {
     (
-        struct $name:ident > [$ver:expr] {
+        struct $name:ident > [$ver:expr]; $vcount:expr => {
             common {
                 $(uniform {
                     $(
@@ -825,10 +830,16 @@ macro_rules! shader_glsl {
                         $c_const_a:expr
                     )+
                 };)?
+                $(variants {
+                    $($var_name:ident;)+
+                };)?
                 $(lib {
                     $(
                         $c_lib:expr;
                     )+
+                    $(
+                        >$c_var_match:ident => $vc_lib:expr;
+                    )*
                 };)?
             };
 
@@ -863,14 +874,81 @@ macro_rules! shader_glsl {
                         $(
                             $lib:expr;
                         )+
+                        $(
+                            >$var_match:ident => $v_lib:expr;
+                        )*
                     };)?
 
-                    src() $src:literal
+                    src() {
+                        $((
+                            $($s_lit_root:literal;)*
+                            $(match variant {
+                                $(0 =>
+                                    $([
+                                        $($s_lit_nest0f:literal;)*
+                                        $(match variant {
+                                            $(0 =>
+                                                $({
+                                                    $($s_lit_nest1ff:literal;)*
+                                                    $(match variant {
+                                                        $(0 => $s_mat_nest1_defff:literal;)?
+                                                        $($s_item_nest1ff:ident => $s_lit_nest2ff:literal;)+
+                                                    })*
+                                                })?
+                                            )?
+                                            $($s_item_nest0f:ident =>
+                                                $({
+                                                    $($s_lit_nest1f:literal;)*
+                                                    $(match variant {
+                                                        $(0 => $s_mat_nest1_deff:literal;)?
+                                                        $($s_item_nest1f:ident => $s_lit_nest2f:literal;)+
+                                                    })*
+                                                })?
+                                            )+
+                                        })*
+                                    ])?
+                                )?
+                                $($s_item_root:ident =>
+                                    $([
+                                        $($s_lit_nest0:literal;)*
+                                        $(match variant {
+                                            $(0 =>
+                                                $({
+                                                    $($s_lit_nest1bf:literal;)*
+                                                    $(match variant {
+                                                        $(0 => $s_mat_nest1_defbf:literal;)?
+                                                        $($s_item_nest1bf:ident => $s_lit_nest2bf:literal;)+
+                                                    })*
+                                                })?
+                                            )?
+                                            $($s_item_nest0:ident =>
+                                                $({
+                                                    $($s_lit_nest1:literal;)*
+                                                    $(match variant {
+                                                        $(0 => $s_mat_nest1_def:literal;)?
+                                                        $($s_item_nest1:ident => $s_lit_nest2:literal;)+
+                                                    })*
+                                                })?
+                                            )+
+                                        })*
+                                    ])?
+                                )+
+                            })*
+                        ))+
+                    }
                 ];
             )+
         }
     ) => {
         paste::paste! {
+            #[derive(Debug, PartialEq, Eq, Hash, Default, Clone, Copy)]
+            pub enum [< Shader $name Variants >] {
+                #[default]
+                Default,
+                $($($var_name,)+)?
+            }
+            impl $crate::shader::VarShader for [< Shader $name Variants >] {}
+
             #[derive(Debug, PartialEq, Eq, Hash, Default)]
             pub struct [< Shader $name >] {
                 handle: $crate::shader::ShaderHandle,
@@ -944,6 +1022,11 @@ macro_rules! shader_glsl {
                             $(
                                 let _ = composer.inject_body(&$c_lib);
                             )+
+                            $(
+                                if variant == [< Shader $name Variants >]::$c_var_match {
+                                    let _ = composer.inject_body(&$vc_lib);
+                                }
+                            )*
                         )?
 
                         composer
@@ -990,6 +1073,11 @@ macro_rules! shader_glsl {
                             $(
                                 let _ = composer.inject_body(&$lib);
                             )+
+                            $(
+                                if variant == [< Shader $name Variants >]::$var_match {
+                                    let _ = composer.inject_body(&$v_lib);
+                                }
+                            )*
                         )?
                         composer.copy_from(&common);
                         composer.set_source(indoc::indoc! { $src });
@@ -1059,6 +1147,11 @@ macro_rules! shader_glsl {
                                 $(
                                     let _ = composer.inject_body(&$c_lib);
                                 )+
+                                $(
+                                    if variant == $c_var_match {
+                                        let _ = composer.inject_body(&$cv_lib);
+                                    }
+                                )*
                             )?
 
                             composer
@@ -1106,6 +1199,11 @@ macro_rules! shader_glsl {
                                     $(
                                         let _ = composer.inject_body(&$lib);
                                     )+
+                                    $(
+                                        if variant == $var_match {
+                                            let _ = composer.inject_body(&$v_lib);
+                                        }
+                                    )*
                                 )?
                                 composer.copy_from(&common);
                                 composer.set_source(indoc::indoc! { $src });
