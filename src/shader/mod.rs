@@ -1,4 +1,5 @@
 pub mod glsl;
+pub mod source;
 pub mod uniform;
 
 pub use crate::shader_glsl_ssbo;
@@ -309,66 +310,6 @@ impl ShaderComposer {
             "{}\n{}{}{}{}",
             self.version, self.header, self.uniforms_section, self.body, self.source
         )
-    }
-}
-
-pub trait VarShader: Default + PartialEq + Eq + Clone + Copy + std::fmt::Debug {}
-
-#[derive(Clone, Debug)]
-pub enum ShaderSourceNode<const VAR_COUNT: usize, T: VarShader> {
-    Literal(&'static str),
-    Variable([(T, Box<Self>); VAR_COUNT]),
-    Subtree(Vec<Self>),
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ShaderSourceTree<const VAR_COUNT: usize, T: VarShader> {
-    nodes: Vec<ShaderSourceNode<VAR_COUNT, T>>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ShaderSourceBuilder<const VAR_COUNT: usize, T: VarShader> {
-    tree: ShaderSourceTree<VAR_COUNT, T>,
-}
-impl<const VAR_COUNT: usize, T: VarShader> ShaderSourceBuilder<VAR_COUNT, T> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn append_node(&mut self, node: ShaderSourceNode<VAR_COUNT, T>) {
-        self.tree.nodes.push(node);
-    }
-
-    fn build_node(variant: T, node: &ShaderSourceNode<VAR_COUNT, T>, out: &mut String) {
-        match node {
-            ShaderSourceNode::Literal(literal) => {
-                let _ = writeln!(out, "{literal}");
-            }
-            ShaderSourceNode::Variable(options) => {
-                if let Some((variant, contents)) = options.iter().find(|(v, _)| variant.eq(v)) {
-                    Self::build_node(*variant, contents, out);
-                } else {
-                    tracing::error!(
-                        "error building shader source: no matching source for variable {variant:?} in source node"
-                    );
-                }
-            }
-            ShaderSourceNode::Subtree(shader_source_nodes) => {
-                Self::build_nodes(variant, shader_source_nodes, out)
-            }
-        }
-    }
-
-    fn build_nodes(variant: T, nodes: &[ShaderSourceNode<VAR_COUNT, T>], out: &mut String) {
-        for node in nodes {
-            Self::build_node(variant, node, out);
-        }
-    }
-
-    pub fn build(&self, variant: T) -> String {
-        let mut string = String::new();
-        Self::build_nodes(variant, &self.tree.nodes, &mut string);
-        format!("void main() {{\n{string}}}")
     }
 }
 
@@ -880,61 +821,7 @@ macro_rules! shader_glsl {
                     };)?
 
                     src() {
-                        $((
-                            $($s_lit_root:literal;)*
-                            $(match variant {
-                                $(0 =>
-                                    $([
-                                        $($s_lit_nest0f:literal;)*
-                                        $(match variant {
-                                            $(0 =>
-                                                $({
-                                                    $($s_lit_nest1ff:literal;)*
-                                                    $(match variant {
-                                                        $(0 => $s_mat_nest1_defff:literal;)?
-                                                        $($s_item_nest1ff:ident => $s_lit_nest2ff:literal;)+
-                                                    })*
-                                                })?
-                                            )?
-                                            $($s_item_nest0f:ident =>
-                                                $({
-                                                    $($s_lit_nest1f:literal;)*
-                                                    $(match variant {
-                                                        $(0 => $s_mat_nest1_deff:literal;)?
-                                                        $($s_item_nest1f:ident => $s_lit_nest2f:literal;)+
-                                                    })*
-                                                })?
-                                            )+
-                                        })*
-                                    ])?
-                                )?
-                                $($s_item_root:ident =>
-                                    $([
-                                        $($s_lit_nest0:literal;)*
-                                        $(match variant {
-                                            $(0 =>
-                                                $({
-                                                    $($s_lit_nest1bf:literal;)*
-                                                    $(match variant {
-                                                        $(0 => $s_mat_nest1_defbf:literal;)?
-                                                        $($s_item_nest1bf:ident => $s_lit_nest2bf:literal;)+
-                                                    })*
-                                                })?
-                                            )?
-                                            $($s_item_nest0:ident =>
-                                                $({
-                                                    $($s_lit_nest1:literal;)*
-                                                    $(match variant {
-                                                        $(0 => $s_mat_nest1_def:literal;)?
-                                                        $($s_item_nest1:ident => $s_lit_nest2:literal;)+
-                                                    })*
-                                                })?
-                                            )+
-                                        })*
-                                    ])?
-                                )+
-                            })*
-                        ))+
+                        $($tokens:tt)*
                     }
                 ];
             )+
@@ -947,7 +834,11 @@ macro_rules! shader_glsl {
                 Default,
                 $($($var_name,)+)?
             }
-            impl $crate::shader::VarShader for [< Shader $name Variants >] {}
+            impl $crate::shader::source::VarShader for [< Shader $name Variants >] {}
+            $crate::impl_variant_count!([< Shader $name Variants >] {
+                Default,
+                $($($var_name,)+)?
+            });
 
             #[derive(Debug, PartialEq, Eq, Hash, Default)]
             pub struct [< Shader $name >] {
@@ -1087,64 +978,9 @@ macro_rules! shader_glsl {
                         composer.copy_from(&common);
 
                         let source = {
-                            let tree = $crate::shader_source! {
-                                enum [< Shader $name Variants >]: $vcount, {
-                                    $((
-                                        $($s_lit_root;)*
-                                        $(match variant {
-                                            $(0 =>
-                                                $([
-                                                    $($s_lit_nest0f;)*
-                                                    $(match variant {
-                                                        $(0 =>
-                                                            $({
-                                                                $($s_lit_nest1ff;)*
-                                                                $(match variant {
-                                                                    $(0 => $s_mat_nest1_defff;)?
-                                                                    $($s_item_nest1ff => $s_lit_nest2ff;)+
-                                                                })*
-                                                            })?
-                                                        )?
-                                                        $($s_item_nest0f =>
-                                                            $({
-                                                                $($s_lit_nest1f;)*
-                                                                $(match variant {
-                                                                    $(0 => $s_mat_nest1_deff;)?
-                                                                    $($s_item_nest1f => $s_lit_nest2f;)+
-                                                                })*
-                                                            })?
-                                                        )+
-                                                    })*
-                                                ])?
-                                            )?
-                                            $($s_item_root =>
-                                                $([
-                                                    $($s_lit_nest0;)*
-                                                    $(match variant {
-                                                        $(0 =>
-                                                            $({
-                                                                $($s_lit_nest1bf;)*
-                                                                $(match variant {
-                                                                    $(0 => $s_mat_nest1_defbf;)?
-                                                                    $($s_item_nest1bf => $s_lit_nest2bf;)+
-                                                                })*
-                                                            })?
-                                                        )?
-                                                        $($s_item_nest0 =>
-                                                            $({
-                                                                $($s_lit_nest1;)*
-                                                                $(match variant {
-                                                                    $(0 => $s_mat_nest1_def;)?
-                                                                    $($s_item_nest1 => $s_lit_nest2;)+
-                                                                })*
-                                                            })?
-                                                        )+
-                                                    })*
-                                                ])?
-                                            )+
-                                        })*
-                                    ))+
-                                }
+                            let tree = $crate::shader_source_v2! {
+                                [< Shader $name Variants >],
+                                $($tokens)*
                             };
                             tree.build(variant)
                         };
@@ -1280,64 +1116,9 @@ macro_rules! shader_glsl {
                                 composer.copy_from(&common);
 
                                 let source = {
-                                    let tree = $crate::shader_source! {
-                                        enum [< Shader $name Variants >]: $vcount, {
-                                            $((
-                                                $($s_lit_root;)*
-                                                $(match variant {
-                                                    $(0 =>
-                                                        $([
-                                                            $($s_lit_nest0f;)*
-                                                            $(match variant {
-                                                                $(0 =>
-                                                                    $({
-                                                                        $($s_lit_nest1ff;)*
-                                                                        $(match variant {
-                                                                            $(0 => $s_mat_nest1_defff;)?
-                                                                            $($s_item_nest1ff => $s_lit_nest2ff;)+
-                                                                        })*
-                                                                    })?
-                                                                )?
-                                                                $($s_item_nest0f =>
-                                                                    $({
-                                                                        $($s_lit_nest1f;)*
-                                                                        $(match variant {
-                                                                            $(0 => $s_mat_nest1_deff;)?
-                                                                            $($s_item_nest1f => $s_lit_nest2f;)+
-                                                                        })*
-                                                                    })?
-                                                                )+
-                                                            })*
-                                                        ])?
-                                                    )?
-                                                    $($s_item_root =>
-                                                        $([
-                                                            $($s_lit_nest0;)*
-                                                            $(match variant {
-                                                                $(0 =>
-                                                                    $({
-                                                                        $($s_lit_nest1bf;)*
-                                                                        $(match variant {
-                                                                            $(0 => $s_mat_nest1_defbf;)?
-                                                                            $($s_item_nest1bf => $s_lit_nest2bf;)+
-                                                                        })*
-                                                                    })?
-                                                                )?
-                                                                $($s_item_nest0 =>
-                                                                    $({
-                                                                        $($s_lit_nest1;)*
-                                                                        $(match variant {
-                                                                            $(0 => $s_mat_nest1_def;)?
-                                                                            $($s_item_nest1 => $s_lit_nest2;)+
-                                                                        })*
-                                                                    })?
-                                                                )+
-                                                            })*
-                                                        ])?
-                                                    )+
-                                                })*
-                                            ))+
-                                        }
+                                    let tree = $crate::shader_source_v2! {
+                                        [< Shader $name Variants >],
+                                        $($tokens)*
                                     };
                                     tree.build(variant)
                                 };
@@ -1658,10 +1439,10 @@ mod tests {
                 };
 
                 src() {
-                    ("
+                    "
                         do cool stuff
                         gl_Position = vec4(FIXED_POS);";
-                    )
+
                 }
             ];
 
@@ -1690,39 +1471,24 @@ mod tests {
                     };
                 };
 
-                src() {(
-                    "
-                        do more cool stuff
-                        outColor = vec4(1.0);
-                    ";
-                    match variant {
-                        // Another and Default
-                        0 => ["//default";]
-                        Other => ["//other";]
+                src() {
+                    "test";
+                    match {
+                        _ => {
+                            "default";
+                            match {
+                                Other => "default, other";
+                                _ => "default, default";
+                        }};
+                        Other | Another => {
+                            "other";
+                            match {
+                                _ => "default";
+                                Other => "other";
+                                Another => "another";
+                        }};
                     }
-                )(
-                    "// another node!";
-                    match variant {
-                        // Other and Another
-                        0 => [
-                            "//other lit 0";
-                            match variant {
-                                0 => {"// okay okay now we end this here for real";}
-                                Another => {
-                                    "//another lit 1";
-                                    match variant {
-                                        0 => "// okay okay now we end this here for real";
-                                        Another => "// i am done playing.";
-                                        Other => "i have decided i will NOT compile";
-                                    }
-                                }
-                                Other => {"i have decided i will NOT compile";}
-                            }
-                        ]
-                        // can also explicitly match Default
-                        Default => ["// lets just end this here";]
-                    }
-                )}
+                }
             ];
         }
     }
