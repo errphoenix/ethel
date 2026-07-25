@@ -5,7 +5,7 @@ pub mod uniform;
 pub use crate::shader_glsl_ssbo;
 use crate::state::data;
 
-use std::{fmt::Write, hash::Hash, str::FromStr};
+use std::{hash::Hash, str::FromStr};
 
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
@@ -457,11 +457,11 @@ impl ShaderProgram for ComputeShaderHandleView {}
 /// 7. Utility/library functions (`lib`), to define utility or auxiliary shader
 ///    functions with a custom syntax. See [`crate::shader::shader_glsl_lib`].
 ///    Can also be selected dynamically depending on the selected shader
-///    variant with the `on VARIANT_PATTERN => `expr` syntax.
+///    variant with the `>VARIANT_PATTERN => `expr` syntax.
 #[macro_export]
 macro_rules! shader_glsl {
     (
-        struct $name:ident > [$ver:expr]; $vcount:expr => {
+        struct $name:ident > [$ver:expr] {
             common {
                 $(uniform {
                     $(
@@ -489,7 +489,7 @@ macro_rules! shader_glsl {
                 $(lib {
                     $(
                         $c_lib:expr;
-                    )+
+                    )*
                     $(
                         >$c_var_match:ident => $vc_lib:expr;
                     )*
@@ -526,7 +526,7 @@ macro_rules! shader_glsl {
                     $(lib {
                         $(
                             $lib:expr;
-                        )+
+                        )*
                         $(
                             >$var_match:ident => $v_lib:expr;
                         )*
@@ -569,7 +569,6 @@ macro_rules! shader_glsl {
                     )?
                 )+
             }
-
             impl [< Shader $name >] {
                 pub fn bind(&self) {
                     self.handle.bind();
@@ -629,9 +628,9 @@ macro_rules! shader_glsl {
                         $(
                             $(
                                 let _ = composer.inject_body(&$c_lib);
-                            )+
+                            )*
                             $(
-                                if variant == [< Shader $name Variants >]::$c_var_match {
+                                if variant == [< Shader $name Variants >] ::$c_var_match {
                                     let _ = composer.inject_body(&$vc_lib);
                                 }
                             )*
@@ -680,9 +679,9 @@ macro_rules! shader_glsl {
                         $(
                             $(
                                 let _ = composer.inject_body(&$lib);
-                            )+
+                            )*
                             $(
-                                if variant == [< Shader $name Variants >]::$var_match {
+                                if variant == [< Shader $name Variants >] ::$var_match {
                                     let _ = composer.inject_body(&$v_lib);
                                 }
                             )*
@@ -906,7 +905,7 @@ macro_rules! shader_glsl_compute {
 
             $(uniform {
                 $(
-                    $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
+                    length $u_len:literal, $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
                 )+
             };)?
             $(type {
@@ -924,16 +923,36 @@ macro_rules! shader_glsl_compute {
                     $const_a:expr
                 )+
             };)?
+            $(variants {
+                $($var_name:ident;)+
+            };)?
             $(lib {
                 $(
                     $lib:expr;
-                )+
+                )*
+                $(
+                    >$var_match:ident => $v_lib:expr;
+                )*
             };)?
 
-            src() $src:literal
+            src() {
+                $($tokens:tt)*
+            }
         }
     ) => {
         paste::paste! {
+            #[derive(Debug, PartialEq, Eq, Hash, Default, Clone, Copy)]
+            pub enum [< ComputeShader $name Variants >] {
+                #[default]
+                Default,
+                $($($var_name,)+)?
+            }
+            impl $crate::shader::source::VarShader for [< ComputeShader $name Variants >] {}
+            $crate::impl_variant_count!([< ComputeShader $name Variants >] {
+                Default,
+                $($($var_name,)+)?
+            });
+
             #[derive(Debug, Default)]
             pub struct [< ComputeShader $name >] {
                 handle: $crate::shader::ComputeShaderHandle,
@@ -944,7 +963,6 @@ macro_rules! shader_glsl_compute {
                     )+
                 )?
             }
-
             impl [< ComputeShader $name >] {
                 pub fn bind(&self) {
                     self.handle.bind();
@@ -968,6 +986,11 @@ macro_rules! shader_glsl_compute {
 
                 #[cfg(debug_assertions)]
                 pub fn build_sources() -> String {
+                    Self::build_sources_variant(std::default::Default::default())
+                }
+
+                #[cfg(debug_assertions)]
+                pub fn build_sources_variant(variant: [< ComputeShader $name Variants >]) -> String {
                     let version = $crate::shader::ShadingVersion::core($ver);
 
                     let mut composer = $crate::shader::ShaderComposer::new(version);
@@ -979,10 +1002,19 @@ macro_rules! shader_glsl_compute {
                         );
                         let _ = composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
                     }
-
                     $(
                         $(
-                            let _ = composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                            let _ = composer.add_uniform(
+                                if $u_len > 1 {
+                                    $crate::shader_glsl_uniform!(
+                                        $u_len, $u_gl_name: $u_gl_type
+                                    )
+                                } else {
+                                    $crate::shader_glsl_uniform!(
+                                        $u_gl_name: $u_gl_type
+                                    )
+                                }
+                            );
                         )+
                     )?
                     $(
@@ -1003,10 +1035,22 @@ macro_rules! shader_glsl_compute {
                     $(
                         $(
                             let _ = composer.inject_body(&$lib);
-                        )+
+                        )*
+                        $(
+                            if variant == [< ComputeShader $name Variants >] ::$var_match {
+                                let _ = composer.inject_body(&$v_lib);
+                            }
+                        )*
                     )?
 
-                    composer.set_source(indoc::indoc! { $src });
+                    let source = {
+                        let tree = $crate::shader_source! {
+                            [< ComputeShader $name Variants >],
+                            $($tokens)*
+                        };
+                        tree.build(variant)
+                    };
+                    composer.set_source(source);
 
                     composer.build()
                 }
@@ -1014,12 +1058,16 @@ macro_rules! shader_glsl_compute {
                 $(
                     $(
                         $crate::shader_glsl_build_uniform_interface! {
-                            $u_gl_name: $u_gl_type => $u_r_type
+                            array $u_len, $u_gl_name: $u_gl_type => $u_r_type
                         }
                     )+
                 )?
 
                 pub fn new_compiled() -> Self {
+                    Self::new_compiled_variant(std::default::Default::default())
+                }
+
+                pub fn new_compiled_variant(variant: [< ComputeShader $name Variants >]) -> Self {
                     let version = $crate::shader::ShadingVersion::core($ver);
 
                     let mut composer = $crate::shader::ShaderComposer::new(version);
@@ -1059,7 +1107,14 @@ macro_rules! shader_glsl_compute {
                         )+
                     )?
 
-                    composer.set_source(indoc::indoc! { $src });
+                    let source = {
+                        let tree = $crate::shader_source! {
+                            [< ComputeShader $name Variants >],
+                            $($tokens)*
+                        };
+                        tree.build(variant)
+                    };
+                    composer.set_source(source);
 
                     let full_source = composer.build();
                     let shader_unit = $crate::shader::compile_shader_unit(&full_source, $crate::shader::ShaderKind::Compute)
@@ -1112,10 +1167,75 @@ mod tests {
         };
     }
 
-    use ShaderDebugVariants::*;
+    shader_glsl_compute! {
+        struct Debug > [460] {
+            workgroup [1, 1, 1];
 
+            uniform {
+                length 1, projection: mat4 => glam::Mat4;
+            };
+
+            type {
+                DirectIndexGlslStruct::as_definition()
+            };
+
+            ssbo {
+                crate::shader_glsl_ssbo! {
+                    buf POD_Positions => {
+                        [dyn_array vec4: pod_positions]
+                    }
+                }
+
+                crate::shader_glsl_ssbo! {
+                    buf IMap_Entity => {
+                        [dyn_array DirectIndex: imap_entity]
+                    }
+                }
+            };
+
+            variants {
+                Other;
+                Another;
+            };
+
+            lib {
+                crate::shader_glsl_lib! {
+                    float halve [ num: float ] => "
+                        return num * 0.5;
+                    "
+                };
+
+                >Other => crate::shader_glsl_lib! {
+                    float halve [ num: float ] => "
+                        return num * 0.5;
+                    "
+                };
+            };
+
+            src() {
+                "//test";
+                match {
+                    _ => {
+                        "//default";
+                        match {
+                            Other => "//other";
+                            _ => "//default";
+                    }};
+                    Other | Another => {
+                        "//other";
+                        match {
+                            _ => "//default";
+                            Other => "//other";
+                            Another => "//another";
+                    }};
+                }
+            }
+        }
+    }
+
+    use ShaderDebugVariants::*;
     shader_glsl! {
-        struct Debug > [460]; 3 => {
+        struct Debug > [460] {
             common {
                 uniform {
                     length 1, projection: mat4 => glam::Mat4;
@@ -1152,9 +1272,8 @@ mod tests {
 
                 src() {
                     "
-                        do cool stuff
+                        //do cool stuff
                         gl_Position = vec4(FIXED_POS);";
-
                 }
             ];
 
@@ -1184,20 +1303,20 @@ mod tests {
                 };
 
                 src() {
-                    "test";
+                    "//test";
                     match {
                         _ => {
-                            "default";
+                            "//default";
                             match {
-                                Other => "default, other";
-                                _ => "default, default";
+                                Other => "//other";
+                                _ => "//default";
                         }};
                         Other | Another => {
-                            "other";
+                            "//other";
                             match {
-                                _ => "default";
-                                Other => "other";
-                                Another => "another";
+                                _ => "//default";
+                                Other => "//other";
+                                Another => "//another";
                         }};
                     }
                 }
