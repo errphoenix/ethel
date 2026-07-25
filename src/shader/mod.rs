@@ -1619,8 +1619,10 @@ mod tests {
         };
     }
 
+    use ShaderDebugVariants::*;
+
     shader_glsl! {
-        struct Debug > [460] {
+        struct Debug > [460]; 3 => {
             common {
                 uniform {
                     length 1, projection: mat4 => glam::Mat4;
@@ -1643,6 +1645,11 @@ mod tests {
                         }
                     }
                 };
+
+                variants {
+                    Other;
+                    Another;
+                };
             };
 
             unit ShaderKind::Vertex => [
@@ -1650,10 +1657,12 @@ mod tests {
                     Constant::new("FIXED_POS", 1.0)
                 };
 
-                src() "
-                    do cool stuff
-                    gl_Position = vec4(FIXED_POS);
-                "
+                src() {
+                    ("
+                        do cool stuff
+                        gl_Position = vec4(FIXED_POS);";
+                    )
+                }
             ];
 
             unit ShaderKind::Pixel => [
@@ -1673,12 +1682,47 @@ mod tests {
                             return num * 0.5;
                         "
                     };
+
+                    >Other => crate::shader_glsl_lib! {
+                        float halve [ num: float ] => "
+                            return num * 0.5;
+                        "
+                    };
                 };
 
-                src() "
-                    do more cool stuff
-                    outColor = vec4(1.0);
-                "
+                src() {(
+                    "
+                        do more cool stuff
+                        outColor = vec4(1.0);
+                    ";
+                    match variant {
+                        // Another and Default
+                        0 => ["//default";]
+                        Other => ["//other";]
+                    }
+                )(
+                    "// another node!";
+                    match variant {
+                        // Other and Another
+                        0 => [
+                            "//other lit 0";
+                            match variant {
+                                0 => {"// okay okay now we end this here for real";}
+                                Another => {
+                                    "//another lit 1";
+                                    match variant {
+                                        0 => "// okay okay now we end this here for real";
+                                        Another => "// i am done playing.";
+                                        Other => "i have decided i will NOT compile";
+                                    }
+                                }
+                                Other => {"i have decided i will NOT compile";}
+                            }
+                        ]
+                        // can also explicitly match Default
+                        Default => ["// lets just end this here";]
+                    }
+                )}
             ];
         }
     }
