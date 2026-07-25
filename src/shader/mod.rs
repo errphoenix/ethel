@@ -1355,7 +1355,7 @@ mod tests {
             uniform mat4 projection;
 
             void main() {
-            do cool stuff
+            //do cool stuff
             gl_Position = vec4(FIXED_POS);
             }" };
 
@@ -1389,8 +1389,9 @@ mod tests {
             }
 
             void main() {
-            do more cool stuff
-            outColor = vec4(1.0);
+            //test
+            //default
+            //default
             }" };
 
         assert_eq!(sources[1].trim_end(), S1);
