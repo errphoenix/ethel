@@ -982,6 +982,11 @@ macro_rules! shader_glsl {
 
                 #[cfg(debug_assertions)]
                 pub fn build_sources() -> Vec<String> {
+                    Self::build_sources_variant(std::default::Default::default())
+                }
+
+                #[cfg(debug_assertions)]
+                pub fn build_sources_variant(variant: [< Shader $name Variants >]) -> Vec<String> {
                     let mut sources = Vec::new();
 
                     let version = $crate::shader::ShadingVersion::core($ver);
@@ -1080,7 +1085,70 @@ macro_rules! shader_glsl {
                             )*
                         )?
                         composer.copy_from(&common);
-                        composer.set_source(indoc::indoc! { $src });
+
+                        let source = {
+                            let tree = $crate::shader_source! {
+                                enum [< Shader $name Variants >]: $vcount, {
+                                    $((
+                                        $($s_lit_root;)*
+                                        $(match variant {
+                                            $(0 =>
+                                                $([
+                                                    $($s_lit_nest0f;)*
+                                                    $(match variant {
+                                                        $(0 =>
+                                                            $({
+                                                                $($s_lit_nest1ff;)*
+                                                                $(match variant {
+                                                                    $(0 => $s_mat_nest1_defff;)?
+                                                                    $($s_item_nest1ff => $s_lit_nest2ff;)+
+                                                                })*
+                                                            })?
+                                                        )?
+                                                        $($s_item_nest0f =>
+                                                            $({
+                                                                $($s_lit_nest1f;)*
+                                                                $(match variant {
+                                                                    $(0 => $s_mat_nest1_deff;)?
+                                                                    $($s_item_nest1f => $s_lit_nest2f;)+
+                                                                })*
+                                                            })?
+                                                        )+
+                                                    })*
+                                                ])?
+                                            )?
+                                            $($s_item_root =>
+                                                $([
+                                                    $($s_lit_nest0;)*
+                                                    $(match variant {
+                                                        $(0 =>
+                                                            $({
+                                                                $($s_lit_nest1bf;)*
+                                                                $(match variant {
+                                                                    $(0 => $s_mat_nest1_defbf;)?
+                                                                    $($s_item_nest1bf => $s_lit_nest2bf;)+
+                                                                })*
+                                                            })?
+                                                        )?
+                                                        $($s_item_nest0 =>
+                                                            $({
+                                                                $($s_lit_nest1;)*
+                                                                $(match variant {
+                                                                    $(0 => $s_mat_nest1_def;)?
+                                                                    $($s_item_nest1 => $s_lit_nest2;)+
+                                                                })*
+                                                            })?
+                                                        )+
+                                                    })*
+                                                ])?
+                                            )+
+                                        })*
+                                    ))+
+                                }
+                            };
+                            tree.build(variant)
+                        };
+                        composer.set_source(source);
 
                         sources.push(composer.build());
                     )+
@@ -1106,6 +1174,10 @@ macro_rules! shader_glsl {
                 )+
 
                 pub fn new_compiled() -> Self {
+                    Self::new_compiled_variant(std::default::Default::default())
+                }
+
+                pub fn new_compiled_variant(variant: [< Shader $name Variants >]) -> Self {
                     let mut units = Vec::new();
 
                     {
@@ -1206,7 +1278,71 @@ macro_rules! shader_glsl {
                                     )*
                                 )?
                                 composer.copy_from(&common);
-                                composer.set_source(indoc::indoc! { $src });
+
+                                let source = {
+                                    let tree = $crate::shader_source! {
+                                        enum [< Shader $name Variants >]: $vcount, {
+                                            $((
+                                                $($s_lit_root;)*
+                                                $(match variant {
+                                                    $(0 =>
+                                                        $([
+                                                            $($s_lit_nest0f;)*
+                                                            $(match variant {
+                                                                $(0 =>
+                                                                    $({
+                                                                        $($s_lit_nest1ff;)*
+                                                                        $(match variant {
+                                                                            $(0 => $s_mat_nest1_defff;)?
+                                                                            $($s_item_nest1ff => $s_lit_nest2ff;)+
+                                                                        })*
+                                                                    })?
+                                                                )?
+                                                                $($s_item_nest0f =>
+                                                                    $({
+                                                                        $($s_lit_nest1f;)*
+                                                                        $(match variant {
+                                                                            $(0 => $s_mat_nest1_deff;)?
+                                                                            $($s_item_nest1f => $s_lit_nest2f;)+
+                                                                        })*
+                                                                    })?
+                                                                )+
+                                                            })*
+                                                        ])?
+                                                    )?
+                                                    $($s_item_root =>
+                                                        $([
+                                                            $($s_lit_nest0;)*
+                                                            $(match variant {
+                                                                $(0 =>
+                                                                    $({
+                                                                        $($s_lit_nest1bf;)*
+                                                                        $(match variant {
+                                                                            $(0 => $s_mat_nest1_defbf;)?
+                                                                            $($s_item_nest1bf => $s_lit_nest2bf;)+
+                                                                        })*
+                                                                    })?
+                                                                )?
+                                                                $($s_item_nest0 =>
+                                                                    $({
+                                                                        $($s_lit_nest1;)*
+                                                                        $(match variant {
+                                                                            $(0 => $s_mat_nest1_def;)?
+                                                                            $($s_item_nest1 => $s_lit_nest2;)+
+                                                                        })*
+                                                                    })?
+                                                                )+
+                                                            })*
+                                                        ])?
+                                                    )+
+                                                })*
+                                            ))+
+                                        }
+                                    };
+                                    tree.build(variant)
+                                };
+                                composer.set_source(source);
+
                                 composer
                             };
 
