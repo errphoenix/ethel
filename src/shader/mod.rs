@@ -4,7 +4,7 @@ pub mod uniform;
 pub use crate::shader_glsl_ssbo;
 use crate::state::data;
 
-use std::{hash::Hash, str::FromStr};
+use std::{fmt::Write, hash::Hash, str::FromStr};
 
 use janus::{GlProperty, gl};
 use tracing::{Level, event};
@@ -283,8 +283,8 @@ impl ShaderComposer {
     }
 
     /// Set the shader's main function contents.
-    pub fn set_source(&mut self, source: impl Into<ShaderSource>) {
-        self.source = source.into().0;
+    pub fn set_source(&mut self, source: String) {
+        self.source = source;
     }
 
     /// Add a constant variable to the shader's header.
@@ -312,36 +312,352 @@ impl ShaderComposer {
     }
 }
 
-/// The raw source code of a shader's `main()` function.
+pub trait VarShader: Default + PartialEq + Eq + Clone + Copy + std::fmt::Debug {}
+
+#[derive(Clone, Debug)]
+pub enum ShaderSourceNode<const VAR_COUNT: usize, T: VarShader> {
+    Literal(&'static str),
+    Variable([(T, Box<Self>); VAR_COUNT]),
+    Subtree(Vec<Self>),
+}
+
 #[derive(Clone, Debug, Default)]
-pub struct ShaderSource(String);
+pub struct ShaderSourceTree<const VAR_COUNT: usize, T: VarShader> {
+    nodes: Vec<ShaderSourceNode<VAR_COUNT, T>>,
+}
 
-impl std::fmt::Display for ShaderSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+#[derive(Clone, Debug, Default)]
+pub struct ShaderSourceBuilder<const VAR_COUNT: usize, T: VarShader> {
+    tree: ShaderSourceTree<VAR_COUNT, T>,
+}
+impl<const VAR_COUNT: usize, T: VarShader> ShaderSourceBuilder<VAR_COUNT, T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn append_node(&mut self, node: ShaderSourceNode<VAR_COUNT, T>) {
+        self.tree.nodes.push(node);
+    }
+
+    fn build_node(variant: T, node: &ShaderSourceNode<VAR_COUNT, T>, out: &mut String) {
+        match node {
+            ShaderSourceNode::Literal(literal) => {
+                let _ = writeln!(out, "{literal}");
+            }
+            ShaderSourceNode::Variable(options) => {
+                if let Some((variant, contents)) = options.iter().find(|(v, _)| variant.eq(v)) {
+                    Self::build_node(*variant, contents, out);
+                } else {
+                    tracing::error!(
+                        "error building shader source: no matching source for variable {variant:?} in source node"
+                    );
+                }
+            }
+            ShaderSourceNode::Subtree(shader_source_nodes) => {
+                Self::build_nodes(variant, shader_source_nodes, out)
+            }
+        }
+    }
+
+    fn build_nodes(variant: T, nodes: &[ShaderSourceNode<VAR_COUNT, T>], out: &mut String) {
+        for node in nodes {
+            Self::build_node(variant, node, out);
+        }
+    }
+
+    pub fn build(&self, variant: T) -> String {
+        let mut string = String::new();
+        Self::build_nodes(variant, &self.tree.nodes, &mut string);
+        format!("void main() {{\n{string}}}")
     }
 }
 
-impl From<String> for ShaderSource {
-    fn from(value: String) -> Self {
-        ShaderSource::new(&value)
-    }
-}
+#[macro_export]
+macro_rules! shader_source {
+    (
+        enum $variants:ty: $vc:expr, {
+            $((
+                $($s_lit_root:literal;)*
+                $(match variant {
+                    $(0 =>
+                        $([
+                            $($s_lit_nest0f:literal;)*
+                            $(match variant {
+                                $(0 =>
+                                    $({
+                                        $($s_lit_nest1ff:literal;)*
+                                        $(match variant {
+                                            $(0 => $s_mat_nest1_defff:literal;)?
+                                            $($s_item_nest1ff:ident => $s_lit_nest2ff:literal;)+
+                                        })*
+                                    })?
+                                )?
+                                $($s_item_nest0f:ident =>
+                                    $({
+                                        $($s_lit_nest1f:literal;)*
+                                        $(match variant {
+                                            $(0 => $s_mat_nest1_deff:literal;)?
+                                            $($s_item_nest1f:ident => $s_lit_nest2f:literal;)+
+                                        })*
+                                    })?
+                                )+
+                            })*
+                        ])?
+                    )?
+                    $($s_item_root:ident =>
+                        $([
+                            $($s_lit_nest0:literal;)*
+                            $(match variant {
+                                $(0 =>
+                                    $({
+                                        $($s_lit_nest1bf:literal;)*
+                                        $(match variant {
+                                            $(0 => $s_mat_nest1_defbf:literal;)?
+                                            $($s_item_nest1bf:ident => $s_lit_nest2bf:literal;)+
+                                        })*
+                                    })?
+                                )?
+                                $($s_item_nest0:ident =>
+                                    $({
+                                        $($s_lit_nest1:literal;)*
+                                        $(match variant {
+                                            $(0 => $s_mat_nest1_def:literal;)?
+                                            $($s_item_nest1:ident => $s_lit_nest2:literal;)+
+                                        })*
+                                    })?
+                                )+
+                            })*
+                        ])?
+                    )+
+                })*
+            ))+
+        }
+    ) => {
+        {
+            use $variants::*;
 
-impl From<&str> for ShaderSource {
-    fn from(value: &str) -> Self {
-        ShaderSource::new(value)
-    }
-}
+            let mut tree = $crate::shader::ShaderSourceBuilder::<$vc, $variants>::new();
+            $( // ROOT
+                $( // LIT
+                    let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_root));
+                    tree.append_node(node);
+                )*
+                $( // BRANCH
+                    let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                        std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
 
-impl ShaderSource {
-    pub fn new(source: &str) -> Self {
-        Self(format!("void main() {{\n{source}}}"))
-    }
+                    $( // ROOT DEFAULT
+                        let mut subtree = Vec::new();
+                        $(
+                            $( // LIT
+                                let node = $crate::shader::ShaderSourceNode::<$vc, $variants>::Literal(indoc::indoc!($s_lit_nest0f));
+                                subtree.push(node);
+                            )*
+                            $( // BRANCH
+                                let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                                    std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
 
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+                                $( // NEST 0 DEFAULT
+                                    let mut subtree = Vec::new();
+                                    $(
+                                        $( // LIT
+                                            let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest1ff));
+                                            subtree.push(node);
+                                        )*
+                                        $( // BRANCH
+                                            let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                                                std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
+
+                                            $( // NEST 1 DEFAULT DEFAULT
+                                                array.fill(
+                                                    (
+                                                        std::default::Default::default(),
+                                                        Box::new($crate::shader::ShaderSourceNode::Literal($s_mat_nest1_defff))
+                                                    )
+                                                )
+                                            )?
+                                            let mut i = 0;
+                                            $( // ITEM NEST 2
+                                                $(
+                                                    let mut subtree = Vec::new();
+                                                    $( // LIT
+                                                        let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest2ff));
+                                                        subtree.push(node);
+                                                    )*
+                                                    array[i] = ($s_item_nest1ff, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree)));
+                                                )?
+                                                i += 1;
+                                            )+
+
+                                            let node = $crate::shader::ShaderSourceNode::Variable(array);
+                                            subtree.push(node);
+                                        )*
+
+                                        array[i] = (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Subtree(subtree.clone())));
+                                    )?
+                                    array.fill_with(|| (
+                                        std::default::Default::default(),
+                                        Box::new($crate::shader::ShaderSourceNode::Subtree(subtree.clone()))
+                                    ));
+                                )?
+                                let mut i = 0;
+                                $( // ITEM NEST 1
+                                    $(
+                                        let mut subtree = Vec::new();
+                                        $( // LIT
+                                            let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest1f));
+                                            subtree.push(node);
+                                        )*
+                                        $( // BRANCH
+                                            let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                                                std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
+
+                                            $(
+                                                array.fill(
+                                                    (
+                                                        std::default::Default::default(),
+                                                        Box::new($crate::shader::ShaderSourceNode::Literal($s_mat_nest1_deff))
+                                                    )
+                                                );
+                                            )?
+                                            let mut i = 0;
+                                            $( // ITEM NEST 2
+                                                array[i] = ($s_item_nest1f, Box::new($crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest2f))));
+                                                i += 1;
+                                            )+
+
+                                            let node = $crate::shader::ShaderSourceNode::Variable(array.clone());
+                                            subtree.push(node);
+                                        )*
+
+                                        array[i] = ($s_item_nest0f, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree.clone())));
+                                    )?
+                                    i += 1;
+                                )+
+
+                                let node = $crate::shader::ShaderSourceNode::Variable(array.clone());
+                                subtree.push(node);
+                            )*
+                        )?
+
+                        array.fill_with(|| (
+                            std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Subtree(subtree.clone()))
+                        ));
+                    )?
+                    let mut i = 0;
+                    $( // ITEM NEST 0
+                        $(
+                            let mut subtree = Vec::new();
+                            $( // LIT
+                                let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest0));
+                                subtree.push(node);
+                            )*
+                            $( // BRANCH
+                                let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                                    std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
+
+                                $( // NEST 0 DEFAULT
+                                    let mut subtree = Vec::new();
+                                    $(
+                                        $( // LIT
+                                            let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest1bf));
+                                            subtree.push(node);
+                                        )*
+                                        $( // BRANCH
+                                            let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                                                std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
+
+                                            $( // NEST 1 DEFAULT DEFAULT
+                                                array.fill(
+                                                    (
+                                                        std::default::Default::default(),
+                                                        Box::new($crate::shader::ShaderSourceNode::Literal($s_mat_nest1_defbf))
+                                                    )
+                                                )
+                                            )?
+                                            let mut i = 0;
+                                            $( // ITEM NEST 2
+                                                $(
+                                                    let mut subtree = Vec::new();
+                                                    $( // LIT
+                                                        let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest2bf));
+                                                        subtree.push(node);
+                                                    )*
+                                                    array[i] = ($s_item_nest1bf, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree)));
+                                                )?
+                                                i += 1;
+                                            )+
+
+                                            let node = $crate::shader::ShaderSourceNode::Variable(array);
+                                            subtree.push(node);
+                                        )*
+
+                                        array[i] = ($s_item_nest0, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree)));
+                                    )?
+                                    array.fill_with(|| (
+                                        std::default::Default::default(),
+                                        Box::new($crate::shader::ShaderSourceNode::Subtree(subtree.clone()))
+                                    ));
+                                )?
+                                let mut i = 0;
+                                $( // ITEM NEST 1
+                                    $(
+                                        let mut subtree = Vec::new();
+                                        $( // LIT
+                                            let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest1));
+                                            subtree.push(node);
+                                        )*
+                                        $( // BRANCH
+                                            let mut array: [($variants, Box<$crate::shader::ShaderSourceNode<$vc, $variants>>); $vc] =
+                                                std::array::from_fn(|_| (std::default::Default::default(), Box::new($crate::shader::ShaderSourceNode::Literal(""))));
+
+                                            $(
+                                                array.fill(
+                                                    (
+                                                        std::default::Default::default(),
+                                                        Box::new($crate::shader::ShaderSourceNode::Literal($s_mat_nest1_def))
+                                                    )
+                                                )
+                                            )?
+                                            let mut i = 0;
+                                            $( // ITEM NEST 2
+                                                $(
+                                                    let mut subtree = Vec::new();
+                                                    $( // LIT
+                                                        let node = $crate::shader::ShaderSourceNode::Literal(indoc::indoc!($s_lit_nest2));
+                                                        subtree.push(node);
+                                                    )*
+                                                    array[i] = ($s_item_nest1, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree)));
+                                                )?
+                                                i += 1;
+                                            )+
+
+                                            let node = $crate::shader::ShaderSourceNode::Variable(array);
+                                            subtree.push(node);
+                                        )*
+
+                                        array[i] = ($s_item_nest0, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree)));
+                                    )?
+                                    i += 1;
+                                )+
+
+                                let node = $crate::shader::ShaderSourceNode::Variable(array);
+                                subtree.push(node);
+                            )*
+
+
+                            array[i] = ($s_item_root, Box::new($crate::shader::ShaderSourceNode::Subtree(subtree)));
+                        )?
+                        i += 1;
+                    )+
+
+                    let node = $crate::shader::ShaderSourceNode::Variable(array);
+                    tree.append_node(node);
+                )*
+            )+
+            tree
+        }
+    };
 }
 
 pub fn unbind() {
