@@ -177,7 +177,7 @@ macro_rules! shader_source_internal {
 }
 
 #[macro_export]
-macro_rules! shader_source_v2 {
+macro_rules! shader_source {
     ($variants:ident, $($tokens:tt)*) => {{
         let mut builder = $crate::shader::source::ShaderSourceBuilder::<
             { <$variants as $crate::shader::source::VariantCount>::COUNT },
