@@ -230,7 +230,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    pub fn set_length(&self, section: usize, part: usize, length: u32) {
+    pub unsafe fn set_length(&self, section: usize, part: usize, length: u32) {
         let p = self.lengths[section][part].get() as *mut u32;
         unsafe {
             *p = length;
@@ -256,7 +256,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// # Panics
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
-    pub fn blit_section(&self, section: usize, data: &[u8], offset: usize) {
+    pub unsafe fn blit_section(&self, section: usize, data: &[u8], offset: usize) {
         assert_tb_section!(section);
 
         let src = data.as_ptr();
@@ -290,7 +290,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// # Panic
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
-    pub fn view_section(&self, section: usize) -> View<'_, u8> {
+    pub unsafe fn view_section(&self, section: usize) -> View<'_, u8> {
         assert_tb_section!(section);
 
         let length = self.layout.len();
@@ -330,7 +330,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// # Panic
     /// The function will panic if `section` is not a value within the range
     /// (0, 2).
-    pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, u8> {
+    pub unsafe fn view_section_mut(&self, section: usize) -> ViewMut<'_, u8> {
         assert_tb_section!(section);
 
         let length = self.layout.len();
@@ -483,7 +483,9 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         let data_len = avail.min(data_bytes);
 
         let total_len = data_len / size_of::<T>();
-        self.set_length(section, partition, total_len as u32);
+        unsafe {
+            self.set_length(section, partition, total_len as u32);
+        }
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid
@@ -586,7 +588,9 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
         let total_len = data_len / size_of::<T>();
-        self.set_length(section, partition, total_len as u32);
+        unsafe {
+            self.set_length(section, partition, total_len as u32);
+        }
 
         // SAFETY: we assert the section and partition are valid within this
         // buffer's layout. The buffer's layout, in turn, guarantees valid

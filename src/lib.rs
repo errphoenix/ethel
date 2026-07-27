@@ -200,11 +200,11 @@ where
 
             let vertices = self.mesh_data.vertex_storage();
             let vbs = mesh::BUFFER_VERTEX_STORAGE_INDEX;
-            mesh_buf.fill_partition(vbs, vertices);
+            unsafe { mesh_buf.fill_partition(vbs, vertices) };
 
             let metadata = self.mesh_data.close();
             let mds = mesh::BUFFER_MESH_META_INDEX;
-            mesh_buf.fill_partition(mds, &metadata);
+            unsafe { mesh_buf.fill_partition(mds, &metadata) };
 
             renderer.mesh_buffer = mesh_buf.finish();
         }

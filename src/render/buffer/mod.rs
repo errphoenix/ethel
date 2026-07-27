@@ -174,7 +174,7 @@ where
         }
     }
 
-    pub fn view_section(&self, section: usize) -> View<'_, T> {
+    pub unsafe fn view_section(&self, section: usize) -> View<'_, T> {
         assert_tb_section!(section);
 
         let ptr = self.ptr[section];
@@ -189,7 +189,7 @@ where
         }
     }
 
-    pub fn view_section_mut(&self, section: usize) -> ViewMut<'_, T> {
+    pub unsafe fn view_section_mut(&self, section: usize) -> ViewMut<'_, T> {
         assert_tb_section!(section);
 
         let ptr = self.ptr[section];
@@ -204,7 +204,7 @@ where
         }
     }
 
-    pub fn set_length(&self, section: usize, length: u32) {
+    pub unsafe fn set_length(&self, section: usize, length: u32) {
         let p = self.lengths[section].get() as *mut u32;
         unsafe {
             *p = length;
@@ -218,6 +218,11 @@ where
 
     pub fn capacity(&self) -> usize {
         self.capacity
+    }
+
+    pub unsafe fn raw_section(&self, section: usize) -> *mut T {
+        assert_tb_section!(section);
+        self.ptr[section]
     }
 
     /// Copy the given `data` into a `section` of the triple buffer at a given
@@ -234,7 +239,7 @@ where
     /// # Panics
     /// * If `section` is not a value within the range (0, 2).
     /// * If `offset` is greater than the length of the section.
-    pub fn blit_section(&self, section: usize, data: &[T], offset: usize) {
+    pub unsafe fn blit_section(&self, section: usize, data: &[T], offset: usize) {
         assert_tb_section!(section);
         assert!(
             self.capacity > offset,
@@ -295,7 +300,7 @@ where
     /// * If `pad_len` is 0.
     ///
     /// [`blit_section`]: TriBuffer::blit_section
-    pub fn blit_section_padded<S: Clone + Copy + Default>(
+    pub unsafe fn blit_section_padded<S: Clone + Copy + Default>(
         &self,
         section: usize,
         data: &[S],

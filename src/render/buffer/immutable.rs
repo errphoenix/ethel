@@ -69,7 +69,7 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
     ///
     /// Passing the wrong type `T` might lead to undefined behaviour, and will
     /// cause VRAM corruption.
-    pub fn fill_partition<T: Sized>(&mut self, partition: usize, data: &[T]) {
+    pub unsafe fn fill_partition<T: Sized>(&mut self, partition: usize, data: &[T]) {
         assert!(
             partition < PARTS,
             "attempted to fill partition {partition} of a buffer that contains only {PARTS} partitions"
