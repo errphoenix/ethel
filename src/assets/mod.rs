@@ -9,6 +9,7 @@ use janus::{
     StringHash,
     texture::{ImageFormat, ImageType, MipLevels, Tex, Texture, TextureError, TextureView},
 };
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use tracing::{Level, event};
 
@@ -330,13 +331,13 @@ where
 {
     id: StringHash,
     source: PathBuf,
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     raw_resource: Option<T>,
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     gpu_resource: Option<T::AsGpu>,
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     root_pipe: crossbeam::channel::Sender<AssetMessage<T>>,
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     _marker_meta: std::marker::PhantomData<M>,
 }
 impl<T, M> Handle<T, M>
@@ -662,7 +663,7 @@ impl AsView for Texture {
 }
 
 #[derive(Clone, Debug)]
-pub struct RawTexture(DynamicImage);
+pub struct RawTexture(pub DynamicImage);
 impl From<DynamicImage> for RawTexture {
     fn from(value: DynamicImage) -> Self {
         Self::new(value)
