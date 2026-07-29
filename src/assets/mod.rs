@@ -603,7 +603,7 @@ where
 }
 
 pub trait Import {
-    type AdditionalParams: Clone + Debug;
+    type AdditionalParams: Clone + Debug + Default;
 
     fn from_file<P: AsRef<Path> + Debug>(
         path: P,
@@ -622,7 +622,7 @@ pub trait Import {
 }
 
 pub trait Upload {
-    type AdditionalParams: Clone + Debug;
+    type AdditionalParams: Clone + Debug + Default;
     type AsGpu: Debug;
 
     fn upload_to_gpu(&self, params: &Self::AdditionalParams) -> AssetResult<Self::AsGpu>;
