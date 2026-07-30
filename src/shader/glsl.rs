@@ -486,6 +486,8 @@ macro_rules! shader_glsl_struct {
 ///
 /// let _macro_1 = shader_glsl_ssbo! {
 ///     buf POD_BindPose => {
+///         some_var: float;
+///         some_array: float[32];
 ///         [dyn_array vec4: pod_bind_pose]
 ///     }
 /// };
@@ -501,7 +503,7 @@ macro_rules! shader_glsl_ssbo {
     (
         buf $ssbo:ident => {
             $(
-                $t:ident : $n:ident;
+                $t:ident : $n:ident $([ $f_len:expr ])?;
             )*
             $(
                 [dyn_array $dat:ident: $dan:ident $(=> each $len:expr)?]
@@ -511,7 +513,7 @@ macro_rules! shader_glsl_ssbo {
         $crate::shader::glsl::GlslStorage::new(
             concat!("layout(std430, binding = ", ssbo_binding!($ssbo), ") buffer ",
                 stringify!($ssbo), "\n{\n",
-                $("    ", stringify!($t), " ", stringify!($n), ";\n",)*
+                $("    ", stringify!($t), " ", stringify!($n), $("[", $f_len, "]",)? ";\n",)*
                 $("    ", stringify!($dat), " ", stringify!($dan), "[]",
                     $("[", $len, "]",)?
                     ";\n",)?
@@ -595,6 +597,8 @@ mod tests {
 
         let generated = shader_glsl_ssbo! {
             buf POD_BindPose => {
+                some_var: float;
+                some_array: float[32];
                 [dyn_array vec4: pod_bind_pose]
             }
         };
