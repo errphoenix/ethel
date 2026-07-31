@@ -105,8 +105,14 @@ impl Deref for Meshadata {
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
 pub struct Vertex {
-    pub position: [f32; 4],
-    pub normal: [f32; 4],
+    pub pos_x: f32,
+    pub pos_y: f32,
+    pub pos_z: f32,
+    pub norm_x: f32,
+    pub norm_y: f32,
+    pub norm_z: f32,
+    pub uv_x: f32,
+    pub uv_y: f32,
 }
 
 pub(crate) const BUFFER_VERTEX_STORAGE_INDEX: usize = 0;
@@ -121,8 +127,14 @@ crate::shader_glsl_struct! {
 
 crate::shader_glsl_struct! {
     struct Vertex {
-        position: [f32; 4] => vec4;
-        normal: [f32; 4] => vec4;
+        pos_x: f32 => float;
+        pos_y: f32 => float;
+        pos_z: f32 => float;
+        norm_x: f32 => float;
+        norm_y: f32 => float;
+        norm_z: f32 => float;
+        uv_x: f32 => float;
+        uv_y: f32 => float;
     }
 }
 
