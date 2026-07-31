@@ -749,11 +749,11 @@ pub struct TextureMetadata {
 #[macro_export]
 macro_rules! asset_registry {
     (struct $asset:ty: $meta:ty {
-        $($name:ident: $path:expr;)*
+        $($name:expr => $path:expr;)*
     }) => {
         paste::paste! {
             $(
-                const [< $asset:upper _ $name:upper >]: std::sync::LazyLock<$crate::assets::AssetId> = $crate::hashet!(stringify!($name));
+                const [< $asset:upper _ $name:upper >]: std::sync::LazyLock<$crate::assets::AssetId> = $crate::hashet!($name);
                 const [< $asset:upper _ $name:upper _PATH >]: &'static str = $path;
             )*
 
