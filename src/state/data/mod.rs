@@ -10,13 +10,6 @@ pub struct IndirectIndex {
     pub(crate) index: u32,
     pub(crate) generation: u32,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct DirectIndex {
-    pub(crate) index: u32,
-    pub(crate) generation: u32,
-}
-
 impl IndirectIndex {
     pub const fn null(generation: u32) -> Self {
         Self {
@@ -66,7 +59,22 @@ impl IndirectIndex {
         self.generation
     }
 }
+impl Into<u32> for IndirectIndex {
+    fn into(self) -> u32 {
+        self.as_int()
+    }
+}
+impl Into<usize> for IndirectIndex {
+    fn into(self) -> usize {
+        self.as_index()
+    }
+}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct DirectIndex {
+    pub(crate) index: u32,
+    pub(crate) generation: u32,
+}
 impl DirectIndex {
     pub const fn null(generation: u32) -> Self {
         Self {
@@ -116,19 +124,6 @@ impl DirectIndex {
         self.generation
     }
 }
-
-impl Into<u32> for IndirectIndex {
-    fn into(self) -> u32 {
-        self.as_int()
-    }
-}
-
-impl Into<usize> for IndirectIndex {
-    fn into(self) -> usize {
-        self.as_index()
-    }
-}
-
 impl Into<u32> for DirectIndex {
     fn into(self) -> u32 {
         self.as_int()

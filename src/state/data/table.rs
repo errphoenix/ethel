@@ -769,7 +769,7 @@ pub trait TableView<'view, Def: Sized + Default>: Debug + Clone + Copy {
 }
 
 #[macro_export]
-macro_rules! table_spec {
+macro_rules! table_signature {
     (
         struct $name:ident {
             $row_0:ident : $rt_0:ty;
@@ -784,13 +784,13 @@ macro_rules! table_spec {
                         $($rt,)+
                 )
             );
-
             impl From<($rt_0, $($rt,)+)> for [< $name TableDef >] {
                 fn from(value: ($rt_0, $($rt,)+)) -> [< $name TableDef >] {
                     [< $name TableDef >](value)
                 }
             }
 
+            #[allow(unused)]
             #[derive(Debug, Clone, Copy)]
             pub struct [< $name RowTableView >]<'view> {
                 pub indirect_indices: &'view [$crate::state::data::DirectIndex],
@@ -802,7 +802,7 @@ macro_rules! table_spec {
                     pub $row: &'view [$rt],
                 )+
             }
-
+            #[allow(unused)]
             impl<'view> [< $name RowTableView >]<'view> {
                 pub fn from(table: &'view [< $name RowTable >]) -> Self {
                     use $crate::state::data::SparseSlot;
@@ -920,7 +920,26 @@ macro_rules! table_spec {
                     self.view_offset
                 }
             }
+        }
+    };
+}
 
+#[macro_export]
+macro_rules! table_spec {
+    (
+        struct $name:ident {
+            $row_0:ident : $rt_0:ty;
+            $($row:ident : $rt:ty;)+
+        }
+    ) => {
+        $crate::table_signature! {
+            struct $name {
+                $row_0 : $rt_0;
+                $($row : $rt;)+
+            }
+        }
+
+        paste::paste! {
             #[derive(Debug)]
             pub struct [< $name RowTable >] {
                 indices: Vec<$crate::state::data::DirectIndex>,
@@ -1015,7 +1034,7 @@ macro_rules! table_spec {
                     index
                 }
             }
-
+            #[allow(unused)]
             impl [< $name RowTable >] {
                 pub fn new() -> Self {
                     Self {
