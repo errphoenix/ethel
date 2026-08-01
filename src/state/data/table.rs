@@ -952,13 +952,11 @@ macro_rules! table_spec {
                     pub $row: Vec<$rt>,
                 )+
             }
-
             impl Default for [< $name RowTable >] {
                 fn default() -> Self {
                     Self::new()
                 }
             }
-
             impl $crate::state::data::SparseSlot for [< $name RowTable >] {
                 fn slots_map(&self) -> &Vec<$crate::state::data::DirectIndex> {
                     &self.indices
@@ -976,7 +974,6 @@ macro_rules! table_spec {
                     &mut self.free
                 }
             }
-
             impl $crate::state::data::Column < [< $name TableDef >]> for [< $name RowTable >] {
                 fn len(&self) -> usize {
                     self.$row_0.len()

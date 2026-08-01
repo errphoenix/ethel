@@ -1,3 +1,58 @@
+//! A partitioned triple buffered OpenGL buffer over a single memory block.
+//!
+//! This handles alignments and offsets of each memory section and partitions
+//! (contiguous memory blocks of data of the same type).
+//!
+//! # OpenGL Representation
+//! The GPU buffers are coherent persistent copy-write buffers. It includes
+//! a convenience function to bind each partition of the buffer as an SSBO
+//! ([`PartitionedTriBuffer::bind_shader_storage`]).
+//!
+//! This will only bind the partitions that specified an SSBO binding in [`Layout`].
+//!
+//! # Operations
+//! Available operations are:
+//! * [`blit partition`](PartitionedTriBuffer::blit_part) to copy data from the CPU over
+//!   the GPU buffers for one partition.
+//! * [`blit section`](PartitionedTriBuffer::blit_section) to copy data from the CPU
+//!   over the GPU buffers for a whole section. This takes in raw bytes for
+//!   type-erasure, as the section may contain parts of varying types.
+//! * [`view section`](PartitionedTriBuffer::view_section) to gain an immutable view
+//!   of a whole section from the GPU buffers.
+//! * [`view part`](PartitionedTriBuffer::view_part) to gain an immutable view of a
+//!   partition of a section from the GPU buffers.
+//! * [`view section mutable`](PartitionedTriBuffer::view_section_mut) to gain a
+//!   mutable view of a whole section from the GPU buffers.
+//! * [`view part mutable`](PartitionedTriBuffer::view_part_mut) to gain a mutable
+//!   view of a partition of a section from the GPU buffers.
+//!
+//! ### Note
+//!
+//! Similarly to [`TriBuffer`], reading from the GPU buffers is slower than
+//! reading from system memory, thus it is not recommended to mutate data
+//! through the `view_*_mut` functions in performance-critical scenarios.
+//!
+//! Prefer the usage of `blit_part` and `blit_section` to mutate data as these
+//! correspond to a single `memcpy` operation directly to the underlying
+//! memory, which is significantly faster because the required modification is
+//! reduced to a single operation.
+//! They're also not unsafe, unlike `view_*_mut`.
+//!
+//! Most operations related to partitions are all unsafe, as it isn't possible
+//! to verify that the type in the given data corresponds to the same type of
+//! the data present on the GPU buffers. Consider using the
+//! [`typed_part_buffer`] to create a type safe abstraction.
+//!
+//! # Synchronisation
+//! [`PartitionedTriBuffer`] can operate over cross-boundary synchronisation
+//! coordination of [`Boundary`] and [`Cross`] over its
+//! [`Producer`]-to-[`Consumer`] model.
+//!
+//! [`TriBuffer`]: super::TriBuffer
+//! [`Boundary`]: crate::state::cross::Boundary
+//! [`Cross`]: crate::state::cross::Cross
+//! [`Producer`]: crate::state::cross::Producer
+//! [`Consumer`]: crate::state::cross::Consumer
 use std::cell::UnsafeCell;
 
 use crate::render::buffer::{InitStrategy, View, ViewMut, assert_tb_section, layout::Layout};
@@ -13,64 +68,10 @@ macro_rules! assert_partition {
     };
 }
 
-/// A partitioned triple buffered OpenGL buffer over a single memory block.
+/// The Partitioned-Triple-Buffer struct, owns the pointer to the mapped memory
+/// and layout abstractions.
 ///
-/// This handles alignments and offsets of each memory section and partitions
-/// (contiguous memory blocks of data of the same type).
-///
-/// # OpenGL Representation
-/// The GPU buffers are coherent persistent copy-write buffers. It includes
-/// a convenience function to bind each partition of the buffer as an SSBO
-/// ([`PartitionedTriBuffer::bind_shader_storage`]).
-///
-/// This will only bind the partitions that specified an SSBO binding in [`Layout`].
-///
-/// # Operations
-/// Available operations are:
-/// * [`blit partition`](PartitionedTriBuffer::blit_part) to copy data from the CPU over
-///   the GPU buffers for one partition.
-/// * [`blit section`](PartitionedTriBuffer::blit_section) to copy data from the CPU
-///   over the GPU buffers for a whole section. This takes in raw bytes for
-///   type-erasure, as the section may contain parts of varying types.
-/// * [`view section`](PartitionedTriBuffer::view_section) to gain an immutable view
-///   of a whole section from the GPU buffers.
-/// * [`view part`](PartitionedTriBuffer::view_part) to gain an immutable view of a
-///   partition of a section from the GPU buffers.
-/// * [`view section mutable`](PartitionedTriBuffer::view_section_mut) to gain a
-///   mutable view of a whole section from the GPU buffers.
-/// * [`view part mutable`](PartitionedTriBuffer::view_part_mut) to gain a mutable
-///   view of a partition of a section from the GPU buffers.
-///
-/// <div class="warning">
-///
-/// ### Note
-///
-/// Similarly to [`TriBuffer`], reading from the GPU buffers is slower than
-/// reading from system memory, thus it is not recommended to mutate data
-/// through the `view_*_mut` functions in performance-critical scenarios.
-///
-/// Prefer the usage of `blit_part` and `blit_section` to mutate data as these
-/// correspond to a single `memcpy` operation directly to the underlying
-/// memory, which is significantly faster because the required modification is
-/// reduced to a single operation.
-/// They're also not unsafe, unlike `view_*_mut`.
-///
-/// </div>
-///
-/// Most operations related to partitions are all unsafe, as it isn't possible
-/// to verify that the type in the given data corresponds to the same type of
-/// the data present on the GPU buffers.
-///
-/// # Synchronisation
-/// [`PartitionedTriBuffer`] can operate over cross-boundary synchronisation
-/// coordination of [`Boundary`] and [`Cross`] over its
-/// [`Producer`]-to-[`Consumer`] model.
-///
-/// [`TriBuffer`]: super::TriBuffer
-/// [`Boundary`]: crate::state::cross::Boundary
-/// [`Cross`]: crate::state::cross::Cross
-/// [`Producer`]: crate::state::cross::Producer
-/// [`Consumer`]: crate::state::cross::Consumer
+/// See the [`module-level documentation`](self) for more information.
 #[derive(Debug)]
 pub struct PartitionedTriBuffer<const PARTS: usize> {
     gl_obj: u32,
@@ -78,7 +79,6 @@ pub struct PartitionedTriBuffer<const PARTS: usize> {
     ptr: *mut u8,
     lengths: [[UnsafeCell<u32>; PARTS]; 3],
 }
-
 impl<const PARTS: usize> Default for PartitionedTriBuffer<PARTS> {
     fn default() -> Self {
         let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(0)));
@@ -90,10 +90,8 @@ impl<const PARTS: usize> Default for PartitionedTriBuffer<PARTS> {
         }
     }
 }
-
 unsafe impl<const PARTS: usize> Sync for PartitionedTriBuffer<PARTS> {}
 unsafe impl<const PARTS: usize> Send for PartitionedTriBuffer<PARTS> {}
-
 impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     pub fn new(layout: Layout<PARTS>) -> Self {
         let mut gl_obj = 0;
@@ -609,7 +607,6 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 }
-
 impl<const PARTS: usize> Drop for PartitionedTriBuffer<PARTS> {
     fn drop(&mut self) {
         unsafe {
