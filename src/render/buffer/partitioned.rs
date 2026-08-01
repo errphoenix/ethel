@@ -617,3 +617,107 @@ impl<const PARTS: usize> Drop for PartitionedTriBuffer<PARTS> {
         self.ptr = std::ptr::null_mut();
     }
 }
+
+#[macro_export]
+macro_rules! typed_part_buffer {
+    (
+        const $name:ty: $len:expr, {
+            $(
+                enum $part:ident: $part_len:expr => {
+                    type $part_ty:ty;
+                    bind $part_idx:expr;
+                    $(init with $init:block;)?
+                    $(shader $part_ssbo:expr;)?
+                };
+            )+
+        }
+    ) => {
+        $crate::layout_buffer! {
+            const $name: $len, {
+                $(
+                    enum $part: $part_len => {
+                        type $part_ty;
+                        bind $part_idx;
+                        $(init with $init;)?
+                        $(shader $part_ssbo;)?
+                    };
+                )+
+            }
+        }
+
+        paste::paste! {
+            #[derive(Debug)]
+            pub struct [< $name PartitionedTriBuffer >](
+                $crate::render::buffer::partitioned::PartitionedTriBuffer<$len>
+            );
+            impl [< $name PartitionedTriBuffer >] {
+                pub fn new() -> Self {
+                    let layout = [< Layout $name >]::create();
+                    let buffer = $crate::render::buffer::partitioned::PartitionedTriBuffer::new(layout);
+                    [< Layout $name >]::initialise_partitions(&buffer);
+                    Self(buffer)
+                }
+
+                pub const fn inner(&self) -> &$crate::render::buffer::partitioned::PartitionedTriBuffer<$len> {
+                    &self.0
+                }
+
+                pub fn bind_ssbo_all(&self, section: usize) {
+                    self.0.bind_shader_storage(section);
+                }
+
+                $(
+                    pub fn [< view_ $part:lower >](&self, section: usize) -> $crate::render::buffer::View<'_, $part_ty> {
+                        unsafe {
+                            self.0.view_part(
+                                section,
+                                $part_idx as usize,
+                            )
+                        }
+                    }
+
+                    pub fn [< view_ $part:lower _put >](&self, section: usize) -> $crate::render::buffer::ViewMut<'_, $part_ty> {
+                        unsafe {
+                            self.0.view_part_mut(
+                                section,
+                                $part_idx as usize,
+                            )
+                        }
+                    }
+
+                    pub fn [< blit_ $part:lower >](&self, section: usize, data: &[$part_ty], offset: usize) {
+                        unsafe {
+                            self.0.blit_part(
+                                section,
+                                $part_idx as usize,
+                                data,
+                                offset,
+                            );
+                        }
+                    }
+
+                    pub fn [< blit_ $part:lower _padded >](&self, section: usize, data: &[$part_ty], offset: usize, padding: usize) {
+                        unsafe {
+                            self.0.blit_part_padded(
+                                section,
+                                $part_idx as usize,
+                                data,
+                                offset,
+                                padding,
+                            );
+                        }
+                    }
+
+                    pub fn [< bind_ssbo_ $part:lower >](&self, section: usize, ssbo_index: Option<u32>) {
+                        self.0
+                            .bind_shader_storage_single(
+                                section,
+                                $part_idx as usize,
+                                ssbo_index,
+                            );
+                    }
+                )+
+            }
+        }
+    };
+}
