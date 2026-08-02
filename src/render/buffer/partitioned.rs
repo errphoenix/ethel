@@ -646,7 +646,7 @@ macro_rules! typed_part_buffer {
         }
 
         paste::paste! {
-            #[derive(Debug)]
+            #[derive(Debug, Default)]
             pub struct [< $name PartitionedTriBuffer >](
                 $crate::render::buffer::partitioned::PartitionedTriBuffer<$len>
             );
