@@ -6,13 +6,11 @@ pub struct Layout<const PARTS: usize> {
     lengths: [usize; PARTS],
     shader: [u32; PARTS],
 }
-
 impl<const PARTS: usize> Default for Layout<PARTS> {
     fn default() -> Self {
         Self::new()
     }
 }
-
 impl<const PARTS: usize> Layout<PARTS> {
     pub fn new() -> Self {
         assert!(PARTS != 0);
@@ -228,7 +226,20 @@ macro_rules! layout_buffer {
                     layout
                 }
 
-                pub fn initialise_partitions<const PARTS: usize>(buffer: &$crate::render::buffer::partitioned::PartitionedTriBuffer<PARTS>) {
+                pub fn initialise_partitions<const PARTS: usize>(buffer: &$crate::render::buffer::partitioned::PartitionedBuffer<PARTS>) {
+                    $(
+                        #[allow(unused_variables)]
+                        {
+                            let mode = $crate::render::buffer::InitStrategy::<$part_ty, fn() -> $part_ty>::Zero;
+                            $(
+                                let mode = $crate::render::buffer::InitStrategy::FillWith(|| $init);
+                            )?
+                            buffer.initialise_partition::<$part_ty, _>($part_idx, mode);
+                        }
+                    )+
+                }
+
+                pub fn initialise_partitions_tri<const PARTS: usize>(buffer: &$crate::render::buffer::partitioned::PartitionedTriBuffer<PARTS>) {
                     $(
                         #[allow(unused_variables)]
                         {
