@@ -168,7 +168,6 @@ impl super::WriteValue for glam::Vec4 {
 
 #[derive(Clone, Copy, Debug)]
 pub struct GlslWorkGroupSize(&'static str);
-
 impl GlslWorkGroupSize {
     pub const fn new(value: &'static str) -> Self {
         Self(value)
@@ -178,30 +177,48 @@ impl GlslWorkGroupSize {
         self.0
     }
 }
-
 impl std::fmt::Display for GlslWorkGroupSize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
-
 impl super::Inject for GlslWorkGroupSize {
     fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "{}", self.as_str())
     }
 }
-
 impl super::ShaderHeader for GlslWorkGroupSize {}
 
 #[derive(Clone, Copy, Debug)]
-pub struct GlslAttribute(&'static str);
+pub struct GlslSharedMemory(&'static str);
+impl GlslSharedMemory {
+    pub const fn new(value: &'static str) -> Self {
+        Self(value)
+    }
 
+    pub const fn as_str(&self) -> &'static str {
+        self.0
+    }
+}
+impl std::fmt::Display for GlslSharedMemory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+impl super::Inject for GlslSharedMemory {
+    fn inject_shader(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "{}", self.as_str())
+    }
+}
+impl super::ShaderHeader for GlslSharedMemory {}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GlslAttribute(&'static str);
 impl std::fmt::Display for GlslAttribute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
-
 impl GlslAttribute {
     pub const fn new(value: &'static str) -> Self {
         Self(value)

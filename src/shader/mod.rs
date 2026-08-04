@@ -934,6 +934,9 @@ macro_rules! shader_glsl_compute {
                     >$var_match:ident => $v_lib:expr;
                 )*
             };)?
+            $(share {
+                $($share_t:ident $($share_n:tt)+)*
+            };)?
 
             src() {
                 $($tokens:tt)*
@@ -1002,6 +1005,7 @@ macro_rules! shader_glsl_compute {
                         );
                         let _ = composer.inject_header(&$crate::shader::glsl::GlslWorkGroupSize::new(WORK_GROUP_GLSL));
                     }
+
                     $(
                         $(
                             let _ = composer.add_uniform(
@@ -1031,6 +1035,15 @@ macro_rules! shader_glsl_compute {
                         $(
                             let _ = composer.add_constant(&$const_a);
                         )+
+                    )?
+                    $(
+                        $(
+                            let _ = composer.inject_header(
+                                &$crate::shader::glsl::GlslSharedMemory::new(concat!(
+                                    "shared ", stringify!($share_t), " ", $(stringify!($share_n),)*
+                                ))
+                            );
+                        )*
                     )?
                     $(
                         $(
@@ -1100,6 +1113,15 @@ macro_rules! shader_glsl_compute {
                         $(
                             let _ = composer.add_constant(&$const_a);
                         )+
+                    )?
+                    $(
+                        $(
+                            let _ = composer.inject_header(
+                                &$crate::shader::glsl::GlslSharedMemory::new(concat!(
+                                    "shared ", stringify!($share_t), " ", $(stringify!($share_n),)*
+                                ))
+                            );
+                        )*
                     )?
                     $(
                         $(

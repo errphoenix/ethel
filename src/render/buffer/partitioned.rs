@@ -139,20 +139,17 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         let offset = self.layout.offset_at(partition);
 
         match strategy {
-            InitStrategy::Zero => {
-                let total_size = self.layout.len() as isize;
-                unsafe {
-                    janus::gl::ClearNamedBufferSubData(
-                        self.gl_obj,
-                        janus::gl::R32UI,
-                        offset as isize,
-                        len as isize,
-                        janus::gl::RED_INTEGER,
-                        janus::gl::UNSIGNED_INT,
-                        std::ptr::null(),
-                    );
-                }
-            }
+            InitStrategy::Zero => unsafe {
+                janus::gl::ClearNamedBufferSubData(
+                    self.gl_obj,
+                    janus::gl::R32UI,
+                    offset as isize,
+                    len as isize,
+                    janus::gl::RED_INTEGER,
+                    janus::gl::UNSIGNED_INT,
+                    std::ptr::null(),
+                );
+            },
             InitStrategy::FillWith(func) => {
                 let len = len / size_of::<T>();
                 unsafe {
