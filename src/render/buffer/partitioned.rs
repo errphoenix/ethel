@@ -371,10 +371,18 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         }
     }
 
+    /// Returns the capacity (in bytes) of the specified `partition`.
+    pub fn capacity(&self, partition: usize) -> usize {
+        self.layout.length_at(partition)
+    }
+
     /// Copy the given `data` in a `partition` of the buffer at
     /// the given bytes `offset`.
     ///
     /// A `partition` represents a contiguous stream of data of the same type.
+    ///
+    /// Note that this will update the internal length of the `partition`,
+    /// which includes `offset`: (`offset + size_of(T) * data.length`)
     ///
     /// # Safety
     /// The type parameter `T` cannot be verified to be the actual type of the
@@ -407,7 +415,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         // safe length of data, in bytes
         let data_len = avail.min(data_bytes);
 
-        let total_len = data_len / size_of::<T>();
+        let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
             self.set_length(partition, total_len as u32);
         }
@@ -428,6 +436,9 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
     /// `offset` with a padding of `pad_lan` at the end of each element.
     ///
     /// A `partition` represents a contiguous stream of data of the same time.
+    ///
+    /// Note that this will update the internal length of the `partition`,
+    /// which includes `offset`: (`offset + size_of(T) * data.length`)
     ///
     /// This function is intended for operations where the CPU and GPU data
     /// representations differ due to memory alignment requirements.
@@ -506,7 +517,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
-        let total_len = data_len / size_of::<T>();
+        let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
             self.set_length(partition, total_len as u32);
         }
@@ -711,6 +722,11 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     pub fn length(&self, section: usize, part: usize) -> usize {
         assert_tb_section!(section);
         (unsafe { *self.lengths[section][part].get() }) as usize
+    }
+
+    /// Returns the capacity (in bytes) of the specified `partition`.
+    pub fn capacity(&self, partition: usize) -> usize {
+        self.layout.length_at(partition)
     }
 
     /// Copy the given `data` in a `section` of the storage buffer at a given
@@ -918,6 +934,9 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     ///
     /// A `partition` represents a contiguous stream of data of the same type.
     ///
+    /// Note that this will update the internal length of the `partition`,
+    /// which includes `offset`: (`offset + size_of(T) * data.length`)
+    ///
     /// # Safety
     /// The type parameter `T` cannot be verified to be the actual type of the
     /// data in this partition, the caller must ensure this is always the case.
@@ -953,7 +972,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         // safe length of data, in bytes
         let data_len = avail.min(data_bytes);
 
-        let total_len = data_len / size_of::<T>();
+        let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
             self.set_length(section, partition, total_len as u32);
         }
@@ -975,6 +994,9 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
     /// element.
     ///
     /// A `partition` represents a contiguous stream of data of the same time.
+    ///
+    /// Note that this will update the internal length of the `partition`,
+    /// which includes `offset`: (`offset + size_of(T) * data.length`)
     ///
     /// This function is intended for operations where the CPU and GPU data
     /// representations differ due to memory alignment requirements.
@@ -1058,7 +1080,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         // safe total length of data, element count
         let data_len = avail_count.min(data_count);
-        let total_len = data_len / size_of::<T>();
+        let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
             self.set_length(section, partition, total_len as u32);
         }
@@ -1156,6 +1178,17 @@ macro_rules! typed_part_tribuffer {
                                 $part_idx as usize,
                             )
                         }
+                    }
+
+                    pub fn [< length_ $part:lower >](&self, section: usize) -> usize {
+                        self.0.length(section, $part_idx as usize)
+                    }
+
+                    /// Returns capacity of a partition, as number of elements.
+                    ///
+                    /// The capacity is equal across all three buffer sections.
+                    pub fn [< capacity_ $part:lower >](&self) -> usize {
+                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>
                     }
 
                     /// Blit `data` to its partitioned on the buffer starting
@@ -1268,6 +1301,15 @@ macro_rules! typed_part_buffer {
                                 $part_idx as usize,
                             )
                         }
+                    }
+
+                    pub fn [< length_ $part:lower >](&self) -> usize {
+                        self.0.length($part_idx as usize)
+                    }
+
+                    /// Returns capacity of a partition, as number of elements.
+                    pub fn [< capacity_ $part:lower >](&self) -> usize {
+                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>
                     }
 
                     /// Blit `data` to its partitioned on the buffer starting
