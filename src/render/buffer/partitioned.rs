@@ -1158,7 +1158,12 @@ macro_rules! typed_part_tribuffer {
                         }
                     }
 
+                    /// Blit `data` to its partitioned on the buffer starting
+                    /// from the specified `offset`.
+                    ///
+                    /// The `offset` must be in number of elements.
                     pub fn [< blit_ $part:lower >](&self, section: usize, data: &[$part_ty], offset: usize) {
+                        let offset = std::mem::size_of::<$part_ty>() * offset;
                         unsafe {
                             self.0.blit_part(
                                 section,
@@ -1169,7 +1174,12 @@ macro_rules! typed_part_tribuffer {
                         }
                     }
 
+                    /// Blit `data` to its partitioned on the buffer starting
+                    /// from the specified `offset` with a `padding`.
+                    ///
+                    /// The `offset` must be in number of elements.
                     pub fn [< blit_ $part:lower _padded >](&self, section: usize, data: &[$part_ty], offset: usize, padding: usize) {
+                        let offset = std::mem::size_of::<$part_ty>() * offset;
                         unsafe {
                             self.0.blit_part_padded(
                                 section,
@@ -1260,7 +1270,12 @@ macro_rules! typed_part_buffer {
                         }
                     }
 
+                    /// Blit `data` to its partitioned on the buffer starting
+                    /// from the specified `offset`.
+                    ///
+                    /// The `offset` must be in number of elements.
                     pub fn [< blit_ $part:lower >](&self, data: &[$part_ty], offset: usize) {
+                        let offset = std::mem::size_of::<$part_ty>() * offset;
                         unsafe {
                             self.0.blit_part(
                                 $part_idx as usize,
@@ -1270,7 +1285,12 @@ macro_rules! typed_part_buffer {
                         }
                     }
 
+                    /// Blit `data` to its partitioned on the buffer starting
+                    /// from the specified `offset` with a `padding`.
+                    ///
+                    /// The `offset` must be in number of elements.
                     pub fn [< blit_ $part:lower _padded >](&self, data: &[$part_ty], offset: usize, padding: usize) {
+                        let offset = std::mem::size_of::<$part_ty>() * offset;
                         unsafe {
                             self.0.blit_part_padded(
                                 $part_idx as usize,
