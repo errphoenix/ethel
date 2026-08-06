@@ -1188,7 +1188,7 @@ macro_rules! typed_part_tribuffer {
                     ///
                     /// The capacity is equal across all three buffer sections.
                     pub fn [< capacity_ $part:lower >](&self) -> usize {
-                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>
+                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>()
                     }
 
                     /// Blit `data` to its partitioned on the buffer starting
@@ -1309,7 +1309,7 @@ macro_rules! typed_part_buffer {
 
                     /// Returns capacity of a partition, as number of elements.
                     pub fn [< capacity_ $part:lower >](&self) -> usize {
-                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>
+                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>()
                     }
 
                     /// Blit `data` to its partitioned on the buffer starting
