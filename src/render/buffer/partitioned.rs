@@ -409,7 +409,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         );
 
         let avail = partition_len - offset;
-        let offset = self.layout.offset_at(partition) + offset;
+        let global_offset = self.layout.offset_at(partition) + offset;
         let data_bytes = data.len() * size_of::<T>();
 
         // safe length of data, in bytes
@@ -427,7 +427,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         // Additionally, the caller must also ensure that the size of `T`
         // corresponds to the same size of the type present on the GPU buffers.
         unsafe {
-            let dst = self.ptr.add(offset) as *mut T;
+            let dst = self.ptr.add(global_offset) as *mut T;
             std::ptr::copy_nonoverlapping(src, dst, data_len / size_of::<T>());
         }
     }
@@ -509,7 +509,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         );
 
         let avail = partition_len - offset;
-        let offset = self.layout.offset_at(partition) + offset;
+        let global_offset = self.layout.offset_at(partition) + offset;
 
         let data_bytes_padded = size_of::<T>() + pad_len;
         let avail_count = avail / data_bytes_padded;
@@ -529,7 +529,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         // Additionally, the caller must also ensure that that the length of
         // T + `pad_len` correspond to the size of the type on the GPU.
         unsafe {
-            let mut dst = self.ptr.add(offset);
+            let mut dst = self.ptr.add(global_offset);
             for i in 0..data_len {
                 std::ptr::write_unaligned(dst as *mut T, data[i]);
                 dst = dst.add(size_of::<T>());
@@ -966,7 +966,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         );
 
         let avail = partition_len - offset;
-        let offset = self.layout.offset_at(partition) + offset;
+        let global_offset = self.layout.offset_at(partition) + offset;
         let data_bytes = data.len() * size_of::<T>();
 
         // safe length of data, in bytes
@@ -984,7 +984,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         // Additionally, the caller must also ensure that the size of `T`
         // corresponds to the same size of the type present on the GPU buffers.
         unsafe {
-            let dst = self.ptr.add(base_offset + offset) as *mut T;
+            let dst = self.ptr.add(base_offset + global_offset) as *mut T;
             std::ptr::copy_nonoverlapping(src, dst, data_len / size_of::<T>());
         }
     }
@@ -1072,7 +1072,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         );
 
         let avail = partition_len - offset;
-        let offset = self.layout.offset_at(partition) + offset;
+        let global_offset = self.layout.offset_at(partition) + offset;
 
         let data_bytes_padded = size_of::<T>() + pad_len;
         let avail_count = avail / data_bytes_padded;
@@ -1092,7 +1092,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         // Additionally, the caller must also ensure that that the length of
         // T + `pad_len` correspond to the size of the type on the GPU.
         unsafe {
-            let mut dst = self.ptr.add(base_offset + offset);
+            let mut dst = self.ptr.add(base_offset + global_offset);
             for i in 0..data_len {
                 std::ptr::write_unaligned(dst as *mut T, data[i]);
                 dst = dst.add(size_of::<T>());
@@ -1211,8 +1211,13 @@ macro_rules! typed_part_tribuffer {
                     /// from the specified `offset` with a `padding`.
                     ///
                     /// The `offset` must be in number of elements.
-                    pub fn [< blit_ $part:lower _padded >](&self, section: usize, data: &[$part_ty], offset: usize, padding: usize) {
-                        let offset = std::mem::size_of::<$part_ty>() * offset;
+                    pub unsafe fn [< blit_ $part:lower _padded >]<T: Sized + Clone + Copy>(
+                        &self,
+                        data: &[T],
+                        offset: usize,
+                        padding: usize
+                    ) {
+                        let offset = std::mem::size_of::<T>() * offset;
                         unsafe {
                             self.0.blit_part_padded(
                                 section,
@@ -1331,8 +1336,13 @@ macro_rules! typed_part_buffer {
                     /// from the specified `offset` with a `padding`.
                     ///
                     /// The `offset` must be in number of elements.
-                    pub fn [< blit_ $part:lower _padded >](&self, data: &[$part_ty], offset: usize, padding: usize) {
-                        let offset = std::mem::size_of::<$part_ty>() * offset;
+                    pub unsafe fn [< blit_ $part:lower _padded >]<T: Sized + Clone + Copy>(
+                        &self,
+                        data: &[T],
+                        offset: usize,
+                        padding: usize
+                    ) {
+                        let offset = std::mem::size_of::<T>() * offset;
                         unsafe {
                             self.0.blit_part_padded(
                                 $part_idx as usize,
