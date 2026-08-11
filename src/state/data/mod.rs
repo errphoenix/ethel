@@ -147,7 +147,7 @@ pub trait SparseSlot: Default {
 
     fn next_slot_index(&mut self) -> IndirectIndex {
         if let Some(cached_index) = self.free_list_mut().pop() {
-            // cached index's generatin is already updated, since it was freed
+            // cached index's generation is already updated when it was freed
             cached_index
         } else {
             // new index, gen 0
