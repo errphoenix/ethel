@@ -120,9 +120,9 @@ impl<Storage> Cross<Consumer, Storage> {
     ///
     /// This means that the GPU fence synchronisation of `barrier` must be
     /// handled by the caller.
-    pub fn cross<F>(&self, barrier: &mut SyncBarrier, op: F)
+    pub fn cross<F>(&self, barrier: &mut SyncBarrier, mut op: F)
     where
-        F: Fn(StorageSection, &Storage),
+        F: FnMut(StorageSection, &Storage),
     {
         let section = self.boundary.current_section();
         self.boundary.sync(barrier);
@@ -148,9 +148,9 @@ impl<Storage> Cross<Producer, Storage> {
     /// After the operation is executed (no lock was present on the section),
     /// the current tracked section of the [`Boundary`] is advanced to the
     /// next section (the one the CPU has just finished writing to).
-    pub fn cross<F>(&self, op: F)
+    pub fn cross<F>(&self, mut op: F)
     where
-        F: Fn(StorageSection, &Storage),
+        F: FnMut(StorageSection, &Storage),
     {
         let section = self.boundary.current_section().next();
 
