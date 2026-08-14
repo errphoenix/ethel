@@ -86,7 +86,7 @@ pub struct PartitionedBuffer<const PARTS: usize> {
 }
 impl<const PARTS: usize> Default for PartitionedBuffer<PARTS> {
     fn default() -> Self {
-        let lengths = std::array::from_fn(|_| UnsafeCell::new(1));
+        let lengths = std::array::from_fn(|_| UnsafeCell::new(0));
         Self {
             gl_obj: Default::default(),
             layout: Default::default(),
@@ -119,7 +119,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
             janus::gl::MapBufferRange(janus::gl::COPY_WRITE_BUFFER, 0, buffer_size, flags)
         } as *mut u8;
 
-        let lengths = std::array::from_fn(|_| UnsafeCell::new(1));
+        let lengths = std::array::from_fn(|_| UnsafeCell::new(0));
         Self {
             gl_obj,
             layout,
@@ -417,7 +417,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
         let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
-            self.set_length(partition, 1 + total_len as u32);
+            self.set_length(partition, total_len as u32);
         }
 
         // SAFETY: we assert the partition is valid within this
@@ -519,7 +519,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         let data_len = avail_count.min(data_count);
         let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
-            self.set_length(partition, 1 + total_len as u32);
+            self.set_length(partition, total_len as u32);
         }
 
         // SAFETY: we assert the partition is valid within this buffer's
@@ -565,7 +565,7 @@ pub struct PartitionedTriBuffer<const PARTS: usize> {
 }
 impl<const PARTS: usize> Default for PartitionedTriBuffer<PARTS> {
     fn default() -> Self {
-        let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(1)));
+        let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(0)));
         Self {
             gl_obj: Default::default(),
             layout: Default::default(),
@@ -599,7 +599,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
             janus::gl::MapBufferRange(janus::gl::COPY_WRITE_BUFFER, 0, total_length, flags)
         } as *mut u8;
 
-        let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(1)));
+        let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(0)));
         Self {
             gl_obj,
             layout,
@@ -974,7 +974,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 
         let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
-            self.set_length(section, partition, 1 + total_len as u32);
+            self.set_length(section, partition, total_len as u32);
         }
 
         // SAFETY: we assert the section and partition are valid within this
@@ -1082,7 +1082,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         let data_len = avail_count.min(data_count);
         let total_len = (offset + data_len) / size_of::<T>();
         unsafe {
-            self.set_length(section, partition, 1 + total_len as u32);
+            self.set_length(section, partition, total_len as u32);
         }
 
         // SAFETY: we assert the section and partition are valid within this
