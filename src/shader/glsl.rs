@@ -17,7 +17,6 @@ pub struct ShadingVersion {
     version: u32,
     core: bool,
 }
-
 impl ShadingVersion {
     pub const LATEST: Self = Self::core(460);
 
@@ -40,13 +39,11 @@ impl ShadingVersion {
         self.version
     }
 }
-
 impl std::fmt::Display for ShadingVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_glsl_alloc())
     }
 }
-
 impl GlslAlloc for ShadingVersion {
     fn to_glsl_alloc(&self) -> String {
         format!(
@@ -87,75 +84,70 @@ macro_rules! copy_type_name_glsl {
         }
     };
 }
+macro_rules! copy_type_name_also_as_array_glsl {
+    ($gt:ty => $lab:literal) => {
+        copy_type_name_glsl!($gt => $lab);
 
-impl<const SIZE: usize> Glsl for [f32; SIZE] {
-    fn to_glsl() -> &'static str {
-        "float"
-    }
+        impl<const N: usize> $crate::shader::glsl::Glsl for [$gt; N] {
+            fn to_glsl() -> &'static str {
+                $lab
+            }
+        }
+
+        impl<const N: usize> $crate::shader::glsl::GlslType for [$gt; N] {
+            fn to_glsl_type() -> &'static str {
+                $lab
+            }
+        }
+    };
 }
-impl<const SIZE: usize> Glsl for [i32; SIZE] {
-    fn to_glsl() -> &'static str {
-        "int"
-    }
-}
-impl<const SIZE: usize> Glsl for [u32; SIZE] {
-    fn to_glsl() -> &'static str {
-        "uint"
-    }
-}
+
+copy_type_name_glsl!((f32, f32) => "vec2");
+copy_type_name_glsl!((f32, f32, f32) => "vec3");
+copy_type_name_glsl!((f32, f32, f32, f32) => "vec4");
+copy_type_name_glsl!([(f32, f32, f32); 3] => "mat3");
+copy_type_name_glsl!([(f32, f32, f32, f32); 4] => "mat4");
+copy_type_name_also_as_array_glsl!(f32 => "float");
+copy_type_name_also_as_array_glsl!(i32 => "int");
+copy_type_name_also_as_array_glsl!(u32 => "uint");
+copy_type_name_also_as_array_glsl!(bool => "boolean");
+copy_type_name_also_as_array_glsl!(glam::Vec2 => "vec2");
+copy_type_name_also_as_array_glsl!(glam::Vec3 => "vec3");
+copy_type_name_also_as_array_glsl!(glam::Vec4 => "vec4");
+copy_type_name_also_as_array_glsl!(glam::Mat2 => "mat2");
+copy_type_name_also_as_array_glsl!(glam::Mat3 => "mat3");
+copy_type_name_also_as_array_glsl!(glam::Mat4 => "mat4");
 
 impl WriteValue for f32 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "{:.3}", self)
     }
 }
-
 impl WriteValue for u32 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "{}", self)
     }
 }
-
 impl WriteValue for i32 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "{}", self)
     }
 }
-
 impl WriteValue for bool {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "{}", self)
     }
 }
-
-copy_type_name_glsl!(f32 => "float");
-copy_type_name_glsl!(i32 => "int");
-copy_type_name_glsl!(u32 => "uint");
-copy_type_name_glsl!(bool => "boolean");
-copy_type_name_glsl!(glam::Vec2 => "vec2");
-copy_type_name_glsl!((f32, f32) => "vec2");
-copy_type_name_glsl!(glam::Vec3 => "vec3");
-copy_type_name_glsl!((f32, f32, f32) => "vec3");
-copy_type_name_glsl!(glam::Vec4 => "vec4");
-copy_type_name_glsl!((f32, f32, f32, f32) => "vec4");
-copy_type_name_glsl!(glam::Mat2 => "mat2");
-copy_type_name_glsl!(glam::Mat3 => "mat3");
-copy_type_name_glsl!([(f32, f32, f32); 3] => "mat3");
-copy_type_name_glsl!(glam::Mat4 => "mat4");
-copy_type_name_glsl!([(f32, f32, f32, f32); 4] => "mat4");
-
 impl super::WriteValue for glam::Vec2 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "vec2({:.3}, {:.3})", self[0], self[1])
     }
 }
-
 impl super::WriteValue for glam::Vec3 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(to, "vec3({:.3}, {:.3}, {:.3})", self[0], self[1], self[2])
     }
 }
-
 impl super::WriteValue for glam::Vec4 {
     fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
         write!(
