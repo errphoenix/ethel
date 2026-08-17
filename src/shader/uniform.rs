@@ -113,16 +113,16 @@ impl<const SIZE: usize> UploadUniform for [i32; SIZE] {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct GlslUniform(&'static str);
+#[derive(Clone, Debug)]
+pub struct GlslUniform(String);
 
 impl GlslUniform {
-    pub const fn new(string: &'static str) -> Self {
+    pub const fn new(string: String) -> Self {
         Self(string)
     }
 
-    pub const fn as_str(&self) -> &'static str {
-        self.0
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -141,14 +141,14 @@ impl super::Inject for GlslUniform {
 #[macro_export]
 macro_rules! shader_glsl_uniform {
     ($($arr_n:literal,)? $gl_name:ident: $gl_type:ident) => {
-        GlslUniform::new(concat!(
+        $crate::shader::uniform::GlslUniform::new(concat!(
             "uniform ",
             stringify!($gl_type),
             " ",
             stringify!($gl_name),
             $("[", $arr_n, "]",)?
             ";\n"
-        ))
+        ).to_string())
     };
 }
 
@@ -173,6 +173,39 @@ macro_rules! shader_glsl_build_uniform_interface {
             }
         }
     };
+}
+
+#[macro_export]
+macro_rules! shader_glsl_internal_image {
+    (on $idx:expr $(, for $len:expr)? => $name:ident : $image_type:ident as $format:ident $($m:tt)* ) => {
+        {
+            #[allow(unused)]
+            let mut pfx = $crate::shader_glsl_internal_image!(@prefix $idx, $format);
+            $($crate::shader_glsl_internal_image!(@parse pfx $m);)*
+            let sfx = $crate::shader_glsl_internal_image!(@suffix $name, $image_type, $($len)?);
+            $crate::shader::uniform::GlslUniform::new(format!("{pfx} {sfx}"))
+        }
+    };
+
+    (@prefix $idx:expr, $format: ident) => {
+        concat!(
+            "layout(binding = ", $idx, ", ", stringify!($format), ")",
+        ).to_string()
+    };
+    (@suffix $name:ident, $type:ident, $($len:expr)?) => {
+        concat!(
+            "uniform ", stringify!($type), " ", stringify!($name),
+            $("[", $len, "]",)?
+            ";"
+        )
+    };
+
+    (@parse $pfx:ident writeonly) => { $pfx = format!("{} writeonly", $pfx) };
+    (@parse $pfx:ident readonly ) => { $pfx = format!("{} readonly" , $pfx) };
+    (@parse $pfx:ident coherent ) => { $pfx = format!("{} coherent" , $pfx) };
+    (@parse $pfx:ident volatile ) => { $pfx = format!("{} volatile" , $pfx) };
+    (@parse $pfx:ident restrict ) => { $pfx = format!("{} restrict" , $pfx) };
+    (@parse ) => {};
 }
 
 #[cfg(test)]
