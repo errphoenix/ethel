@@ -592,8 +592,7 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_ssbo() {
-        const TEST: &str =
-            "layout(std430, binding = 2) buffer POD_BindPose\n{\n    vec4 pod_bind_pose[];\n};\n";
+        const TEST: &str = "layout(std430, binding = 2) buffer POD_BindPose\n{\n    float some_var;\n    float some_array[32];\n    vec4 pod_bind_pose[];\n};\n";
 
         macro_rules! ssbo_binding {
             (POD_BindPose) => {
@@ -606,8 +605,8 @@ mod tests {
 
         let generated = shader_glsl_ssbo! {
             buf POD_BindPose => {
-                some_var: float;
-                some_array: float[32];
+                float: some_var;
+                float: some_array[32];
                 [dyn_array vec4: pod_bind_pose]
             }
         };
