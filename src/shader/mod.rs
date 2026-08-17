@@ -571,7 +571,7 @@ macro_rules! shader_glsl {
             }
             impl [< Shader $name >] {
                 pub fn bind(&self) {
-                    self.handle.bind();
+                    $crate::shader::ShaderProgram::bind(&self.handle);
                 }
 
                 pub fn unbind(&self) {
@@ -853,13 +853,19 @@ macro_rules! shader_glsl {
 
                     $(
                         $(
-                            let [< location_ $c_u_gl_name _ $c_u_gl_type >] = handle.find_uniform_location(stringify!($c_u_gl_name));
+                            let [< location_ $c_u_gl_name _ $c_u_gl_type >] =
+                                $crate::shader::ShaderProgram::find_uniform_location(
+                                    &handle, stringify!($c_u_gl_name)
+                                );
                         )+
                     )?
                     $(
                         $(
                             $(
-                                let [< location_ $u_gl_name _ $u_gl_type >] = handle.find_uniform_location(stringify!($u_gl_name));
+                                let [< location_ $u_gl_name _ $u_gl_type >] =
+                                    $crate::shader::ShaderProgram::find_uniform_location(
+                                        &handle, stringify!($u_gl_name)
+                                    );
                             )+
                         )?
                     )+
@@ -907,6 +913,9 @@ macro_rules! shader_glsl_compute {
                 $(
                     length $u_len:literal, $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
                 )+
+            };)?
+            $(image {
+                $(on $idx:expr $(, for $len:expr)? => $ui_name:ident : $image_type:ident as $format:ident $($m:ident)* ; )+
             };)?
             $(type {
                 $(
@@ -968,7 +977,7 @@ macro_rules! shader_glsl_compute {
             }
             impl [< ComputeShader $name >] {
                 pub fn bind(&self) {
-                    self.handle.bind();
+                    $crate::shader::ShaderProgram::bind(&self.handle);
                 }
 
                 pub fn unbind(&self) {
@@ -1019,6 +1028,14 @@ macro_rules! shader_glsl_compute {
                                     )
                                 }
                             );
+                        )+
+                    )?
+                    $(
+                        $(
+                            let u = $crate::shader_glsl_internal_image!(
+                                on $idx $(, for $len)? => $ui_name : $image_type as $format $($m)*
+                            );
+                            let _ = composer.add_uniform(u);
                         )+
                     )?
                     $(
@@ -1098,7 +1115,25 @@ macro_rules! shader_glsl_compute {
 
                     $(
                         $(
-                            let _ = composer.add_uniform($crate::shader_glsl_uniform!($u_gl_name: $u_gl_type));
+                            let _ = composer.add_uniform(
+                                if $u_len > 1 {
+                                    $crate::shader_glsl_uniform!(
+                                        $u_len, $u_gl_name: $u_gl_type
+                                    )
+                                } else {
+                                    $crate::shader_glsl_uniform!(
+                                        $u_gl_name: $u_gl_type
+                                    )
+                                }
+                            );
+                        )+
+                    )?
+                    $(
+                        $(
+                            let u = $crate::shader_glsl_internal_image!(
+                                on $idx $(, for $len)? => $ui_name : $image_type as $format $($m)*
+                            );
+                            let _ = composer.add_uniform(u);
                         )+
                     )?
                     $(
@@ -1153,7 +1188,11 @@ macro_rules! shader_glsl_compute {
 
                     $(
                         $(
-                            let [< location_ $u_gl_name _ $u_gl_type >] = handle.find_uniform_location(stringify!($u_gl_name));
+                            let [< location_ $u_gl_name _ $u_gl_type >] =
+                                $crate::shader::ShaderProgram::find_uniform_location(
+                                    &handle, stringify!($u_gl_name)
+                                );
+
                         )+
                     )?
 

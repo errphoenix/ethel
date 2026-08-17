@@ -177,7 +177,7 @@ macro_rules! shader_glsl_build_uniform_interface {
 
 #[macro_export]
 macro_rules! shader_glsl_internal_image {
-    (on $idx:expr $(, for $len:expr)? => $name:ident : $image_type:ident as $format:ident $($m:tt)* ) => {
+    (on $idx:expr $(, for $len:expr)? => $name:ident : $image_type:ident as $format:ident $($m:ident)* ) => {
         {
             #[allow(unused)]
             let mut pfx = $crate::shader_glsl_internal_image!(@prefix $idx, $format);
@@ -217,5 +217,18 @@ mod tests {
         const TEST: &str = "uniform mat4 projection;\n";
         let uniform = shader_glsl_uniform!(projection: mat4);
         assert_eq!(TEST, uniform.as_str());
+    }
+
+    #[test]
+    fn shader_compose_glsl_image() {
+        const TEST_A: &str = "layout(binding = 1, rgba16f) uniform imageCube env_map[4];";
+        let image = shader_glsl_internal_image!(on 1, for 4 => env_map : imageCube as rgba16f);
+        assert_eq!(TEST_A, image.as_str());
+
+        const TEST_B: &str =
+            "layout(binding = 5, rgba8) readonly restrict uniform image2D im_imag;";
+        let image =
+            shader_glsl_internal_image!(on 5 => im_imag : image2D as rgba8 readonly restrict);
+        assert_eq!(TEST_B, image.as_str());
     }
 }
