@@ -105,6 +105,15 @@ macro_rules! copy_type_name_also_as_array_glsl {
 copy_type_name_glsl!((f32, f32) => "vec2");
 copy_type_name_glsl!((f32, f32, f32) => "vec3");
 copy_type_name_glsl!((f32, f32, f32, f32) => "vec4");
+copy_type_name_glsl!((u32, u32) => "uvec2");
+copy_type_name_glsl!((u32, u32, u32) => "uvec3");
+copy_type_name_glsl!((u32, u32, u32, u32) => "uvec4");
+copy_type_name_glsl!((i32, i32) => "ivec2");
+copy_type_name_glsl!((i32, i32, i32) => "ivec3");
+copy_type_name_glsl!((i32, i32, i32, i32) => "ivec4");
+copy_type_name_glsl!((bool, bool) => "bvec2");
+copy_type_name_glsl!((bool, bool, bool) => "bvec3");
+copy_type_name_glsl!((bool, bool, bool, bool) => "bvec4");
 copy_type_name_glsl!([(f32, f32, f32); 3] => "mat3");
 copy_type_name_glsl!([(f32, f32, f32, f32); 4] => "mat4");
 copy_type_name_also_as_array_glsl!(f32 => "float");
@@ -114,6 +123,15 @@ copy_type_name_also_as_array_glsl!(bool => "boolean");
 copy_type_name_also_as_array_glsl!(glam::Vec2 => "vec2");
 copy_type_name_also_as_array_glsl!(glam::Vec3 => "vec3");
 copy_type_name_also_as_array_glsl!(glam::Vec4 => "vec4");
+copy_type_name_also_as_array_glsl!(glam::UVec2 => "uvec2");
+copy_type_name_also_as_array_glsl!(glam::UVec3 => "uvec3");
+copy_type_name_also_as_array_glsl!(glam::UVec4 => "uvec4");
+copy_type_name_also_as_array_glsl!(glam::IVec2 => "ivec2");
+copy_type_name_also_as_array_glsl!(glam::IVec3 => "ivec3");
+copy_type_name_also_as_array_glsl!(glam::IVec4 => "ivec4");
+copy_type_name_also_as_array_glsl!(glam::BVec2 => "bvec2");
+copy_type_name_also_as_array_glsl!(glam::BVec3 => "bvec3");
+copy_type_name_also_as_array_glsl!(glam::BVec4 => "bvec4");
 copy_type_name_also_as_array_glsl!(glam::Mat2 => "mat2");
 copy_type_name_also_as_array_glsl!(glam::Mat3 => "mat3");
 copy_type_name_also_as_array_glsl!(glam::Mat4 => "mat4");
@@ -155,6 +173,59 @@ impl super::WriteValue for glam::Vec4 {
             "vec4({:.3}, {:.3}, {:.3}, {:.3})",
             self[0], self[1], self[2], self[3]
         )
+    }
+}
+impl super::WriteValue for glam::UVec2 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "uvec2({}, {})", self[0], self[1])
+    }
+}
+impl super::WriteValue for glam::UVec3 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "uvec3({}, {}, {})", self[0], self[1], self[2])
+    }
+}
+impl super::WriteValue for glam::UVec4 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(
+            to,
+            "uvec4({}, {}, {}, {})",
+            self[0], self[1], self[2], self[3]
+        )
+    }
+}
+impl super::WriteValue for glam::IVec2 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "ivec2({}, {})", self[0], self[1])
+    }
+}
+impl super::WriteValue for glam::IVec3 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "ivec3({}, {}, {})", self[0], self[1], self[2])
+    }
+}
+impl super::WriteValue for glam::IVec4 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(
+            to,
+            "ivec4({}, {}, {}, {})",
+            self[0], self[1], self[2], self[3]
+        )
+    }
+}
+impl super::WriteValue for glam::BVec2 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "bvec2({}, {})", self.x, self.y)
+    }
+}
+impl super::WriteValue for glam::BVec3 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "bvec3({}, {}, {})", self.x, self.y, self.z)
+    }
+}
+impl super::WriteValue for glam::BVec4 {
+    fn write_value(&self, to: &mut impl std::fmt::Write) -> std::fmt::Result {
+        write!(to, "bvec4({}, {}, {}, {})", self.x, self.y, self.z, self.w)
     }
 }
 

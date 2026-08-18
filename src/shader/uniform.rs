@@ -3,7 +3,6 @@ use crate::shader::{UniformLocation, glsl::Glsl};
 pub trait UploadUniform: Glsl {
     fn upload(&self, location: UniformLocation);
 }
-
 impl UploadUniform for glam::Vec2 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -11,7 +10,6 @@ impl UploadUniform for glam::Vec2 {
         }
     }
 }
-
 impl UploadUniform for glam::Vec3 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -19,7 +17,6 @@ impl UploadUniform for glam::Vec3 {
         }
     }
 }
-
 impl UploadUniform for glam::Vec4 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -27,7 +24,75 @@ impl UploadUniform for glam::Vec4 {
         }
     }
 }
-
+impl UploadUniform for glam::IVec2 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform2i(*location, self.x, self.y);
+        }
+    }
+}
+impl UploadUniform for glam::IVec3 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform3i(*location, self.x, self.y, self.z);
+        }
+    }
+}
+impl UploadUniform for glam::IVec4 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform4i(*location, self.x, self.y, self.z, self.w);
+        }
+    }
+}
+impl UploadUniform for glam::UVec2 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform2ui(*location, self.x, self.y);
+        }
+    }
+}
+impl UploadUniform for glam::UVec3 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform3ui(*location, self.x, self.y, self.z);
+        }
+    }
+}
+impl UploadUniform for glam::UVec4 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform4ui(*location, self.x, self.y, self.z, self.w);
+        }
+    }
+}
+impl UploadUniform for glam::BVec2 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform2i(*location, self.x as i32, self.y as i32);
+        }
+    }
+}
+impl UploadUniform for glam::BVec3 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform3i(*location, self.x as i32, self.y as i32, self.z as i32);
+        }
+    }
+}
+impl UploadUniform for glam::BVec4 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform4i(
+                *location,
+                self.x as i32,
+                self.y as i32,
+                self.z as i32,
+                self.w as i32,
+            );
+        }
+    }
+}
 impl UploadUniform for glam::Mat2 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -40,7 +105,6 @@ impl UploadUniform for glam::Mat2 {
         }
     }
 }
-
 impl UploadUniform for glam::Mat3 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -53,7 +117,6 @@ impl UploadUniform for glam::Mat3 {
         }
     }
 }
-
 impl UploadUniform for glam::Mat4 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -66,7 +129,13 @@ impl UploadUniform for glam::Mat4 {
         }
     }
 }
-
+impl UploadUniform for f32 {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            janus::gl::Uniform1f(*location, *self);
+        }
+    }
+}
 impl UploadUniform for u32 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -74,7 +143,6 @@ impl UploadUniform for u32 {
         }
     }
 }
-
 impl UploadUniform for i32 {
     fn upload(&self, location: UniformLocation) {
         unsafe {
@@ -82,33 +150,72 @@ impl UploadUniform for i32 {
         }
     }
 }
-
 impl UploadUniform for bool {
     fn upload(&self, location: UniformLocation) {
         UploadUniform::upload(&(*self as u32), location);
     }
 }
-
+impl<const SIZE: usize> UploadUniform for [bool; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        unsafe {
+            match SIZE {
+                0 => unreachable!(),
+                1 => UploadUniform::upload(&self[0], location),
+                2 => janus::gl::Uniform2i(*location, self[0] as i32, self[1] as i32),
+                3 => {
+                    janus::gl::Uniform3i(*location, self[0] as i32, self[1] as i32, self[2] as i32)
+                }
+                4 => janus::gl::Uniform4i(
+                    *location,
+                    self[0] as i32,
+                    self[1] as i32,
+                    self[2] as i32,
+                    self[3] as i32,
+                ),
+                _ => janus::gl::Uniform1iv(*location, SIZE as i32, self.as_ptr().cast()),
+            }
+        }
+    }
+}
 impl<const SIZE: usize> UploadUniform for [f32; SIZE] {
     fn upload(&self, location: UniformLocation) {
         unsafe {
-            janus::gl::Uniform1fv(*location, SIZE as i32, self.as_ptr());
+            match SIZE {
+                0 => unreachable!(),
+                1 => UploadUniform::upload(&self[0], location),
+                2 => janus::gl::Uniform2f(*location, self[0], self[1]),
+                3 => janus::gl::Uniform3f(*location, self[0], self[1], self[2]),
+                4 => janus::gl::Uniform4f(*location, self[0], self[1], self[2], self[3]),
+                _ => janus::gl::Uniform1fv(*location, SIZE as i32, self.as_ptr()),
+            }
         }
     }
 }
-
 impl<const SIZE: usize> UploadUniform for [u32; SIZE] {
     fn upload(&self, location: UniformLocation) {
         unsafe {
-            janus::gl::Uniform1uiv(*location, SIZE as i32, self.as_ptr());
+            match SIZE {
+                0 => unreachable!(),
+                1 => UploadUniform::upload(&self[0], location),
+                2 => janus::gl::Uniform2ui(*location, self[0], self[1]),
+                3 => janus::gl::Uniform3ui(*location, self[0], self[1], self[2]),
+                4 => janus::gl::Uniform4ui(*location, self[0], self[1], self[2], self[3]),
+                _ => janus::gl::Uniform1uiv(*location, SIZE as i32, self.as_ptr()),
+            }
         }
     }
 }
-
 impl<const SIZE: usize> UploadUniform for [i32; SIZE] {
     fn upload(&self, location: UniformLocation) {
         unsafe {
-            janus::gl::Uniform1iv(*location, SIZE as i32, self.as_ptr());
+            match SIZE {
+                0 => unreachable!(),
+                1 => UploadUniform::upload(&self[0], location),
+                2 => janus::gl::Uniform2i(*location, self[0], self[1]),
+                3 => janus::gl::Uniform3i(*location, self[0], self[1], self[2]),
+                4 => janus::gl::Uniform4i(*location, self[0], self[1], self[2], self[3]),
+                _ => janus::gl::Uniform1iv(*location, SIZE as i32, self.as_ptr()),
+            }
         }
     }
 }
@@ -188,9 +295,9 @@ macro_rules! shader_glsl_internal_image {
     };
 
     (@prefix $idx:expr, $format: ident) => {
-        concat!(
-            "layout(binding = ", $idx, ", ", stringify!($format), ")",
-        ).to_string()
+        format!(
+            "layout(binding = {}, {})", $idx, stringify!($format)
+        )
     };
     (@suffix $name:ident, $type:ident, $($len:expr)?) => {
         concat!(
@@ -210,8 +317,6 @@ macro_rules! shader_glsl_internal_image {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn shader_compose_glsl_uniform() {
         const TEST: &str = "uniform mat4 projection;\n";
@@ -221,8 +326,9 @@ mod tests {
 
     #[test]
     fn shader_compose_glsl_image() {
+        const B: u32 = 1;
         const TEST_A: &str = "layout(binding = 1, rgba16f) uniform imageCube env_map[4];";
-        let image = shader_glsl_internal_image!(on 1, for 4 => env_map : imageCube as rgba16f);
+        let image = shader_glsl_internal_image!(on B, for 4 => env_map : imageCube as rgba16f);
         assert_eq!(TEST_A, image.as_str());
 
         const TEST_B: &str =

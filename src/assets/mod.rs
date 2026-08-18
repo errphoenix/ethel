@@ -449,6 +449,45 @@ where
         self.gpu_resource.as_ref()
     }
 
+    /// Get the raw resource stored in memory or load it if not present.
+    ///
+    /// See [`Self::load_to_memory`] for additional info.
+    ///
+    /// If `params_if_unloaded` is `None` and the asset is not loaded to
+    /// memory, the function will return [`AssetError::NotInMemory`].
+    pub fn raw_resource_or_load(
+        &mut self,
+        params_if_unloaded: Option<&<T as Import>::AdditionalParams>,
+    ) -> AssetResult<&T> {
+        if self.raw_resource.is_some() {
+            Ok(self.raw_resource.as_ref().unwrap())
+        } else if let Some(params) = params_if_unloaded {
+            self.load_to_memory(params)
+        } else {
+            Err(AssetError::NotInMemory)
+        }
+    }
+
+    /// Get the GPU resource stored in video-memory or upload it if not
+    /// present.
+    ///
+    /// See [`Self::upload_to_gpu`] for additional info.
+    ///
+    /// If `params_if_unloaded` is `None` and the asset is not loaded onto
+    /// the GPU, the function will return [`AssetError::NotProcessed`].
+    pub fn gpu_resource_or_upload(
+        &mut self,
+        params_if_unloaded: Option<&<T as Upload>::AdditionalParams>,
+    ) -> AssetResult<&T::AsGpu> {
+        if self.gpu_resource.is_some() {
+            Ok(self.gpu_resource.as_ref().unwrap())
+        } else if let Some(params) = params_if_unloaded {
+            self.upload_to_gpu(params)
+        } else {
+            Err(AssetError::NotProcessed)
+        }
+    }
+
     /// Attempt to load the raw resource from disk.
     ///
     /// This operation must only occur during the [`ResourceState::Unloaded`]
