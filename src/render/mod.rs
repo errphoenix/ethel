@@ -231,11 +231,14 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
                 janus::gl::BindVertexArray(self.render_vao);
             }
         }
+
+        let mut res_has_changed = false;
         {
             if self.screen_space.check_sync_status() {
                 self.screen_space.sync().unwrap();
                 let resolution = self.screen_space.resolution;
                 if resolution.is_changed() {
+                    res_has_changed = true;
                     self.screen_space.publish_with(|screen| {
                         let fov = screen.fov();
                         let w = resolution.width;
@@ -243,7 +246,6 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
 
                         screen.projection = projection_perspective(w, h, fov);
                         screen.ortho_proj = projection_orthographic(w, h);
-                        screen.resolution.dirty = false;
                     });
 
                     let w = resolution.width as i32;
@@ -262,6 +264,11 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
                 self.mesh_buffer.bind_shader_storage();
                 self.handler.render_frame(&storage, section);
             });
+
+        if res_has_changed {
+            self.screen_space
+                .publish_with(|s| s.resolution.dirty = false);
+        }
 
         #[cfg(debug_assertions)]
         {
