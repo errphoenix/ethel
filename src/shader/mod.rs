@@ -400,7 +400,7 @@ impl janus::GpuResource for ComputeShaderHandle {
 }
 impl ShaderProgram for ComputeShaderHandle {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShaderHandleView {
     program: u32,
 }
