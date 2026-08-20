@@ -480,7 +480,7 @@ macro_rules! shader_glsl_struct {
     (
         struct $name:ident {
             $(
-                $f_name:ident$([$rn:literal])?: $f_typ:ty => $f_lit:ident;
+                $f_name:ident$([$rn:literal])?: $f_typ:ty => $f_lit:ident $(,)?
             )+
         }
     ) => {

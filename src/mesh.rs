@@ -120,21 +120,21 @@ pub(crate) const BUFFER_MESH_META_INDEX: usize = 1;
 
 crate::shader_glsl_struct! {
     struct Metadata {
-        offset: u32 => uint;
-        length: u32 => uint;
+        offset: u32 => uint,
+        length: u32 => uint
     }
 }
 
 crate::shader_glsl_struct! {
     struct Vertex {
-        pos_x: f32 => float;
-        pos_y: f32 => float;
-        pos_z: f32 => float;
-        norm_x: f32 => float;
-        norm_y: f32 => float;
-        norm_z: f32 => float;
-        uv_x: f32 => float;
-        uv_y: f32 => float;
+        pos_x: f32 => float,
+        pos_y: f32 => float,
+        pos_z: f32 => float,
+        norm_x: f32 => float,
+        norm_y: f32 => float,
+        norm_z: f32 => float,
+        uv_x: f32 => float,
+        uv_y: f32 => float
     }
 }
 

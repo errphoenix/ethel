@@ -1218,8 +1218,8 @@ mod tests {
 
     crate::shader_glsl_struct! {
         struct DirectIndex {
-            handle: u32 => uint;
-            generation: u32 => uint;
+            handle: u32 => uint,
+            generation: u32 => uint
         }
     }
 
