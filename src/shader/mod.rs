@@ -468,6 +468,9 @@ macro_rules! shader_glsl {
                         length $c_u_len:literal, $c_u_gl_name:ident: $c_u_gl_type:ident => $c_u_r_type:ty;
                     )+
                 };)?
+                $(sampler {
+                    $(on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; )+
+                };)?
                 $(type {
                     $(
                         $c_type_glsl:expr
@@ -611,6 +614,15 @@ macro_rules! shader_glsl {
                             )+
                         )?
                         $(
+                            let mut unit_offset = 0;
+                            $(
+                                let u = $crate::shader_glsl_internal_sampler!(
+                                    on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                                );
+                                let _ = composer.add_uniform(u);
+                            )+
+                        )?
+                        $(
                             $(
                                 let _ = composer.inject_header(&$c_type_glsl);
                             )+
@@ -745,6 +757,15 @@ macro_rules! shader_glsl {
                                             )
                                         }
                                     );
+                                )+
+                            )?
+                            $(
+                                let mut unit_offset = 0;
+                                $(
+                                    let u = $crate::shader_glsl_internal_sampler!(
+                                        on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                                    );
+                                    let _ = composer.add_uniform(u);
                                 )+
                             )?
                             $(
@@ -914,6 +935,9 @@ macro_rules! shader_glsl_compute {
                     length $u_len:literal, $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
                 )+
             };)?
+            $(sampler {
+                $(on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; )+
+            };)?
             $(image {
                 $(on $idx:expr $(, for $len:expr)? => $ui_name:ident : $image_type:ident as $format:ident $($m:ident)* ; )+
             };)?
@@ -1031,6 +1055,15 @@ macro_rules! shader_glsl_compute {
                         )+
                     )?
                     $(
+                        let mut unit_offset = 0;
+                        $(
+                            let u = $crate::shader_glsl_internal_sampler!(
+                                on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                            );
+                            let _ = composer.add_uniform(u);
+                        )+
+                    )?
+                    $(
                         $(
                             let u = $crate::shader_glsl_internal_image!(
                                 on $idx $(, for $len)? => $ui_name : $image_type as $format $($m)*
@@ -1132,6 +1165,15 @@ macro_rules! shader_glsl_compute {
                         $(
                             let u = $crate::shader_glsl_internal_image!(
                                 on $idx $(, for $len)? => $ui_name : $image_type as $format $($m)*
+                            );
+                            let _ = composer.add_uniform(u);
+                        )+
+                    )?
+                    $(
+                        let mut unit_offset = 0;
+                        $(
+                            let u = $crate::shader_glsl_internal_sampler!(
+                                on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
                             );
                             let _ = composer.add_uniform(u);
                         )+

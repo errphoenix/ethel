@@ -283,6 +283,38 @@ macro_rules! shader_glsl_build_uniform_interface {
 }
 
 #[macro_export]
+macro_rules! shader_glsl_internal_sampler {
+    (on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; $unit_offset:ident) => {
+        {
+            assert!(
+                $s_idx >= $unit_offset,
+                "conflicting sampler binding index: current offset is {} but specified binding {}",
+                $unit_offset, $s_idx
+            );
+
+            #[allow(unused)]
+            {
+                $unit_offset += 1;
+                $(
+                    $unit_offset += $s_len - 1;
+                )?
+            }
+
+            let name = concat!(
+                stringify!($us_name),
+                $("[", $s_len, "]",)?
+            );
+            $crate::shader::uniform::GlslUniform::new(
+                format!(
+                    "layout(binding = {}) uniform {} {name};",
+                    $s_idx, stringify!($sampler_type)
+                )
+            )
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! shader_glsl_internal_image {
     (on $idx:expr $(, for $len:expr)? => $name:ident : $image_type:ident as $format:ident $($m:ident)* ) => {
         {
@@ -322,6 +354,20 @@ mod tests {
         const TEST: &str = "uniform mat4 projection;\n";
         let uniform = shader_glsl_uniform!(projection: mat4);
         assert_eq!(TEST, uniform.as_str());
+    }
+
+    #[test]
+    fn shader_compose_glsl_sampler() {
+        let mut uo = 0;
+        let sampler0 =
+            shader_glsl_internal_sampler!(on 0, for 16 => material_map : sampler2DArray ; uo);
+        let sampler1 = shader_glsl_internal_sampler!(on 16 => some_sampler : sampler2D; uo);
+
+        const S0: &str = "layout(binding = 0) uniform sampler2DArray material_map[16];";
+        const S1: &str = "layout(binding = 16) uniform sampler2D some_sampler;";
+
+        assert_eq!(sampler0.as_str(), S0);
+        assert_eq!(sampler1.as_str(), S1);
     }
 
     #[test]
