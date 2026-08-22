@@ -445,16 +445,20 @@ impl ShaderProgram for ComputeShaderHandleView {}
 ///    See [`crate::shader_glsl_attribs`].
 /// 2. Uniforms (`uniform`), with the `length N, shader_name: shader_type => RustType;`
 ///    syntax.
-/// 3. Custom types (`type`), to define custom types to be used in uniforms,
+/// 3. Samplers (`sampler`), with a `on N (, for LEN)? => sampler_name : samplerType`
+///    definition syntax. The part denoted by `?` is optional.
+///    Sampler binding conflicts are evaluated at runtime during shader
+///    compilation.
+/// 4. Custom types (`type`), to define custom types to be used in uniforms,
 ///    SSBO's, etc. See [`crate::shader_glsl_struct`].
-/// 4. Shader Storage Buffer Objects (`ssbo`), to define SSBO binding points
+/// 5. Shader Storage Buffer Objects (`ssbo`), to define SSBO binding points
 ///    and types. See [`crate::shader_glsl_ssbo`].
-/// 5. Constants (`const`), to define constant variables directly form Rust
+/// 6. Constants (`const`), to define constant variables directly form Rust
 ///    source doe. See [`crate::shader::Constant`].
-/// 6. Shader variants (`variants`), to define alternative variants of this
+/// 7. Shader variants (`variants`), to define alternative variants of this
 ///    shader, allowing for dynamic shader source pre-processing. This is only
 ///    allowed in the `common` section.
-/// 7. Utility/library functions (`lib`), to define utility or auxiliary shader
+/// 8. Utility/library functions (`lib`), to define utility or auxiliary shader
 ///    functions with a custom syntax. See [`crate::shader::shader_glsl_lib`].
 ///    Can also be selected dynamically depending on the selected shader
 ///    variant with the `>VARIANT_PATTERN => `expr` syntax.
@@ -469,7 +473,7 @@ macro_rules! shader_glsl {
                     )+
                 };)?
                 $(sampler {
-                    $(on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; )+
+                    $(on $cs_idx:expr $(, for $cs_len:expr)? => $cus_name:ident : $c_sampler_type:ident ; )+
                 };)?
                 $(type {
                     $(
@@ -510,6 +514,9 @@ macro_rules! shader_glsl {
                         $(
                             length $u_len:literal, $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
                         )+
+                    };)?
+                    $(sampler {
+                        $(on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; )+
                     };)?
                     $(type {
                         $(
@@ -617,7 +624,7 @@ macro_rules! shader_glsl {
                             let mut unit_offset = 0;
                             $(
                                 let u = $crate::shader_glsl_internal_sampler!(
-                                    on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                                    on $cs_idx $(, for $cs_len)? => $cus_name : $csampler_type ; unit_offset
                                 );
                                 let _ = composer.add_uniform(u);
                             )+
@@ -671,6 +678,15 @@ macro_rules! shader_glsl {
                                         )
                                     }
                                 );
+                            )+
+                        )?
+                        $(
+                            let mut unit_offset = 0;
+                            $(
+                                let u = $crate::shader_glsl_internal_sampler!(
+                                    on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                                );
+                                let _ = composer.add_uniform(u);
                             )+
                         )?
                         $(
@@ -763,7 +779,7 @@ macro_rules! shader_glsl {
                                 let mut unit_offset = 0;
                                 $(
                                     let u = $crate::shader_glsl_internal_sampler!(
-                                        on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                                        on $cs_idx $(, for $cs_len)? => $cus_name : $csampler_type ; unit_offset
                                     );
                                     let _ = composer.add_uniform(u);
                                 )+
@@ -818,6 +834,15 @@ macro_rules! shader_glsl {
                                                 )
                                             }
                                         );
+                                    )+
+                                )?
+                                $(
+                                    let mut unit_offset = 0;
+                                    $(
+                                        let u = $crate::shader_glsl_internal_sampler!(
+                                            on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                                        );
+                                        let _ = composer.add_uniform(u);
                                     )+
                                 )?
                                 $(
