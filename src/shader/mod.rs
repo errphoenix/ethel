@@ -993,7 +993,7 @@ macro_rules! shader_glsl_compute {
                 )*
             };)?
             $(share {
-                $($share_t:ident $share_n:ident $([$arr_c:ident])* ;)*
+                $($share_t:ident $share_n:ident $([$arr_c:expr])* ;)*
             };)?
 
             src() {

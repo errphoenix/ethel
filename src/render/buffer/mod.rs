@@ -34,12 +34,6 @@ pub(crate) use assert_tb_section;
 /// This is useful for OpenGL indexed buffers, such as indirect command
 /// buffers and array buffers, that do not support `glBindBufferRange` (which
 /// [`PartitionedTriBuffer`] depends on).
-///
-/// This is also the reason as to why multiple types (parts) are not supported
-/// in [`TriBuffer`].
-///
-/// <div class="warning">
-///
 /// ### Note
 ///
 /// Reading from the GPU buffers is slower than reading from system memory,
@@ -53,7 +47,7 @@ pub(crate) use assert_tb_section;
 ///
 /// This is also valid for [`PartitionedTriBuffer`].
 ///
-/// </div>
+/// Also see [`SingleBuffer`], a non-triple-buffered equivalent.
 ///
 /// [`PartitionedTriBuffer`]: partitioned::PartitionedTriBuffer
 #[derive(Default, Debug)]
@@ -61,16 +55,11 @@ pub struct TriBuffer<T: Sized + Clone + Copy> {
     gl_obj: [u32; 3],
     ptr: [*mut T; 3],
     lengths: [UnsafeCell<u32>; 3],
-
     /// Capacity per each section. This is number of elements.
     capacity: usize,
-
-    _marker: std::marker::PhantomData<T>,
 }
-
 unsafe impl<T> Sync for TriBuffer<T> where T: Sized + Clone + Copy {}
 unsafe impl<T> Send for TriBuffer<T> where T: Sized + Clone + Copy {}
-
 impl<T> TriBuffer<T>
 where
     T: Sized + Clone + Copy,
@@ -133,7 +122,6 @@ where
             ptr,
             lengths,
             capacity,
-            _marker: std::marker::PhantomData,
         }
     }
 
@@ -353,7 +341,6 @@ where
         }
     }
 }
-
 impl<T> Drop for TriBuffer<T>
 where
     T: Sized + Clone + Copy,
@@ -366,6 +353,289 @@ where
             janus::gl::DeleteBuffers(3, self.gl_obj.as_ptr());
         }
         self.ptr = [std::ptr::null_mut(); 3];
+    }
+}
+
+/// A non-triple-buffered OpenGL buffer.
+///
+/// Unlike [`PartitionedBuffer`], this buffer is made for only one type.
+///
+/// This is useful for OpenGL indexed buffers, such as indirect command
+/// buffers and array buffers, that do not support `glBindBufferRange` (which
+/// [`PartitionedBuffer`] depends on).
+///
+/// Also see [`TriBuffer`], a triple-buffered equivalent.
+///
+/// [`PartitionedBuffer`]: partitioned::PartitionedBuffer
+#[derive(Default, Debug)]
+pub struct SingleBuffer<T: Sized + Clone + Copy> {
+    gl_obj: u32,
+    ptr: *mut T,
+    length: UnsafeCell<u32>,
+    /// This is number of elements.
+    capacity: usize,
+}
+unsafe impl<T> Sync for SingleBuffer<T> where T: Sized + Clone + Copy {}
+unsafe impl<T> Send for SingleBuffer<T> where T: Sized + Clone + Copy {}
+impl<T> SingleBuffer<T>
+where
+    T: Sized + Clone + Copy,
+{
+    pub fn zeroed(capacity: usize) -> Self {
+        Self::new(capacity, InitStrategy::<T, fn() -> T>::Zero)
+    }
+
+    pub fn new<F: Fn() -> T>(capacity: usize, init: InitStrategy<T, F>) -> Self {
+        let mut gl_obj = 0;
+        let total_size = (capacity * size_of::<T>()) as isize;
+
+        let ptr = unsafe {
+            janus::gl::CreateBuffers(1, &mut gl_obj);
+
+            let flags = janus::gl::MAP_WRITE_BIT
+                | janus::gl::MAP_READ_BIT
+                | janus::gl::MAP_COHERENT_BIT
+                | janus::gl::MAP_PERSISTENT_BIT;
+
+            janus::gl::NamedBufferStorage(gl_obj, total_size, std::ptr::null(), flags);
+            janus::gl::MapNamedBufferRange(gl_obj, 0, total_size, flags) as *mut T
+        };
+
+        match init {
+            InitStrategy::Zero => unsafe {
+                janus::gl::ClearNamedBufferData(
+                    gl_obj,
+                    janus::gl::R32UI,
+                    janus::gl::RED_INTEGER,
+                    janus::gl::UNSIGNED_INT,
+                    std::ptr::null(),
+                );
+            },
+            InitStrategy::FillWith(func) => {
+                for j in 0..capacity {
+                    unsafe {
+                        std::ptr::write(ptr.add(j), func());
+                    }
+                }
+            }
+        }
+
+        let length = UnsafeCell::new(0);
+
+        Self {
+            gl_obj,
+            ptr,
+            length,
+            capacity,
+        }
+    }
+
+    /// Binds the to the given `ssbo_index`, with a custom `offset`.
+    ///
+    /// # Panic
+    /// Or if `offset` is greater or equal to the buffer's internal length.
+    pub fn bind_shader_storage(&self, ssbo_index: u32, offset: u32) {
+        #[cfg(debug_assertions)]
+        {
+            let ssbo_align =
+                unsafe { janus::gl::GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT } as usize;
+            assert_eq!(self.capacity % ssbo_align, 0)
+        }
+
+        let base_length = self.capacity as u32;
+
+        assert!(
+            base_length >= offset,
+            "offset cannot be greater or equal to buffer length {base_length}"
+        );
+
+        let offset_bytes = offset as usize * size_of::<T>();
+        let length_bytes = (base_length - offset) as usize * size_of::<T>();
+
+        unsafe {
+            janus::gl::BindBufferRange(
+                janus::gl::SHADER_STORAGE_BUFFER,
+                ssbo_index,
+                self.gl_obj,
+                offset_bytes as isize,
+                length_bytes as isize,
+            );
+        }
+    }
+
+    pub unsafe fn view(&self) -> View<'_, T> {
+        let slice = unsafe { std::slice::from_raw_parts(self.ptr, self.capacity) };
+        let length = unsafe { *self.length.get() };
+
+        View {
+            slice,
+            length,
+            offset: 0,
+            source: self.gl_obj,
+        }
+    }
+
+    pub unsafe fn view_mut(&self) -> ViewMut<'_, T> {
+        let slice = unsafe { std::slice::from_raw_parts_mut(self.ptr, self.capacity) };
+        let length = unsafe { *self.length.get() };
+
+        ViewMut {
+            slice,
+            length,
+            offset: 0,
+            source: self.gl_obj,
+        }
+    }
+
+    pub unsafe fn set_length(&self, length: u32) {
+        let p = self.length.get() as *mut u32;
+        unsafe {
+            *p = length;
+        }
+    }
+
+    pub fn length(&self) -> usize {
+        (unsafe { *self.length.get() }) as usize
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub unsafe fn raw(&self) -> *mut T {
+        self.ptr
+    }
+
+    /// Copy the given `data` into buffer at a given `offset`.
+    ///
+    /// This is the equivalent of a `memcpy` operation.
+    ///
+    /// The given `offset` must be the amount of elements `T` to skip inside
+    /// of the buffer, not bytes.
+    ///
+    /// If the length of `data` exceeds the capacity of the buffer, it will be
+    /// automatically clamped and any exceeding elements will be ignored.
+    ///
+    /// # Panics
+    /// * If `offset` is greater than the length of the buffer.
+    pub unsafe fn blit(&self, data: &[T], offset: usize) {
+        assert!(
+            self.capacity > offset,
+            "attempted to blit at offset {offset} with buffer capacity {}",
+            self.capacity
+        );
+
+        let src = data.as_ptr();
+        let avail = self.capacity - offset;
+        let len = avail.min(data.len());
+        unsafe { *(self.length.get()) = len as u32 };
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), len);
+        }
+    }
+
+    /// Copy the given `data` into the buffer at a given `offset` with a
+    /// padding of `pad_lan` at the end of each element.
+    ///
+    /// If the length of `data` exceeds the capacity of the buffer, it will be
+    /// automatically clamped and any exceeding elements will be ignored.
+    ///
+    /// This function is intended for operations where the CPU and GPU data
+    /// representations differ due to memory alignment requirements.
+    ///
+    /// Note that this operation is likely slower than the standard [`blit`].
+    ///
+    /// It is, in most cases, not recommended and [`blit`] should be
+    /// preferred if possible.
+    ///
+    /// # Motivation
+    /// Imagine you want to pass a position vector to the GPU: this is a
+    /// 3-dimensional vector on the CPU, but it must be a vec4 on the GPU due
+    /// to OpenGL's SSBO alignment requirements.
+    ///
+    /// In most cases, to avoid this issue, you would likely settle for an
+    /// intermediary buffer on the CPU where this conversion happens or you
+    /// could simply just store all positions as a 4-dimensional vector on the
+    /// CPU (maybe intelligently packing relevant data on the W component) if
+    /// it is not performance critical.
+    ///
+    /// In some cases, though, like visualising physics data, using a
+    /// 4-dimensional is not an option as it would pollute the CPU cache with
+    /// an unused float in a very performance critical scenario.
+    ///
+    /// This is the reason this function exists: it will pad out each element
+    /// of `data` with the given `pad_len` in bytes to satisfy SSBO alignment
+    /// requirements, without the need of intermediary buffers on the CPU.
+    ///
+    /// # Panics
+    /// * If `offset` is greater than the length of the section.
+    /// * If the size of the given type `S` + `pad_len` does not match the size
+    ///   of the buffer type `T`.
+    /// * If `pad_len` is 0.
+    ///
+    /// [`blit`]: SingleBuffer::blit
+    pub unsafe fn blit_padded<S: Clone + Copy + Default>(
+        &self,
+        data: &[S],
+        offset: usize,
+        pad_len: usize,
+    ) {
+        assert_ne!(
+            pad_len, 0,
+            "cannot blit with padding: invalid padding value of 0"
+        );
+
+        assert!(
+            self.capacity > offset,
+            "attempted to blit at offset {offset} with section length {}",
+            self.capacity
+        );
+
+        let avail = self.capacity * size_of::<T>() - offset;
+        let data_bytes_padded = size_of::<S>() + pad_len;
+        assert_eq!(
+            data_bytes_padded,
+            size_of::<T>(),
+            "cannot blit with padding: expected type size of {} bytes (T), but got: {} bytes (S) + {pad_len} bytes (padding) = {data_bytes_padded} bytes",
+            size_of::<T>(),
+            size_of::<S>(),
+        );
+
+        let avail_count = avail / data_bytes_padded;
+        let data_count = data.len();
+
+        // safe total length of data, element count
+        let data_len = avail_count.min(data_count);
+        unsafe { *(self.length.get()) = data_len as u32 };
+
+        // SAFETY: we assert the section and partition are valid within this
+        // buffer's layout. The buffer's layout, in turn, guarantees valid
+        // base offsets and base lengths.
+        // The caller guarantees the pointer to `data` must always be valid.
+        // Additionally, the caller must also ensure that that the length of
+        // T + `pad_len` correspond to the size of the type on the GPU.
+        unsafe {
+            let mut dst = (self.ptr as *mut u8).add(offset);
+            for i in 0..data_len {
+                std::ptr::write_unaligned(dst as *mut S, data[i]);
+                dst = dst.add(size_of::<S>());
+                dst.write_bytes(0, pad_len);
+                dst = dst.add(pad_len);
+            }
+        }
+    }
+}
+impl<T> Drop for SingleBuffer<T>
+where
+    T: Sized + Clone + Copy,
+{
+    fn drop(&mut self) {
+        unsafe {
+            janus::gl::UnmapNamedBuffer(self.gl_obj);
+            janus::gl::DeleteBuffers(1, &self.gl_obj);
+        }
+        self.ptr = std::ptr::null_mut();
     }
 }
 
