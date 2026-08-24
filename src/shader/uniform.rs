@@ -9,44 +9,31 @@ pub trait UploadUniform: Glsl {
 #[macro_export]
 macro_rules! type_uniform_interface {
     ($t:ty : fn $fn:ident => Self $(as $ct:tt)?) => {
-        $crate::type_uniform_interface!(@skip_array $t : fn $fn => Self $(as $ct)?);
-        paste::paste! {
-            $crate::type_uniform_interface!(@array_impl $t : fn [< $fn v >]);
+        impl $crate::shader::uniform::UploadUniform for $t {
+            fn upload(&self, location: $crate::shader::UniformLocation) {
+                unsafe {
+                    paste::paste! {
+                        janus::gl::[< $fn >](
+                            *location,
+                            *self $(as $ct)?
+                        );
+                    }
+                }
+            }
+            fn upload_direct(&self, program: &impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
+                unsafe {
+                    paste::paste! {
+                        janus::gl::[< Program $fn >](
+                            program.shader_program(),
+                            *location,
+                            *self $(as $ct)?
+                        );
+                    }
+                }
+            }
         }
     };
     ($t:ty : fn $fn:ident => $($fld:tt $(as $ct:tt)?),+ $(,)?) => {
-        $crate::type_uniform_interface!(@skip_array $t : fn $fn => $($fld $(as $ct)?),+);
-        paste::paste! {
-            $crate::type_uniform_interface!(@array_impl $t : fn [< $fn v >]);
-        }
-    };
-
-    (@skip_array $t:ty : fn $fn:ident => Self $(as $ct:tt)?) => {
-        impl $crate::shader::uniform::UploadUniform for $t {
-            fn upload(&self, location: $crate::shader::UniformLocation) {
-                unsafe {
-                    paste::paste! {
-                        janus::gl::[< $fn >](
-                            *location,
-                            *self $(as $ct)?
-                        );
-                    }
-                }
-            }
-            fn upload_direct(&self, program: &impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
-                unsafe {
-                    paste::paste! {
-                        janus::gl::[< Program $fn >](
-                            program.shader_program(),
-                            *location,
-                            *self $(as $ct)?
-                        );
-                    }
-                }
-            }
-        }
-    };
-    (@skip_array $t:ty : fn $fn:ident => $($fld:tt $(as $ct:tt)?),+ $(,)?) => {
         impl $crate::shader::uniform::UploadUniform for $t {
             fn upload(&self, location: $crate::shader::UniformLocation) {
                 unsafe {
@@ -65,39 +52,6 @@ macro_rules! type_uniform_interface {
                             program.shader_program(),
                             *location
                             $(, self.$fld $(as $ct)?)+
-                        );
-                    }
-                }
-            }
-        }
-    };
-    (@array_impl $t:ty : fn $fn:ident $(=> $intermed_fn:ident)? $(, $intermed_arg:expr)?) => {
-        impl<const SIZE: usize> $crate::shader::uniform::UploadUniform for [$t; SIZE] {
-            fn upload(&self, location: $crate::shader::UniformLocation) {
-                let v = self;
-                $(let v = Self::$intermed_fn(self);)?
-                unsafe {
-                    paste::paste! {
-                        janus::gl::[< $fn >](
-                            *location,
-                            SIZE as i32,
-                            $($intermed_arg,)?
-                            v.as_ptr().cast()
-                        );
-                    }
-                }
-            }
-            fn upload_direct(&self, program: &impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
-                let v = self;
-                $(let v = Self::$intermed_fn(self);)?
-                unsafe {
-                    paste::paste! {
-                        janus::gl::[< Program $fn >](
-                            program.shader_program(),
-                            *location,
-                            SIZE as i32,
-                            $($intermed_arg,)?
-                            v.as_ptr().cast()
                         );
                     }
                 }
@@ -192,6 +146,262 @@ impl UploadUniform for glam::Mat4 {
                 janus::gl::FALSE,
                 self.to_cols_array().as_ptr(),
             );
+        }
+    }
+}
+
+impl<const SIZE: usize> UploadUniform for [u32; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::Uniform1ui(*location, self[0]);
+            },
+            2 => unsafe {
+                janus::gl::Uniform2ui(*location, self[0], self[1]);
+            },
+            3 => unsafe {
+                janus::gl::Uniform3ui(*location, self[0], self[1], self[2]);
+            },
+            4 => unsafe {
+                janus::gl::Uniform4ui(*location, self[0], self[1], self[2], self[4]);
+            },
+            _ => unsafe {
+                janus::gl::Uniform1uiv(*location, SIZE as i32, self.as_ptr().cast());
+            },
+        }
+    }
+
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::ProgramUniform1ui(program.shader_program(), *location, self[0]);
+            },
+            2 => unsafe {
+                janus::gl::ProgramUniform2ui(program.shader_program(), *location, self[0], self[1]);
+            },
+            3 => unsafe {
+                janus::gl::ProgramUniform3ui(
+                    program.shader_program(),
+                    *location,
+                    self[0],
+                    self[1],
+                    self[2],
+                );
+            },
+            4 => unsafe {
+                janus::gl::ProgramUniform4ui(
+                    program.shader_program(),
+                    *location,
+                    self[0],
+                    self[1],
+                    self[2],
+                    self[4],
+                );
+            },
+            _ => unsafe {
+                janus::gl::ProgramUniform1uiv(
+                    program.shader_program(),
+                    *location,
+                    SIZE as i32,
+                    self.as_ptr().cast(),
+                );
+            },
+        }
+    }
+}
+impl<const SIZE: usize> UploadUniform for [i32; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::Uniform1i(*location, self[0]);
+            },
+            2 => unsafe {
+                janus::gl::Uniform2i(*location, self[0], self[1]);
+            },
+            3 => unsafe {
+                janus::gl::Uniform3i(*location, self[0], self[1], self[2]);
+            },
+            4 => unsafe {
+                janus::gl::Uniform4i(*location, self[0], self[1], self[2], self[4]);
+            },
+            _ => unsafe {
+                janus::gl::Uniform1iv(*location, SIZE as i32, self.as_ptr().cast());
+            },
+        }
+    }
+
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::ProgramUniform1i(program.shader_program(), *location, self[0]);
+            },
+            2 => unsafe {
+                janus::gl::ProgramUniform2i(program.shader_program(), *location, self[0], self[1]);
+            },
+            3 => unsafe {
+                janus::gl::ProgramUniform3i(
+                    program.shader_program(),
+                    *location,
+                    self[0],
+                    self[1],
+                    self[2],
+                );
+            },
+            4 => unsafe {
+                janus::gl::ProgramUniform4i(
+                    program.shader_program(),
+                    *location,
+                    self[0],
+                    self[1],
+                    self[2],
+                    self[4],
+                );
+            },
+            _ => unsafe {
+                janus::gl::ProgramUniform1iv(
+                    program.shader_program(),
+                    *location,
+                    SIZE as i32,
+                    self.as_ptr().cast(),
+                );
+            },
+        }
+    }
+}
+impl<const SIZE: usize> UploadUniform for [bool; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::Uniform1i(*location, self[0] as i32);
+            },
+            2 => unsafe {
+                janus::gl::Uniform2i(*location, self[0] as i32, self[1] as i32);
+            },
+            3 => unsafe {
+                janus::gl::Uniform3i(*location, self[0] as i32, self[1] as i32, self[2] as i32);
+            },
+            4 => unsafe {
+                janus::gl::Uniform4i(
+                    *location,
+                    self[0] as i32,
+                    self[1] as i32,
+                    self[2] as i32,
+                    self[4] as i32,
+                );
+            },
+            _ => unsafe {
+                janus::gl::Uniform1iv(*location, SIZE as i32, self.as_ptr().cast());
+            },
+        }
+    }
+
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::ProgramUniform1i(program.shader_program(), *location, self[0] as i32);
+            },
+            2 => unsafe {
+                janus::gl::ProgramUniform2i(
+                    program.shader_program(),
+                    *location,
+                    self[0] as i32,
+                    self[1] as i32,
+                );
+            },
+            3 => unsafe {
+                janus::gl::ProgramUniform3i(
+                    program.shader_program(),
+                    *location,
+                    self[0] as i32,
+                    self[1] as i32,
+                    self[2] as i32,
+                );
+            },
+            4 => unsafe {
+                janus::gl::ProgramUniform4i(
+                    program.shader_program(),
+                    *location,
+                    self[0] as i32,
+                    self[1] as i32,
+                    self[2] as i32,
+                    self[4] as i32,
+                );
+            },
+            _ => unsafe {
+                janus::gl::ProgramUniform1iv(
+                    program.shader_program(),
+                    *location,
+                    SIZE as i32,
+                    self.as_ptr().cast(),
+                );
+            },
+        }
+    }
+}
+impl<const SIZE: usize> UploadUniform for [f32; SIZE] {
+    fn upload(&self, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::Uniform1f(*location, self[0]);
+            },
+            2 => unsafe {
+                janus::gl::Uniform2f(*location, self[0], self[1]);
+            },
+            3 => unsafe {
+                janus::gl::Uniform3f(*location, self[0], self[1], self[2]);
+            },
+            4 => unsafe {
+                janus::gl::Uniform4f(*location, self[0], self[1], self[2], self[4]);
+            },
+            _ => unsafe {
+                janus::gl::Uniform1fv(*location, SIZE as i32, self.as_ptr().cast());
+            },
+        }
+    }
+
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
+        match SIZE {
+            0 => unreachable!(),
+            1 => unsafe {
+                janus::gl::ProgramUniform1f(program.shader_program(), *location, self[0]);
+            },
+            2 => unsafe {
+                janus::gl::ProgramUniform2f(program.shader_program(), *location, self[0], self[1]);
+            },
+            3 => unsafe {
+                janus::gl::ProgramUniform3f(
+                    program.shader_program(),
+                    *location,
+                    self[0],
+                    self[1],
+                    self[2],
+                );
+            },
+            4 => unsafe {
+                janus::gl::ProgramUniform4f(
+                    program.shader_program(),
+                    *location,
+                    self[0],
+                    self[1],
+                    self[2],
+                    self[4],
+                );
+            },
+            _ => unsafe {
+                janus::gl::ProgramUniform1fv(
+                    program.shader_program(),
+                    *location,
+                    SIZE as i32,
+                    self.as_ptr().cast(),
+                );
+            },
         }
     }
 }
