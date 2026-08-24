@@ -3,7 +3,7 @@ use crate::shader::{ShaderProgram, UniformLocation, glsl::Glsl};
 pub trait UploadUniform: Glsl {
     fn upload(&self, location: UniformLocation);
 
-    fn upload_direct(&self, program: impl ShaderProgram, location: UniformLocation);
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation);
 }
 
 #[macro_export]
@@ -33,7 +33,7 @@ macro_rules! type_uniform_interface {
                     }
                 }
             }
-            fn upload_direct(&self, program: impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
+            fn upload_direct(&self, program: &impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
                 unsafe {
                     paste::paste! {
                         janus::gl::[< Program $fn >](
@@ -58,7 +58,7 @@ macro_rules! type_uniform_interface {
                     }
                 }
             }
-            fn upload_direct(&self, program: impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
+            fn upload_direct(&self, program: &impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
                 unsafe {
                     paste::paste! {
                         janus::gl::[< Program $fn >](
@@ -87,7 +87,7 @@ macro_rules! type_uniform_interface {
                     }
                 }
             }
-            fn upload_direct(&self, program: impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
+            fn upload_direct(&self, program: &impl $crate::shader::ShaderProgram, location: $crate::shader::UniformLocation) {
                 let v = self;
                 $(let v = Self::$intermed_fn(self);)?
                 unsafe {
@@ -135,7 +135,7 @@ impl UploadUniform for glam::Mat2 {
         }
     }
 
-    fn upload_direct(&self, program: impl ShaderProgram, location: UniformLocation) {
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
         unsafe {
             janus::gl::ProgramUniformMatrix2fv(
                 program.shader_program(),
@@ -159,7 +159,7 @@ impl UploadUniform for glam::Mat3 {
         }
     }
 
-    fn upload_direct(&self, program: impl ShaderProgram, location: UniformLocation) {
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
         unsafe {
             janus::gl::ProgramUniformMatrix3fv(
                 program.shader_program(),
@@ -183,7 +183,7 @@ impl UploadUniform for glam::Mat4 {
         }
     }
 
-    fn upload_direct(&self, program: impl ShaderProgram, location: UniformLocation) {
+    fn upload_direct(&self, program: &impl ShaderProgram, location: UniformLocation) {
         unsafe {
             janus::gl::ProgramUniformMatrix4fv(
                 program.shader_program(),
@@ -241,7 +241,7 @@ macro_rules! shader_glsl_build_uniform_interface {
         paste::paste! {
             pub fn [< uniform_ $gl_name _ $gl_type >] (&self, $gl_name: $r_type) {
                 let location = self.[< location_ $gl_name _ $gl_type >];
-                $crate::shader::uniform::UploadUniform::upload(&$gl_name, location);
+                $crate::shader::uniform::UploadUniform::upload_direct(&$gl_name, self.handle(), location);
             }
         }
     };
@@ -251,7 +251,7 @@ macro_rules! shader_glsl_build_uniform_interface {
                 let location = self.[< location_ $gl_name _ $gl_type >];
                 for i in 0..$ac {
                     let location = $crate::shader::UniformLocation(location.0 + i);
-                    $crate::shader::uniform::UploadUniform::upload(&$gl_name[i as usize], location);
+                    $crate::shader::uniform::UploadUniform::upload_direct(&$gl_name[i as usize], self.handle(), location);
                 }
             }
         }
