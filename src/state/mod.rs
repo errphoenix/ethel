@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use janus::sync;
+use janus::{
+    input::{KeyEvent, TextEvent},
+    sync,
+};
 
 use crate::{
     StateHandler,
@@ -110,6 +113,41 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum InputEvent {
+    Key(KeyEvent),
+    Text(TextEvent),
+}
+impl InputEvent {
+    pub const fn key(&self) -> Option<KeyEvent> {
+        match self {
+            InputEvent::Key(key_event) => Some(*key_event),
+            InputEvent::Text(_) => None,
+        }
+    }
+
+    pub const fn text(&self) -> Option<TextEvent> {
+        match self {
+            InputEvent::Text(text_event) => Some(*text_event),
+            InputEvent::Key(_) => None,
+        }
+    }
+
+    pub fn key_and<F: FnOnce(KeyEvent) -> bool>(&self, predicate: F) -> bool {
+        match self {
+            InputEvent::Key(key_event) if predicate(*key_event) => true,
+            _ => false,
+        }
+    }
+
+    pub fn text_and<F: FnOnce(TextEvent) -> bool>(&self, predicate: F) -> bool {
+        match self {
+            InputEvent::Text(text_event) if predicate(*text_event) => true,
+            _ => false,
+        }
+    }
+}
+
 impl<D, T, RG> janus::context::Update for State<D, T, RG>
 where
     D: Sized,
@@ -133,7 +171,10 @@ where
         self.input.poll_key_events();
 
         while let Some(event) = self.input.pop_key_event() {
-            self.handler.on_key_event(event);
+            self.handler.on_input_event(InputEvent::Key(event));
+        }
+        while let Some(event) = self.input.pop_text_event() {
+            self.handler.on_input_event(InputEvent::Text(event));
         }
 
         self.handler

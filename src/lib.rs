@@ -25,7 +25,7 @@ use crate::{
         command::{DrawGroups, GpuCommandQueue},
     },
     state::{
-        State,
+        InputEvent, State,
         camera::ViewPoint,
         cross::{self, Cross, Producer},
     },
@@ -96,17 +96,19 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
 
     /// Sequential keyboard/mouse button processing.
     ///
-    /// Useful for arbitrary key events, for ex. for text fields, which would
-    /// not be appropriate to implement with the classic 'is_key_down'
-    /// approach.
+    /// Useful for arbitrary key/text events, for ex. for text fields, which
+    /// would not be appropriate to implement with 'is_key_down' functions
+    /// and similar.
     ///
-    /// The function is called continuously for every new `event` occurred
-    /// between the last frame and the current frame, in the same order as
-    /// they were registered.
+    /// The function is called for every new `event` occurred between the last
+    /// frame and the current frame, in the same order as they were registered.
     ///
     /// This function is called before the [`Self::fixed_step`] function, which is
     /// then called only after all events have been exhausted.
-    fn on_key_event(&mut self, _event: KeyEvent) {}
+    ///
+    /// Handles both key events (mouse button, keyboard presses) and text
+    /// events. Key events are dispatched before text events.
+    fn on_input_event(&mut self, _event: InputEvent) {}
 
     /// Frame-delta independent "on every new frame" function.
     ///
