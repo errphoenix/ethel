@@ -592,6 +592,10 @@ macro_rules! shader_glsl {
                     &self.handle
                 }
 
+                pub fn handle_owned(self) -> $crate::shader::ShaderHandle {
+                    self.handle
+                }
+
                 #[cfg(debug_assertions)]
                 pub fn build_sources() -> Vec<String> {
                     Self::build_sources_variant(std::default::Default::default())
@@ -1043,6 +1047,10 @@ macro_rules! shader_glsl_compute {
 
                 pub const fn compute_handle(&self) -> &$crate::shader::ComputeShaderHandle {
                     &self.handle
+                }
+
+                pub fn compute_handle_owned(self) -> $crate::shader::ComputeShaderHandle {
+                    self.handle
                 }
 
                 #[cfg(debug_assertions)]
