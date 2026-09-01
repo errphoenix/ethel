@@ -139,16 +139,16 @@ crate::shader_glsl_struct! {
 }
 
 macro_rules! ssbo_binding {
-    (VertexBuffer) => {
+    (ethel_VBuffer) => {
         10
     };
-    (MeshMetadata) => {
+    (ethel_MeshMeta) => {
         11
     };
 }
 
-pub const SHADER_BINDING_VERTEX_BUFFER: u32 = ssbo_binding!(VertexBuffer);
-pub const SHADER_BINDING_MESH_METADATA: u32 = ssbo_binding!(MeshMetadata);
+pub const SHADER_BINDING_VERTEX_BUFFER: u32 = ssbo_binding!(ethel_VBuffer);
+pub const SHADER_BINDING_MESH_METADATA: u32 = ssbo_binding!(ethel_MeshMeta);
 
 /// Helper macro to initialize GPU SSBO's for mesh data.
 ///
@@ -202,18 +202,19 @@ macro_rules! layout_mesh_buffer {
 /// attribute.
 ///
 /// These are, respectively:
-/// * Vertex Storage Buffer, "VertexBuffer", with a dynamic array
-///   of `Vertex` field name `vertex_storage`, on binding index 10.
-/// * Metadata Storage Buffer, with field name `metadata`, on binding index 11.
+/// * The Vertex Storage Buffer on binding index 10, with a runtime array of
+///   [`Vertex`] named `eth_vertex_buffer`.
+/// * The Metadata Storage Buffer on binding index 11, with a runtime array of
+///   [`Metadata`] named `eth_meshmeta`.
 pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
     crate::shader_glsl_ssbo! {
-        buf VertexBuffer => {
-            [dyn_array Vertex: vertex_storage]
+        buf ethel_VBuffer => {
+            [dyn_array Vertex: eth_vertex_buffer]
         }
     },
     crate::shader_glsl_ssbo! {
-        buf MeshMetadata => {
-            [dyn_array Metadata: metadata]
+        buf ethel_MeshMeta => {
+            [dyn_array Metadata: eth_meshmeta]
         }
     },
 ];
