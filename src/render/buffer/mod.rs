@@ -463,7 +463,7 @@ where
         }
     }
 
-    pub unsafe fn view(&self) -> View<'_, T> {
+    pub const unsafe fn view(&self) -> View<'_, T> {
         let slice = unsafe { std::slice::from_raw_parts(self.ptr, self.capacity) };
         let length = unsafe { *self.length.get() };
 
@@ -475,7 +475,7 @@ where
         }
     }
 
-    pub unsafe fn view_mut(&self) -> ViewMut<'_, T> {
+    pub const unsafe fn view_mut(&self) -> ViewMut<'_, T> {
         let slice = unsafe { std::slice::from_raw_parts_mut(self.ptr, self.capacity) };
         let length = unsafe { *self.length.get() };
 
@@ -487,22 +487,22 @@ where
         }
     }
 
-    pub unsafe fn set_length(&self, length: u32) {
+    pub const unsafe fn set_length(&self, length: u32) {
         let p = self.length.get() as *mut u32;
         unsafe {
             *p = length;
         }
     }
 
-    pub fn length(&self) -> usize {
+    pub const fn length(&self) -> usize {
         (unsafe { *self.length.get() }) as usize
     }
 
-    pub fn capacity(&self) -> usize {
+    pub const fn capacity(&self) -> usize {
         self.capacity
     }
 
-    pub unsafe fn raw(&self) -> *mut T {
+    pub const unsafe fn raw(&self) -> *mut T {
         self.ptr
     }
 
@@ -740,8 +740,8 @@ impl<'buf, T: Sized> ViewMut<'buf, T> {
         self.slice
     }
 
-    pub fn as_slice(&'buf self) -> &'buf [T] {
-        self.slice.as_ref()
+    pub const fn as_slice(&'buf self) -> &'buf [T] {
+        self.slice
     }
 
     /// The original offset of the data in the buffer it belongs to.

@@ -342,9 +342,17 @@ pub trait ShaderProgram: janus::GpuResource {
     }
 }
 
+pub trait Shader: ShaderProgram + std::fmt::Debug {
+    fn handle(&self) -> &ShaderHandle;
+}
+
+pub trait ComputeShader: ShaderProgram + std::fmt::Debug {
+    fn compute_handle(&self) -> &ComputeShaderHandle;
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ShaderHandle {
-    program: u32,
+    pub program: u32,
 }
 impl janus::GpuResource for ShaderHandle {
     fn resource_id(&self) -> u32 {
@@ -578,6 +586,17 @@ macro_rules! shader_glsl {
                         )+
                     )?
                 )+
+            }
+            impl janus::GpuResource for [< Shader $name >] {
+                fn resource_id(&self) -> u32 {
+                    self.handle.program
+                }
+            }
+            impl $crate::shader::ShaderProgram for [< Shader $name >] {}
+            impl $crate::shader::Shader for [< Shader $name >] {
+                fn handle(&self) -> &$crate::shader::ShaderHandle {
+                    &self.handle
+                }
             }
             impl [< Shader $name >] {
                 pub fn bind(&self) {
@@ -1027,6 +1046,22 @@ macro_rules! shader_glsl_compute {
                         [< location_ $u_gl_name _ $u_gl_type >]: $crate::shader::UniformLocation,
                     )+
                 )?
+            }
+            impl janus::GpuResource for [< ComputeShader $name >] {
+                fn resource_id(&self) -> u32 {
+                    self.handle.inner_handle().program
+                }
+            }
+            impl $crate::shader::ShaderProgram for [< ComputeShader $name >] {}
+            impl $crate::shader::Shader for [< ComputeShader $name >] {
+                fn handle(&self) -> &$crate::shader::ShaderHandle {
+                    self.handle.inner_handle()
+                }
+            }
+            impl $crate::shader::ComputeShader for [< ComputeShader $name >] {
+                fn compute_handle(&self) -> &$crate::shader::ComputeShaderHandle {
+                    &self.handle
+                }
             }
             impl [< ComputeShader $name >] {
                 pub fn bind(&self) {
