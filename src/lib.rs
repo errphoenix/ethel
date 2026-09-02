@@ -13,7 +13,7 @@ pub mod assets;
 pub use state::data;
 
 use janus::{
-    input::{InputState, KeyEvent},
+    input::InputState,
     sync::{Mirror, TriCell},
 };
 

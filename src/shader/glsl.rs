@@ -294,86 +294,52 @@ impl GlslAttribute {
 
 #[macro_export]
 macro_rules! shader_glsl_attribs {
-    (
-        input $gl_n:ident: $gl_t:ident $(flat: $fvb:expr)?;
-    ) => {
-        {
-            let mut attr = $crate::shader::glsl::GlslAttribute::new(concat!(
-                "in",
-                " ",
-                stringify!($gl_t),
-                " ",
-                stringify!($gl_n),
-                ";\n"
-            ));
-
-            $(
-                if $fvb {
-                    attr = $crate::shader::glsl::GlslAttribute::new(concat!(
-                        "flat in",
-                        " ",
-                        stringify!($gl_t),
-                        " ",
-                        stringify!($gl_n),
-                        ";\n"
-                    ));
-                }
-            )?
-
-            attr
-        }
+    (@attr ) => { "" };
+    (@attr input $gl_n:ident: $gl_t:ident as flat; $($e:tt)*) => {
+        concat!(
+            "flat in ",
+            stringify!($gl_t),
+            " ",
+            stringify!($gl_n),
+            ";\n",
+            $crate::shader_glsl_attribs!(@attr $($e)*)
+        )
     };
-    (
-        output $gl_n:ident: $gl_t:ident $(flat: $fvb:expr)?;
-    ) => {
-        {
-            let mut attr = $crate::shader::glsl::GlslAttribute::new(concat!(
-                "out",
-                " ",
-                stringify!($gl_t),
-                " ",
-                stringify!($gl_n),
-                ";\n"
-            ));
-
-            $(
-                if $fvb {
-                    attr = $crate::shader::glsl::GlslAttribute::new(concat!(
-                        "flat out",
-                        " ",
-                        stringify!($gl_t),
-                        " ",
-                        stringify!($gl_n),
-                        ";\n"
-                    ));
-                }
-            )?
-
-            attr
-        }
+    (@attr input $gl_n:ident: $gl_t:ident; $($e:tt)*) => {
+        concat!(
+            "in ",
+            stringify!($gl_t),
+            " ",
+            stringify!($gl_n),
+            ";\n",
+            $crate::shader_glsl_attribs!(@attr $($e)*)
+        )
     };
-    (
-        $(input $i_gl_n:ident: $i_gl_t:ident;)*
-        $(output $o_gl_n:ident: $o_gl_t:ident;)*
-    ) => {
-        $crate::shader::glsl::GlslAttribute::new(concat!(
-            $(
-                "in",
-                " ",
-                stringify!($i_gl_t),
-                " ",
-                stringify!($i_gl_n),
-                ";\n",
-            )*
-            $(
-                "out",
-                " ",
-                stringify!($o_gl_t),
-                " ",
-                stringify!($o_gl_n),
-                ";\n",
-            )*
-        ))
+    (@attr output $gl_n:ident: $gl_t:ident as flat; $($e:tt)*) => {
+        concat!(
+            "flat out ",
+            stringify!($gl_t),
+            " ",
+            stringify!($gl_n),
+            ";\n",
+            $crate::shader_glsl_attribs!(@attr $($e)*)
+        )
+    };
+    (@attr output $gl_n:ident: $gl_t:ident; $($e:tt)*) => {
+        concat!(
+            "out ",
+            stringify!($gl_t),
+            " ",
+            stringify!($gl_n),
+            ";\n",
+            $crate::shader_glsl_attribs!(@attr $($e)*)
+        )
+    };
+
+    ($($e:tt)*) => {
+        $crate::shader::glsl::GlslAttribute::new(
+            $crate::shader_glsl_attribs!(@attr $($e)*)
+        )
     };
 }
 
@@ -699,11 +665,11 @@ mod tests {
     #[test]
     fn shader_compose_glsl_attribs() {
         const TEST: &str =
-            "in vec4 color;\nin vec3 test;\nout vec3 worldPos;\nout vec2 texCoords;\n";
+            "in vec4 color;\nflat in vec3 test;\nout vec3 worldPos;\nout vec2 texCoords;\n";
 
         let generated = shader_glsl_attribs! {
             input color: vec4;
-            input test: vec3;
+            input test: vec3 as flat;
             output worldPos: vec3;
             output texCoords: vec2;
         };
