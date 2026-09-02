@@ -119,14 +119,14 @@ pub(crate) const BUFFER_VERTEX_STORAGE_INDEX: usize = 0;
 pub(crate) const BUFFER_MESH_META_INDEX: usize = 1;
 
 crate::shader_glsl_struct! {
-    struct Metadata {
+    struct MeshMetadata {
         offset: u32 => uint,
         length: u32 => uint
     }
 }
 
 crate::shader_glsl_struct! {
-    struct Vertex {
+    struct MeshVertex {
         pos_x: f32 => float,
         pos_y: f32 => float,
         pos_z: f32 => float,
@@ -203,18 +203,18 @@ macro_rules! layout_mesh_buffer {
 ///
 /// These are, respectively:
 /// * The Vertex Storage Buffer on binding index 10, with a runtime array of
-///   [`Vertex`] named `eth_vertex_buffer`.
+///   `MeshVertex` named `eth_vertex_buffer`.
 /// * The Metadata Storage Buffer on binding index 11, with a runtime array of
-///   [`Metadata`] named `eth_meshmeta`.
+///   `MeshMetadata` named `eth_meshmeta`.
 pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
     crate::shader_glsl_ssbo! {
         buf ethel_VBuffer => {
-            [dyn_array Vertex: eth_vertex_buffer]
+            [dyn_array MeshVertex: eth_vertex_buffer]
         }
     },
     crate::shader_glsl_ssbo! {
         buf ethel_MeshMeta => {
-            [dyn_array Metadata: eth_meshmeta]
+            [dyn_array MeshMetadata: eth_meshmeta]
         }
     },
 ];
