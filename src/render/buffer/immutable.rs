@@ -17,7 +17,11 @@ pub struct UninitImmutableBuffer<const PARTS: usize> {
     // Drop impl requires GL calls, as does its creation
     _marker: std::marker::PhantomData<Rc<()>>,
 }
-
+impl<const PARTS: usize> janus::GpuResource for UninitImmutableBuffer<PARTS> {
+    fn resource_id(&self) -> u32 {
+        self.gl_obj
+    }
+}
 impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
     pub fn new(layout: Layout<PARTS>) -> Self {
         let mut gl_obj = 0;
@@ -111,7 +115,6 @@ impl<const PARTS: usize> UninitImmutableBuffer<PARTS> {
         }
     }
 }
-
 impl<const PARTS: usize> Drop for UninitImmutableBuffer<PARTS> {
     fn drop(&mut self) {
         if self.mapped {
@@ -135,7 +138,11 @@ pub struct ImmutableBuffer<const PARTS: usize> {
     // thread has no business with it
     _marker: std::marker::PhantomData<Rc<()>>,
 }
-
+impl<const PARTS: usize> janus::GpuResource for ImmutableBuffer<PARTS> {
+    fn resource_id(&self) -> u32 {
+        self.gl_obj
+    }
+}
 impl<const PARTS: usize> ImmutableBuffer<PARTS> {
     pub fn bind_shader_storage(&self) {
         for part in 0..PARTS {
@@ -164,7 +171,6 @@ impl<const PARTS: usize> ImmutableBuffer<PARTS> {
         }
     }
 }
-
 impl<const PARTS: usize> Drop for ImmutableBuffer<PARTS> {
     fn drop(&mut self) {
         unsafe {

@@ -377,6 +377,14 @@ pub struct SingleBuffer<T: Sized + Clone + Copy> {
 }
 unsafe impl<T> Sync for SingleBuffer<T> where T: Sized + Clone + Copy {}
 unsafe impl<T> Send for SingleBuffer<T> where T: Sized + Clone + Copy {}
+impl<T> janus::GpuResource for SingleBuffer<T>
+where
+    T: Sized + Clone + Copy,
+{
+    fn resource_id(&self) -> u32 {
+        self.gl_obj
+    }
+}
 impl<T> SingleBuffer<T>
 where
     T: Sized + Clone + Copy,
@@ -646,7 +654,14 @@ pub struct View<'buf, T: Sized> {
     length: u32,
     source: u32,
 }
-
+impl<'buf, T> janus::GpuResource for View<'buf, T>
+where
+    T: Sized,
+{
+    fn resource_id(&self) -> u32 {
+        self.source
+    }
+}
 impl<'buf, T: Sized> View<'buf, T> {
     pub const fn as_ptr(&self) -> *const T {
         self.slice.as_ptr()
@@ -678,7 +693,6 @@ impl<'buf, T: Sized> View<'buf, T> {
         self.source
     }
 }
-
 impl<T> View<'_, T>
 where
     T: Sized + Clone,
@@ -687,34 +701,10 @@ where
         self.slice.to_vec()
     }
 }
-
-impl<T> ViewMut<'_, T>
-where
-    T: Sized + Clone,
-{
-    pub fn to_vec(&self) -> Vec<T> {
-        self.slice.to_vec()
-    }
-}
-
 impl<T: Sized> std::ops::Deref for View<'_, T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        self.slice
-    }
-}
-
-impl<T: Sized> std::ops::Deref for ViewMut<'_, T> {
-    type Target = [T];
-
-    fn deref(&self) -> &Self::Target {
-        self.slice
-    }
-}
-
-impl<T: Sized> std::ops::DerefMut for ViewMut<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
         self.slice
     }
 }
@@ -726,7 +716,34 @@ pub struct ViewMut<'buf, T: Sized> {
     length: u32,
     source: u32,
 }
+impl<'buf, T> janus::GpuResource for ViewMut<'buf, T>
+where
+    T: Sized,
+{
+    fn resource_id(&self) -> u32 {
+        self.source
+    }
+}
+impl<T> ViewMut<'_, T>
+where
+    T: Sized + Clone,
+{
+    pub fn to_vec(&self) -> Vec<T> {
+        self.slice.to_vec()
+    }
+}
+impl<T: Sized> std::ops::Deref for ViewMut<'_, T> {
+    type Target = [T];
 
+    fn deref(&self) -> &Self::Target {
+        self.slice
+    }
+}
+impl<T: Sized> std::ops::DerefMut for ViewMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.slice
+    }
+}
 impl<'buf, T: Sized> ViewMut<'buf, T> {
     pub const fn as_ptr(&self) -> *const T {
         self.slice.as_ptr()

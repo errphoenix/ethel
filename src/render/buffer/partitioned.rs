@@ -95,6 +95,11 @@ impl<const PARTS: usize> Default for PartitionedBuffer<PARTS> {
         }
     }
 }
+impl<const PARTS: usize> janus::GpuResource for PartitionedBuffer<PARTS> {
+    fn resource_id(&self) -> u32 {
+        self.gl_obj
+    }
+}
 unsafe impl<const PARTS: usize> Sync for PartitionedBuffer<PARTS> {}
 unsafe impl<const PARTS: usize> Send for PartitionedBuffer<PARTS> {}
 impl<const PARTS: usize> PartitionedBuffer<PARTS> {
