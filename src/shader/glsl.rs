@@ -532,9 +532,9 @@ macro_rules! shader_glsl_struct {
 ///
 /// let _macro_1 = shader_glsl_ssbo! {
 ///     buf POD_BindPose => {
-///         some_var: float;
-///         some_array: float[32];
-///         [dyn_array vec4: pod_bind_pose]
+///         float : some_var;
+///         float : some_array[32];
+///         [dyn_array vec4 : pod_bind_pose]
 ///     }
 /// };
 ///
