@@ -177,6 +177,8 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
     /// `ssbo_index` if provided. Otherwise, the SSBO binding index will
     /// correspond to the one specified in this buffer's [`Layout`].
     ///
+    /// This only binds one partition as a GLSL runtime array.
+    ///
     /// # Panic
     /// * If `partition` does not correspond to a valid partition index.
     /// * If `ssbo_index` is `None` and the buffer's layout does not specify
@@ -186,7 +188,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
         let binding = ssbo_index
             .or_else(|| self.layout.ssbo_of(partition))
-            .unwrap();
+            .expect("no ssbo index provided and missing fallback");
 
         let offset = self.layout.offset_at(partition) as isize;
         let length = self.layout.length_at(partition) as isize;
@@ -201,12 +203,61 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         }
     }
 
+    /// Binds `partition_len` contiguous partitions starting from
+    /// `partition_base` as a single SSBO.
+    ///
+    /// All partitions are bound to `ssbo_index` under a single SSBO using
+    /// static GLSL arrays. The GLSL SSBO array length must match the capacity
+    /// of each partition here.
+    ///
+    /// If `ssbo_index` is provided, it will be used as the SSBO binding index;
+    /// else, `partition_base`'s binding index is used if any is defined.
+    ///
+    /// # Panic
+    /// * If `partition` does not correspond to a valid partition index.
+    /// * If `ssbo_index` is `None` and the buffer's layout does not specify
+    ///   an ssbo index for the specified `partition` to fallback to.
+    pub fn bind_shader_storage_arrays(
+        &self,
+        partition_base: usize,
+        partition_len: usize,
+        ssbo_index: Option<u32>,
+    ) {
+        assert_partition!(PARTS, partition_base + partition_len);
+
+        let ssbo_index = ssbo_index
+            .or_else(|| self.layout.ssbo_of(partition_base))
+            .expect("no ssbo index provided and missing fallback");
+
+        let base_offset = self.layout.offset_at(partition_base) as isize;
+        let tot_length = {
+            let mut i = 0;
+            let mut length = 0;
+            while i < partition_len {
+                length += self.layout.length_at(i + partition_base);
+                i += 1;
+            }
+            length as isize
+        };
+
+        unsafe {
+            janus::gl::BindBufferRange(
+                janus::gl::SHADER_STORAGE_BUFFER,
+                ssbo_index,
+                self.gl_obj,
+                base_offset,
+                tot_length,
+            );
+        }
+    }
+
     /// Binds all the buffered data to the GPU's SSBOs.
     ///
     /// Each partition is bound to a different SSBO.
     /// The SSBOs binding indices correspond to the one specified in this
     /// buffer's [`layout`](Layout).
     ///
+    /// This binds each partition as a separate GLSL runtime array.
     pub fn bind_shader_storage(&self) {
         for part in 0..PARTS {
             if self.layout.ssbo_of(part).is_some() {
@@ -695,6 +746,58 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
                 self.gl_obj,
                 base_offset + offset,
                 length,
+            );
+        }
+    }
+
+    /// Binds `partition_len` contiguous partitions starting from
+    /// `partition_base` as a single SSBO.
+    ///
+    /// All partitions are bound to `ssbo_index` under a single SSBO using
+    /// static GLSL arrays. The GLSL SSBO array length must match the capacity
+    /// of each partition here.
+    ///
+    /// If `ssbo_index` is provided, it will be used as the SSBO binding index;
+    /// else, `partition_base`'s binding index is used if any is defined.
+    ///
+    /// # Panic
+    /// * If `section` is not a value within the range (0, 2).
+    /// * If `partition` does not correspond to a valid partition index.
+    /// * If `ssbo_index` is `None` and the buffer's layout does not specify
+    ///   an ssbo index for the specified `partition` to fallback to.
+    pub fn bind_shader_storage_arrays(
+        &self,
+        section: usize,
+        partition_base: usize,
+        partition_len: usize,
+        ssbo_index: Option<u32>,
+    ) {
+        assert_tb_section!(section);
+        assert_partition!(PARTS, partition_base + partition_len);
+
+        let ssbo_index = ssbo_index
+            .or_else(|| self.layout.ssbo_of(partition_base))
+            .expect("no ssbo index provided and missing fallback");
+
+        let section_base_offset = (self.layout.len() * section) as isize;
+        let base_offset = self.layout.offset_at(partition_base) as isize;
+        let tot_length = {
+            let mut i = 0;
+            let mut length = 0;
+            while i < partition_len {
+                length += self.layout.length_at(i + partition_base);
+                i += 1;
+            }
+            length as isize
+        };
+
+        unsafe {
+            janus::gl::BindBufferRange(
+                janus::gl::SHADER_STORAGE_BUFFER,
+                ssbo_index,
+                self.gl_obj,
+                section_base_offset + base_offset,
+                tot_length,
             );
         }
     }
