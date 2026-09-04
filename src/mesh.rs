@@ -1,7 +1,3 @@
-use std::ops::Deref;
-
-use crate::shader::glsl::GlslStorage;
-
 /// The ID that represents a Mesh present on GPU memory, from the CPU.
 ///
 /// An ID of `0` represents a `null` mesh: this is currently an empty mesh, but
@@ -11,7 +7,6 @@ use crate::shader::glsl::GlslStorage;
 /// the GPU through its [`Metadata`].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Id(pub(crate) u32);
-
 impl Id {
     pub const unsafe fn from_value(index: u32) -> Self {
         Self(index)
@@ -22,45 +17,37 @@ impl Id {
     }
 }
 
-/// The position and length of a Mesh on GPU memory.
+/// The position and length of a Mesh on GPU memory, in terms of triangles.
 ///
-/// This is usually accessed through a [`Mesh ID`](Id), and it is the only
-/// instance-specific mesh information that is passed onto the GPU.
+/// This is usually accessed through a [`Mesh ID`](Id).
 ///
-/// It indicates the starting index in the vertex buffer and the total length
-/// of the mesh, which is used to:
-/// * Determine the offset of the next [`Mesh Metadata`](Metadata).
-/// * Specify the amount of vertices the GPU has to draw for the instance using
-///   the mesh.
+/// It indicates the starting index in the triangle buffer and the total
+/// triangle count of the mesh.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Metadata {
-    pub(crate) offset: u32,
-    pub(crate) length: u32,
+    pub(crate) tri_offset: u32,
+    pub(crate) tri_count: u32,
 }
-
 impl Metadata {
-    pub unsafe fn from_values(offset: u32, length: u32) -> Self {
-        Self { offset, length }
+    pub const fn from_values(tri_offset: u32, tri_count: u32) -> Self {
+        Self {
+            tri_offset,
+            tri_count,
+        }
     }
 }
-
-const INITIAL_MESH_ALLOC: usize = 16;
-const INITIAL_VERTEX_ALLOC: usize = INITIAL_MESH_ALLOC * 8;
 
 #[derive(Default, Clone, Debug)]
 pub struct Meshadata {
     metadata: Vec<Metadata>,
 
-    /// Vertex offset
+    /// triangle offset
     head: u32,
 }
-
 impl Meshadata {
     pub fn new() -> Self {
-        let mut metadata = Vec::with_capacity(INITIAL_MESH_ALLOC + 1);
-        metadata.push(Metadata::default());
-
+        let metadata = vec![Metadata::default()];
         Self { metadata, head: 0 }
     }
 
@@ -70,13 +57,13 @@ impl Meshadata {
         self.head = 0;
     }
 
-    pub fn add(&mut self, length: u32) -> Id {
+    pub fn add(&mut self, tris: u32) -> Id {
         let id = self.metadata.len() as u32;
         self.metadata.push(Metadata {
-            offset: self.head,
-            length,
+            tri_offset: self.head,
+            tri_count: tris,
         });
-        self.head += length;
+        self.head += tris;
         Id(id)
     }
 
@@ -84,7 +71,7 @@ impl Meshadata {
         &self.metadata[id.0 as usize]
     }
 
-    /// The current head (offset) of the vertex buffer.
+    /// The current head (offset) of the triangle buffer.
     pub fn head(&self) -> u32 {
         self.head
     }
@@ -93,8 +80,7 @@ impl Meshadata {
         &self.metadata
     }
 }
-
-impl Deref for Meshadata {
+impl std::ops::Deref for Meshadata {
     type Target = [Metadata];
 
     fn deref(&self) -> &Self::Target {
@@ -115,8 +101,13 @@ pub struct Vertex {
     pub uv_y: f32,
 }
 
-pub(crate) const BUFFER_VERTEX_STORAGE_INDEX: usize = 0;
-pub(crate) const BUFFER_MESH_META_INDEX: usize = 1;
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
+pub struct Triangle {
+    pub v0: u32,
+    pub v1: u32,
+    pub v2: u32,
+}
 
 crate::shader_glsl_struct! {
     struct MeshMetadata {
@@ -124,7 +115,6 @@ crate::shader_glsl_struct! {
         length: u32 => uint
     }
 }
-
 crate::shader_glsl_struct! {
     struct MeshVertex {
         pos_x: f32 => float,
@@ -137,105 +127,147 @@ crate::shader_glsl_struct! {
         uv_y: f32 => float
     }
 }
+crate::shader_glsl_struct! {
+    struct MeshTriangle {
+        v0: u32 => uint,
+        v1: u32 => uint,
+        v2: u32 => uint
+    }
+}
 
 macro_rules! ssbo_binding {
-    (ethel_VBuffer) => {
+    (eth_Mesh_StaticData) => {
         10
     };
-    (ethel_MeshMeta) => {
+    (eth_Mesh_Triangles) => {
         11
     };
 }
 
-pub const SHADER_BINDING_VERTEX_BUFFER: u32 = ssbo_binding!(ethel_VBuffer);
-pub const SHADER_BINDING_MESH_METADATA: u32 = ssbo_binding!(ethel_MeshMeta);
+pub const ETH_MESH_SSBO_BIND_STATICDATA: usize = ssbo_binding!(eth_Mesh_StaticData);
+pub const ETH_MESH_SSBO_BIND_TRIANGLES: usize = ssbo_binding!(eth_Mesh_Triangles);
 
 /// Helper macro to initialize GPU SSBO's for mesh data.
 ///
-/// This macro requires only two integer values:
-/// * `count` for the total mesh count available for mesh metadata,
-/// * `vertices` for the total *global* size of the vertex buffers SSBO's.
+/// This macro requires only three integer values:
+/// * `count` for the total mesh count available for mesh metadata
+/// * `vertices` for the total *global* size of the vertex buffer
+/// * `tris` for the total *global` size of the triangle/index buffer
 ///
-/// Note how the vertex count is *global* for all meshes, not for each.
+/// Note how the vertex and tris counts are *global* for all meshes,
+/// not per mesh.
 ///
 /// # Examples
 /// ```rust,ignore
-/// layout_mesh_buffer!(count: 32; vertices: 10_000);
+/// layout_mesh_buffer!(count: 32; vertices: 10_000; tris: 5_000);
 /// ```
 ///
 /// The above example will allocate two GPU buffers: the first for mesh
 /// metadata for 32 unique meshes; the second for vertex data for a total
-/// of 10,000 vertices (and normals) *globally*.
+/// of 10,000 vertices (and normals); and finally a cap of 5000 triangles,
+/// each triangle formed by 3 `u32` indices, as standard.
 #[macro_export]
 macro_rules! layout_mesh_buffer {
-    (count: $mc:expr; vertices: $vc:expr) => {
-        layout_mesh_buffer!(MeshStorage; count: $mc; vertices: $vc);
+    (count: $mc:expr; vertices: $vc:expr; tris: $tc:expr) => {
+        layout_mesh_buffer!(MeshStorage; count: $mc; vertices: $vc; tris: $tc);
     };
-    ($name:ident; count: $mc:expr; vertices: $vc:expr) => {
+    ($name:ident; count: $mc:expr; vertices: $vc:expr; tris: $tc:expr) => {
+        paste::paste! {
         layout_buffer! {
-            const $name: 2, {
+            const [< $name Static >]: 2, {
                 enum vertex_storage: $vc => {
                     type $crate::mesh::Vertex;
                     bind 0;
                     shader 10;
                 };
-
                 enum metadata: $mc => {
                     type $crate::mesh::Metadata;
                     bind 1;
+                    shader 10;
+                };
+            }
+        }
+        layout_buffer! {
+            const [< $name Tris >]: 1, {
+                enum tris_storage: $tc => {
+                    type $crate::mesh::Triangle;
+                    bind 0;
                     shader 11;
                 };
             }
         }
+        }
+
+        macro_rules! ssbo_binding {
+            (eth_Mesh_StaticData) => {
+                10
+            };
+            (eth_Mesh_Triangles) => {
+                11
+            };
+        }
+
+        /// A single GLSL ssbo block with 2 fixed-length arrays for static
+        /// geometry data.
+        ///
+        /// The length matches the capacity provided in the
+        /// [`ethel::layout_mesh_buffer`] macro, and will correspond to the
+        /// correct offset and lenghts in the [`ethel::render::buffer::Layout`]
+        /// generated by the macro.
+        ///
+        /// The arrays are `eth_vertex_buffer, over [`MeshVertex`] and
+        /// `eth_meshmeta` over [`MeshMetadata`].
+        ///
+        /// The ssbo is configured on binding index 10.
+        pub const ETH_MESH_SSBO_STATIC: $crate::shader::glsl::GlslStorage = $crate::shader_glsl_ssbo! {
+            buf eth_Mesh_StaticData => {
+                MeshVertex   : eth_vertex_buffer[$vc];
+                MeshMetadata : eth_meshmeta[$mc];
+            }
+        };
+
+        /// A dedicated triangle buffer GLSL ssbo block formed by a single
+        /// runtime array.
+        ///
+        /// The length matches the capacity provided in the
+        /// [`ethel::layout_mesh_buffer`] macro, and will correspond to the
+        /// correct offset and lenghts in the [`ethel::render::buffer::Layout`]
+        /// generated by the macro.
+        ///
+        /// The array is `eth_tris_buffer`, and the ssbo is configured on
+        /// binding index 10.
+        pub const ETH_MESH_SSBO_TRIS: $crate::shader::glsl::GlslStorage = $crate::shader_glsl_ssbo! {
+            buf eth_Mesh_Triangles => {
+                [dyn_array MeshTriangle : eth_tris_buffer]
+            }
+        };
     };
 }
 
-/// Mesh metadata and vertex storage SSBO interface.
-///
-/// Contains the SSBO declarations for drop-in integration with shader
-/// declarations using the [`crate::shader_glsl`] and
-/// [`crate::shader_glsl_compute`] macros.
-///
-/// These are made using [`crate::shader_glsl_ssbo`], like any other SSBO
-/// definition.
-/// Both SSBO's are dynamic arrays built with the macro's `dyn_array`
-/// attribute.
-///
-/// These are, respectively:
-/// * The Vertex Storage Buffer on binding index 10, with a runtime array of
-///   `MeshVertex` named `eth_vertex_buffer`.
-/// * The Metadata Storage Buffer on binding index 11, with a runtime array of
-///   `MeshMetadata` named `eth_meshmeta`.
-pub const GLSL_SSBO_INTEGRATION: [GlslStorage; 2] = [
-    crate::shader_glsl_ssbo! {
-        buf ethel_VBuffer => {
-            [dyn_array MeshVertex: eth_vertex_buffer]
-        }
-    },
-    crate::shader_glsl_ssbo! {
-        buf ethel_MeshMeta => {
-            [dyn_array MeshMetadata: eth_meshmeta]
-        }
-    },
-];
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MeshStaging {
     metadata: Meshadata,
     vertex_storage: Vec<Vertex>,
+    triangle_storage: Vec<Triangle>,
 }
-
 impl MeshStaging {
     pub fn new() -> Self {
-        Self {
-            metadata: Meshadata::new(),
-            vertex_storage: Vec::with_capacity(INITIAL_VERTEX_ALLOC),
-        }
+        Self::default()
     }
 
-    pub fn stage(&mut self, vertices: &[Vertex]) -> Id {
+    /// The indices of `triangles` must be local to `vertices`.
+    pub fn stage(&mut self, vertices: &[Vertex], triangles: &[Triangle]) -> Id {
+        let offset = self.vertex_storage.len() as u32;
+
         self.vertex_storage.extend_from_slice(vertices);
-        self.metadata.add(vertices.len() as u32)
+        self.triangle_storage
+            .extend(triangles.iter().map(|tri| Triangle {
+                v0: tri.v0 + offset,
+                v1: tri.v1 + offset,
+                v2: tri.v2 + offset,
+            }));
+
+        self.metadata.add(triangles.len() as u32)
     }
 
     pub fn metadata(&self) -> &Meshadata {
@@ -244,6 +276,10 @@ impl MeshStaging {
 
     pub fn vertex_storage(&self) -> &[Vertex] {
         &self.vertex_storage
+    }
+
+    pub fn triangle_storage(&self) -> &[Triangle] {
+        &self.triangle_storage
     }
 
     pub fn close(self) -> Meshadata {

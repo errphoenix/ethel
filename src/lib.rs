@@ -20,7 +20,7 @@ use janus::{
 use crate::{
     mesh::MeshStaging,
     render::{
-        Renderer, Resolution, ScreenSpace,
+        MeshBuffers, Renderer, Resolution, ScreenSpace,
         buffer::{self, Layout, StorageSection},
         command::{DrawGroups, GpuCommandQueue},
     },
@@ -145,6 +145,12 @@ pub trait RenderHandler<FrameData: Sized> {
     fn render_frame(&self, frame_data: &FrameData, section: StorageSection);
 }
 
+#[derive(Debug, Default)]
+struct MeshBuffersLayout {
+    statics: Layout<2>,
+    triangles: Layout<1>,
+}
+
 pub struct StartupHandler<FrameData: Sized> {
     input_system: crate::InputSystem,
 
@@ -152,7 +158,7 @@ pub struct StartupHandler<FrameData: Sized> {
     gl_state_init: fn(),
 
     mesh_data: MeshStaging,
-    mesh_buf_layout: Layout<2>,
+    mesh_bufs_layout: MeshBuffersLayout,
 }
 
 impl<FrameData: Sized> StartupHandler<FrameData> {
@@ -162,12 +168,12 @@ impl<FrameData: Sized> StartupHandler<FrameData> {
             frame_data_init: init_fn,
             gl_state_init: || (),
             mesh_data: MeshStaging::new(),
-            mesh_buf_layout: Layout::new(),
+            mesh_bufs_layout: MeshBuffersLayout::default(),
         }
     }
 
-    pub fn with_mesh_layout(&mut self, mesh_buf_layout: Layout<2>) {
-        self.mesh_buf_layout = mesh_buf_layout;
+    pub fn with_mesh_layouts(&mut self, statics: Layout<2>, triangles: Layout<1>) {
+        self.mesh_bufs_layout = MeshBuffersLayout { statics, triangles };
     }
 
     pub fn with_mesh_data(&mut self, mesh_data: MeshStaging) {
@@ -198,17 +204,22 @@ where
         *state.input_mut() = self.input_system;
 
         {
-            let mut mesh_buf = buffer::immutable::uninit(self.mesh_buf_layout);
+            let MeshBuffersLayout { statics, triangles } = self.mesh_bufs_layout;
+
+            let mut mesh_static_buf = buffer::immutable::uninit(statics);
+            let mut mesh_tris_buf = buffer::immutable::uninit(triangles);
 
             let vertices = self.mesh_data.vertex_storage();
-            let vbs = mesh::BUFFER_VERTEX_STORAGE_INDEX;
-            unsafe { mesh_buf.fill_partition(vbs, vertices) };
-
+            unsafe { mesh_static_buf.fill_partition(0, vertices) };
+            let triangles = self.mesh_data.triangle_storage();
+            unsafe { mesh_tris_buf.fill_partition(0, triangles) };
             let metadata = self.mesh_data.close();
-            let mds = mesh::BUFFER_MESH_META_INDEX;
-            unsafe { mesh_buf.fill_partition(mds, &metadata) };
+            unsafe { mesh_static_buf.fill_partition(1, &metadata) };
 
-            renderer.mesh_buffer = mesh_buf.finish();
+            renderer.mesh_buffers = MeshBuffers {
+                statics: mesh_static_buf.finish(),
+                triangles: mesh_tris_buf.finish(),
+            };
         }
 
         let m_vp = state.viewpoint_shared().clone();

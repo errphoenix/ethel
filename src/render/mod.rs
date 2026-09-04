@@ -170,6 +170,61 @@ impl ScreenSpace {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct MeshBuffers {
+    pub statics: ImmutableBuffer<2>,
+    pub triangles: ImmutableBuffer<1>,
+}
+impl MeshBuffers {
+    /// Bind static geometry data to a ssbo at index `ssbo_index`
+    /// (or index 10 if absent).
+    ///
+    /// The metadata and vertex arrays are bound to a single ssbo as 2 fixed-len
+    /// arrays. The length of the arrays is defined in the [`layout`] passed
+    /// during initialization in [`StartupHandler::with_mesh_layouts`]
+    ///
+    /// [`StartupHandler::with_mesh_layouts`]: crate::StartupHandler::with_mesh_layouts
+    /// [`layout`]: crate::render::buffer::layout::Layout
+    pub fn bind_ssbo_statics(&self, ssbo_index: Option<u32>) {
+        self.statics.bind_shader_storage_arrays(0, 2, ssbo_index);
+    }
+
+    /// Bind mesh vertices data to a ssbo at index `ssbo_index`
+    /// (or index 10 if absent).
+    ///
+    /// The vertex array is bound to a single ssbo as a runtime array, there
+    /// are no specific length requirements for the glsl ssbo block.
+    pub fn bind_ssbo_vertices(&self, ssbo_index: Option<u32>) {
+        self.statics.bind_shader_storage_single(0, ssbo_index);
+    }
+
+    /// Bind mesh metadata to a ssbo at index `ssbo_index`
+    /// (or index 10 if absent).
+    ///
+    /// The metadata array is bound to a single ssbo as a runtime array, there
+    /// are no specific length requirements for the glsl ssbo block.
+    pub fn bind_ssbo_metadata(&self, ssbo_index: Option<u32>) {
+        self.statics.bind_shader_storage_single(1, ssbo_index);
+    }
+
+    /// Bind mesh triangle data to a ssbo at index `ssbo_index`
+    /// (or index 11 if absent).
+    ///
+    /// The triangle array is bound to a single ssbo as a runtime array, there
+    /// are no specific length requirements for the glsl ssbo block.
+    pub fn bind_ssbo_triangles(&self, ssbo_index: Option<u32>) {
+        self.triangles.bind_shader_storage_single(0, ssbo_index);
+    }
+
+    pub const fn statics(&self) -> &ImmutableBuffer<2> {
+        &self.statics
+    }
+
+    pub const fn triangles(&self) -> &ImmutableBuffer<1> {
+        &self.triangles
+    }
+}
+
 /// Render state for the Janus rendering Context
 #[derive(Debug, Default)]
 pub struct Renderer<D: Sized, T: RenderHandler<D>> {
@@ -177,7 +232,7 @@ pub struct Renderer<D: Sized, T: RenderHandler<D>> {
     // without a vao bound during draw calls
     render_vao: u32,
 
-    pub mesh_buffer: ImmutableBuffer<2>,
+    pub mesh_buffers: MeshBuffers,
     pub metadata: Meshadata,
 
     pub screen_space: janus::sync::Mirror<ScreenSpace>,
@@ -194,8 +249,8 @@ impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
         callback(&mut self.handler)
     }
 
-    pub fn mesh_buffer(&self) -> &ImmutableBuffer<2> {
-        &self.mesh_buffer
+    pub fn mesh_buffers(&self) -> &MeshBuffers {
+        &self.mesh_buffers
     }
 
     pub fn screen_space(&self) -> &ScreenSpace {
@@ -261,7 +316,8 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
             .pre_frame(&mut self.screen_space, &self.viewpoint, dt);
         self.boundary
             .cross(&mut self.sync_barrier, |section, storage| {
-                self.mesh_buffer.bind_shader_storage();
+                self.mesh_buffers.bind_ssbo_statics(None);
+                self.mesh_buffers.bind_ssbo_triangles(None);
                 self.handler.render_frame(&storage, section);
             });
 
