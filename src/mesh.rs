@@ -26,14 +26,23 @@ impl Id {
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Metadata {
-    pub(crate) tri_offset: u32,
-    pub(crate) tri_count: u32,
+    pub(crate) tris_offset: u32,
+    pub(crate) tris_length: u32,
+    pub(crate) vert_offset: u32,
+    pub(crate) vert_length: u32,
 }
 impl Metadata {
-    pub const fn from_values(tri_offset: u32, tri_count: u32) -> Self {
+    pub const fn from_values(
+        tris_offset: u32,
+        tris_length: u32,
+        vert_offset: u32,
+        vert_length: u32,
+    ) -> Self {
         Self {
-            tri_offset,
-            tri_count,
+            tris_offset,
+            tris_length,
+            vert_offset,
+            vert_length,
         }
     }
 }
@@ -42,28 +51,34 @@ impl Metadata {
 pub struct Meshadata {
     metadata: Vec<Metadata>,
 
-    /// triangle offset
-    head: u32,
+    /// triangle, vertex offsets
+    head: (u32, u32),
 }
 impl Meshadata {
     pub fn new() -> Self {
         let metadata = vec![Metadata::default()];
-        Self { metadata, head: 0 }
+        Self {
+            metadata,
+            head: (0, 0),
+        }
     }
 
     pub fn clear(&mut self) {
         self.metadata.clear();
         self.metadata.push(Metadata::default());
-        self.head = 0;
+        self.head = (0, 0);
     }
 
-    pub fn add(&mut self, tris: u32) -> Id {
+    pub fn add(&mut self, tris_count: u32, vert_count: u32) -> Id {
         let id = self.metadata.len() as u32;
         self.metadata.push(Metadata {
-            tri_offset: self.head,
-            tri_count: tris,
+            tris_offset: self.head.0,
+            vert_offset: self.head.1,
+            tris_length: tris_count,
+            vert_length: vert_count,
         });
-        self.head += tris;
+        self.head.0 += tris_count;
+        self.head.1 += vert_count;
         Id(id)
     }
 
@@ -72,8 +87,13 @@ impl Meshadata {
     }
 
     /// The current head (offset) of the triangle buffer.
-    pub fn head(&self) -> u32 {
-        self.head
+    pub const fn head_tris(&self) -> u32 {
+        self.head.0
+    }
+
+    /// The current head (offset) of the vertex buffer.
+    pub const fn head_vert(&self) -> u32 {
+        self.head.1
     }
 
     pub fn inner_metadata(&self) -> &[Metadata] {
@@ -111,8 +131,10 @@ pub struct Triangle {
 
 crate::shader_glsl_struct! {
     struct MeshMetadata {
-        offset: u32 => uint,
-        length: u32 => uint
+        tris_offset: u32 => uint,
+        tris_length: u32 => uint,
+        vert_offset: u32 => uint,
+        vert_length: u32 => uint
     }
 }
 crate::shader_glsl_struct! {
@@ -267,7 +289,8 @@ impl MeshStaging {
                 v2: tri.v2 + offset,
             }));
 
-        self.metadata.add(triangles.len() as u32)
+        self.metadata
+            .add(triangles.len() as u32, vertices.len() as u32)
     }
 
     pub fn metadata(&self) -> &Meshadata {
