@@ -223,7 +223,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         partition_len: usize,
         ssbo_index: Option<u32>,
     ) {
-        assert_partition!(PARTS, partition_base + partition_len);
+        assert_partition!(PARTS, partition_base + partition_len - 1);
 
         let ssbo_index = ssbo_index
             .or_else(|| self.layout.ssbo_of(partition_base))
@@ -773,7 +773,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         ssbo_index: Option<u32>,
     ) {
         assert_tb_section!(section);
-        assert_partition!(PARTS, partition_base + partition_len);
+        assert_partition!(PARTS, partition_base + partition_len - 1);
 
         let ssbo_index = ssbo_index
             .or_else(|| self.layout.ssbo_of(partition_base))

@@ -207,7 +207,7 @@ impl<const PARTS: usize> ImmutableBuffer<PARTS> {
         partition_len: usize,
         ssbo_index: Option<u32>,
     ) {
-        assert_partition!(PARTS, partition_base + partition_len);
+        assert_partition!(PARTS, partition_base + partition_len - 1);
 
         let ssbo_index = ssbo_index
             .or_else(|| self.layout.ssbo_of(partition_base))
