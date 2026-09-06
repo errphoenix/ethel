@@ -14,11 +14,11 @@ pub struct DrawArraysIndirectCommand {
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct DrawElementsIndirectCommand {
-    count: u32,
-    instance_count: u32,
-    first_vertex: u32,
-    base_vertex: i32,
-    base_instance: u32,
+    pub count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub base_vertex: i32,
+    pub base_instance: u32,
 }
 
 pub trait DrawCmd: std::fmt::Debug + Clone + Copy {
