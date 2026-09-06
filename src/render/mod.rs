@@ -230,7 +230,7 @@ impl MeshBuffers {
 pub struct Renderer<D: Sized, T: RenderHandler<D>> {
     // only used for rendering as sometimes opengl may refuse to draw anything
     // without a vao bound during draw calls
-    render_vao: u32,
+    pub(crate) internal_vao: u32,
 
     pub mesh_buffers: MeshBuffers,
     pub metadata: Meshadata,
@@ -245,27 +245,38 @@ pub struct Renderer<D: Sized, T: RenderHandler<D>> {
 }
 
 impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
+    /// Returns the internal OpenGL VAO.
+    ///
+    /// This is only used for rendering as some OpenGL drivers may refuse to
+    /// draw anything without a VAO bound during draw calls.
+    ///
+    /// The application may use this existing VAO for additional functions,
+    /// such as indexed drawing.
+    pub const fn internal_vao(&self) -> u32 {
+        self.internal_vao
+    }
+
     pub fn handler_init_callback<F: FnOnce(&mut T)>(&mut self, callback: F) {
         callback(&mut self.handler)
     }
 
-    pub fn mesh_buffers(&self) -> &MeshBuffers {
+    pub const fn mesh_buffers(&self) -> &MeshBuffers {
         &self.mesh_buffers
     }
 
-    pub fn screen_space(&self) -> &ScreenSpace {
+    pub const fn screen_space(&self) -> &ScreenSpace {
+        self.screen_space.get()
+    }
+
+    pub const fn screen_space_mirror(&self) -> &janus::sync::Mirror<ScreenSpace> {
         &self.screen_space
     }
 
-    pub fn screen_space_mirror(&self) -> &janus::sync::Mirror<ScreenSpace> {
-        &self.screen_space
-    }
-
-    pub fn metadata(&self) -> &Meshadata {
+    pub const fn metadata(&self) -> &Meshadata {
         &self.metadata
     }
 
-    pub fn boundary(&self) -> &Cross<Consumer, D> {
+    pub const fn boundary(&self) -> &Cross<Consumer, D> {
         &self.boundary
     }
 
@@ -273,20 +284,12 @@ impl<D: Sized, T: RenderHandler<D>> Renderer<D, T> {
         &self.viewpoint
     }
 
-    pub fn viewpoint_shared(&self) -> &Arc<janus::sync::TriCell<ViewPoint>> {
+    pub const fn viewpoint_shared(&self) -> &Arc<janus::sync::TriCell<ViewPoint>> {
         &self.viewpoint
     }
 }
-
 impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
     fn draw(&mut self, dt: janus::context::DeltaTime) {
-        if self.render_vao == 0 {
-            unsafe {
-                janus::gl::GenVertexArrays(1, &mut self.render_vao);
-                janus::gl::BindVertexArray(self.render_vao);
-            }
-        }
-
         let mut res_has_changed = false;
         {
             if self.screen_space.check_sync_status() {
@@ -357,11 +360,12 @@ impl<D: Sized, T: RenderHandler<D>> janus::context::Draw for Renderer<D, T> {
         });
     }
 }
-
 impl<D: Sized, T: RenderHandler<D>> Drop for Renderer<D, T> {
     fn drop(&mut self) {
-        unsafe {
-            janus::gl::DeleteVertexArrays(1, &self.render_vao);
+        if self.internal_vao != 0 {
+            unsafe {
+                janus::gl::DeleteVertexArrays(1, &self.internal_vao);
+            }
         }
     }
 }

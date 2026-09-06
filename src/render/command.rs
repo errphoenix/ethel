@@ -24,7 +24,6 @@ pub struct DrawElementsIndirectCommand {
 pub trait DrawCmd: std::fmt::Debug + Clone + Copy {
     fn call(draw_count: i32);
 }
-
 impl DrawCmd for DrawArraysIndirectCommand {
     fn call(draw_count: i32) {
         unsafe {
@@ -37,7 +36,6 @@ impl DrawCmd for DrawArraysIndirectCommand {
         }
     }
 }
-
 impl DrawCmd for DrawElementsIndirectCommand {
     fn call(draw_count: i32) {
         unsafe {
@@ -58,6 +56,8 @@ impl DrawCmd for DrawElementsIndirectCommand {
 /// It is recommended to properly document the correct order and usage of the
 /// custom [`DrawGroups`] definition.
 pub trait DrawGroups: Clone + Copy + PartialEq + Eq + std::fmt::Debug + std::fmt::Display {
+    type Command: DrawCmd;
+
     fn as_str(&self) -> &'static str;
 }
 
@@ -66,7 +66,6 @@ pub enum Instruction<C: DrawCmd, G: DrawGroups> {
     Draw(C),
     Switch(G),
 }
-
 impl<C: DrawCmd, G: DrawGroups> std::fmt::Display for Instruction<C, G> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -82,7 +81,6 @@ pub struct GpuCommandQueue<C: DrawCmd, G: DrawGroups> {
     head: AtomicU32,
     first_group: Option<G>,
 }
-
 impl<C: DrawCmd, G: DrawGroups> GpuCommandQueue<C, G> {
     pub fn new() -> Self {
         Self {
@@ -207,7 +205,6 @@ impl<C: DrawCmd, G: DrawGroups> GpuCommandQueue<C, G> {
 pub struct GpuCommandDispatch<'buf, C: DrawCmd + Clone + Copy> {
     command_buffer: View<'buf, C>,
 }
-
 impl<'buf, C: DrawCmd + Clone + Copy> GpuCommandDispatch<'buf, C> {
     pub const fn from_view(view: View<'buf, C>) -> Self {
         Self {
@@ -236,13 +233,11 @@ mod tests {
         B,
         C,
     }
-
     impl std::fmt::Display for Groups {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{}", self.as_str())
         }
     }
-
     impl DrawGroups for Groups {
         fn as_str(&self) -> &'static str {
             match self {
@@ -251,6 +246,8 @@ mod tests {
                 Groups::C => "c",
             }
         }
+
+        type Command = DrawArraysIndirectCommand;
     }
 
     #[test]

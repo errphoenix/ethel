@@ -31,7 +31,7 @@ pub struct State<D: Sized, T: StateHandler<D, RG>, RG: DrawGroups> {
     handler: T,
 
     boundary: Cross<Producer, D>,
-    cmd_queue: GpuCommandQueue<crate::DrawCommand, RG>,
+    cmd_queue: GpuCommandQueue<RG::Command, RG>,
 }
 
 impl<D, T, RG> Default for State<D, T, RG>
@@ -76,11 +76,11 @@ where
         self.handler.upload_gpu(&self.boundary, &mut self.cmd_queue);
     }
 
-    pub fn command_queue(&self) -> &GpuCommandQueue<crate::DrawCommand, RG> {
+    pub fn command_queue(&self) -> &GpuCommandQueue<RG::Command, RG> {
         &self.cmd_queue
     }
 
-    pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<crate::DrawCommand, RG> {
+    pub fn command_queue_mut(&mut self) -> &mut GpuCommandQueue<RG::Command, RG> {
         &mut self.cmd_queue
     }
 

@@ -33,8 +33,6 @@ use crate::{
 
 pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::SECTION_COUNT }>;
 
-pub type DrawCommand = render::command::DrawArraysIndirectCommand;
-
 /// Manages the simulation side state of the program, which contains multiple
 /// responsabilities.
 ///
@@ -71,7 +69,7 @@ pub trait StateHandler<FrameData: Sized, RG: DrawGroups> {
     fn upload_gpu(
         &mut self,
         frame_boundary: &Cross<Producer, FrameData>,
-        command_queue: &mut GpuCommandQueue<crate::DrawCommand, RG>,
+        command_queue: &mut GpuCommandQueue<RG::Command, RG>,
     );
 
     /// The simulation advance/step routine.
@@ -233,6 +231,11 @@ where
         *state.command_queue_mut() = GpuCommandQueue::new();
 
         (self.gl_state_init)();
+
+        unsafe {
+            janus::gl::GenVertexArrays(1, &mut renderer.internal_vao);
+            janus::gl::BindVertexArray(renderer.internal_vao);
+        }
 
         let screen = renderer.screen_space_mirror().clone();
         renderer.handler.init_resources(screen.resolution());
