@@ -360,6 +360,12 @@ impl<const SIZE: usize> UploadUniform for [f32; SIZE] {
             4 => unsafe {
                 janus::gl::Uniform4f(*location, self[0], self[1], self[2], self[4]);
             },
+            12 => unsafe {
+                janus::gl::UniformMatrix3fv(*location, 1, janus::gl::FALSE, self.as_ptr().cast());
+            },
+            16 => unsafe {
+                janus::gl::UniformMatrix4fv(*location, 1, janus::gl::FALSE, self.as_ptr().cast());
+            },
             _ => unsafe {
                 janus::gl::Uniform1fv(*location, SIZE as i32, self.as_ptr().cast());
             },
@@ -392,6 +398,24 @@ impl<const SIZE: usize> UploadUniform for [f32; SIZE] {
                     self[1],
                     self[2],
                     self[4],
+                );
+            },
+            12 => unsafe {
+                janus::gl::ProgramUniformMatrix3fv(
+                    program.shader_program(),
+                    *location,
+                    1,
+                    janus::gl::FALSE,
+                    self.as_ptr().cast(),
+                );
+            },
+            16 => unsafe {
+                janus::gl::ProgramUniformMatrix4fv(
+                    program.shader_program(),
+                    *location,
+                    1,
+                    janus::gl::FALSE,
+                    self.as_ptr().cast(),
                 );
             },
             _ => unsafe {
