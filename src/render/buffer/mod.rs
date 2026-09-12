@@ -495,6 +495,30 @@ where
         }
     }
 
+    /// View the whole allocated memory block.
+    pub const unsafe fn view_all(&self) -> View<'_, T> {
+        let slice = unsafe { std::slice::from_raw_parts(self.ptr, self.capacity) };
+        let length = self.capacity as u32;
+        View {
+            slice,
+            length,
+            offset: 0,
+            source: self.gl_obj,
+        }
+    }
+
+    /// View the whole allocated memory block.
+    pub const unsafe fn view_all_mut(&self) -> ViewMut<'_, T> {
+        let slice = unsafe { std::slice::from_raw_parts_mut(self.ptr, self.capacity) };
+        let length = self.capacity as u32;
+        ViewMut {
+            slice,
+            length,
+            offset: 0,
+            source: self.gl_obj,
+        }
+    }
+
     pub const unsafe fn set_length(&self, length: u32) {
         let p = self.length.get() as *mut u32;
         unsafe {

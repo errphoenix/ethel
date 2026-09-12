@@ -615,12 +615,10 @@ macro_rules! shader_glsl {
                     self.handle
                 }
 
-                #[cfg(debug_assertions)]
                 pub fn build_sources() -> Vec<String> {
                     Self::build_sources_variant(std::default::Default::default())
                 }
 
-                #[cfg(debug_assertions)]
                 pub fn build_sources_variant(variant: [< Shader $name Variants >]) -> Vec<String> {
                     let mut sources = Vec::new();
 
@@ -1088,12 +1086,10 @@ macro_rules! shader_glsl_compute {
                     self.handle
                 }
 
-                #[cfg(debug_assertions)]
                 pub fn build_sources() -> String {
                     Self::build_sources_variant(std::default::Default::default())
                 }
 
-                #[cfg(debug_assertions)]
                 pub fn build_sources_variant(variant: [< ComputeShader $name Variants >]) -> String {
                     let version = $crate::shader::ShadingVersion::core($ver);
 

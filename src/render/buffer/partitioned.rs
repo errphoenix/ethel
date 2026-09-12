@@ -630,6 +630,11 @@ impl<const PARTS: usize> Default for PartitionedTriBuffer<PARTS> {
         }
     }
 }
+impl<const PARTS: usize> janus::GpuResource for PartitionedTriBuffer<PARTS> {
+    fn resource_id(&self) -> u32 {
+        self.gl_obj
+    }
+}
 unsafe impl<const PARTS: usize> Sync for PartitionedTriBuffer<PARTS> {}
 unsafe impl<const PARTS: usize> Send for PartitionedTriBuffer<PARTS> {}
 impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
@@ -1253,6 +1258,11 @@ macro_rules! typed_part_tribuffer {
             pub struct [< $name PartitionedTriBuffer >](
                 $crate::render::buffer::partitioned::PartitionedTriBuffer<$len>
             );
+            impl janus::GpuResource for [< $name PartitionedTriBuffer >] {
+                fn resource_id(&self) -> u32 {
+                    self.0.resource_id()
+                }
+            }
             impl [< $name PartitionedTriBuffer >] {
                 pub fn new() -> Self {
                     let layout = [< Layout $name >]::create();
@@ -1267,6 +1277,10 @@ macro_rules! typed_part_tribuffer {
 
                 pub fn bind_ssbo_all(&self, section: usize) {
                     self.0.bind_shader_storage(section);
+                }
+
+                pub fn bind_ssbo_arrays(&self, section: usize, ssbo_index: Option<u32>) {
+                    self.0.bind_shader_storage_arrays(section, 0, $len, ssbo_index)
                 }
 
                 $(
@@ -1383,6 +1397,11 @@ macro_rules! typed_part_buffer {
             pub struct [< $name PartitionedBuffer >](
                 $crate::render::buffer::partitioned::PartitionedBuffer<$len>
             );
+            impl janus::GpuResource for [< $name PartitionedBuffer >] {
+                fn resource_id(&self) -> u32 {
+                    self.0.resource_id()
+                }
+            }
             impl [< $name PartitionedBuffer >] {
                 pub fn new() -> Self {
                     let layout = [< Layout $name >]::create();
@@ -1397,6 +1416,10 @@ macro_rules! typed_part_buffer {
 
                 pub fn bind_ssbo_all(&self) {
                     self.0.bind_shader_storage();
+                }
+
+                pub fn bind_ssbo_arrays(&self, ssbo_index: Option<u32>) {
+                    self.0.bind_shader_storage_arrays(0, $len, ssbo_index)
                 }
 
                 $(
