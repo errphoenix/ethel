@@ -53,8 +53,7 @@ impl<const VAR_COUNT: usize, T: VarShader> ShaderSourceBuilder<VAR_COUNT, T> {
             ShaderSourceNode::Variable(options) => {
                 if let Some((variant, contents)) = options.iter().find(|(v, _)| variant.eq(v)) {
                     Self::build_node(*variant, contents, out);
-                } else {
-                    let (_, default) = options.iter().find(|(v, _)| variant.eq(v)).unwrap();
+                } else if let Some((_, default)) = options.iter().find(|(v, _)| variant.eq(v)) {
                     Self::build_node(T::default(), default, out);
                 }
             }
