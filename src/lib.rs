@@ -238,6 +238,7 @@ where
         }
 
         let screen = renderer.screen_space_mirror().clone();
+
         renderer.handler.init_resources(screen.resolution());
         *state.screen_space_mirror_mut() = screen;
         Ok(())

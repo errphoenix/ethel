@@ -24,26 +24,23 @@ pub enum ShaderKind {
     Geometry,
     Pixel,
 }
-
 impl ShaderKind {
     pub const fn as_str(&self) -> &'static str {
         match self {
-            Self::Compute => "compute",
-            Self::TesselationEval => "tess-eval",
-            Self::TesselationCtl => "tess-ctl",
-            Self::Vertex => "vertex",
-            Self::Geometry => "geometry",
-            Self::Pixel => "pixel",
+            Self::Compute => "comp",
+            Self::TesselationEval => "tese",
+            Self::TesselationCtl => "tesc",
+            Self::Vertex => "vert",
+            Self::Geometry => "geom",
+            Self::Pixel => "frag",
         }
     }
 }
-
 impl std::fmt::Display for ShaderKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
-
 impl janus::GlProperty for ShaderKind {
     fn property_enum(self) -> u32 {
         match self {
@@ -111,6 +108,11 @@ pub fn compile_shader_unit(
                 r#"Failed to compile {shader_kind} shader (handle={}) from source:
             {}"#, shader_obj, log_contents
             );
+
+            unsafe {
+                janus::gl::DeleteShader(shader_obj);
+            }
+
             return Err(log_contents);
         }
     }
@@ -476,9 +478,7 @@ macro_rules! shader_glsl {
         struct $name:ident > [$ver:expr] {
             common {
                 $(uniform {
-                    $(
-                        length $c_u_len:literal, $c_u_gl_name:ident: $c_u_gl_type:ident => $c_u_r_type:ty;
-                    )+
+                    $(on $c_u_idx:expr $(, for $c_u_len:expr)? => $c_u_gl_name:ident: $c_u_gl_type:ident from $c_u_r_type:ty;)+
                 };)?
                 $(sampler {
                     $(on $cs_idx:expr $(, for $cs_len:expr)? => $cus_name:ident : $c_sampler_type:ident ; )+
@@ -519,9 +519,7 @@ macro_rules! shader_glsl {
                         )+
                     };)?
                     $(uniform {
-                        $(
-                            length $u_len:literal, $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
-                        )+
+                        $(on $u_idx:expr $(, for $u_len:expr)? => $u_gl_name:ident: $u_gl_type:ident from $u_r_type:ty;)+
                     };)?
                     $(sampler {
                         $(on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; )+
@@ -563,6 +561,17 @@ macro_rules! shader_glsl {
                 #[default]
                 Default,
                 $($($var_name,)+)?
+            }
+            impl std::fmt::Display for [< Shader $name Variants >] {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    use [< Shader $name Variants >]::*;
+                    match self {
+                        Default => write!(f, "default"),
+                        $($(
+                            $var_name => write!(f, "{}", stringify!([< $var_name:lower >])),
+                        )+)?
+                    }
+                }
             }
             impl $crate::shader::source::VarShader for [< Shader $name Variants >] {}
             $crate::impl_variant_count!([< Shader $name Variants >] {
@@ -615,30 +624,27 @@ macro_rules! shader_glsl {
                     self.handle
                 }
 
-                pub fn build_sources() -> Vec<String> {
+                pub fn build_sources() -> Vec<($crate::shader::ShaderKind, String)> {
                     Self::build_sources_variant(std::default::Default::default())
                 }
 
-                pub fn build_sources_variant(variant: [< Shader $name Variants >]) -> Vec<String> {
+                pub fn build_sources_variant(
+                    variant: [< Shader $name Variants >]
+                ) -> Vec<($crate::shader::ShaderKind, String)> {
                     let mut sources = Vec::new();
 
                     let version = $crate::shader::ShadingVersion::core($ver);
+
+                    let mut common_uloc_base = 0;
 
                     let common = {
                         let mut composer = $crate::shader::ShaderComposer::new(version);
                         $(
                             $(
-                                let _ = composer.add_uniform(
-                                    if $c_u_len > 1 {
-                                        $crate::shader_glsl_uniform!(
-                                            $c_u_len, $c_u_gl_name: $c_u_gl_type
-                                        )
-                                    } else {
-                                        $crate::shader_glsl_uniform!(
-                                            $c_u_gl_name: $c_u_gl_type
-                                        )
-                                    }
+                                let u = $crate::shader_glsl_internal_uniform!(
+                                    on $c_u_idx $(, for $c_u_len)? => $c_u_gl_name : $c_u_gl_type ; common_uloc_base
                                 );
+                                let _ = composer.add_uniform(u);
                             )+
                         )?
                         $(
@@ -687,18 +693,12 @@ macro_rules! shader_glsl {
                             )+
                         )?
                         $(
+                            let mut uloc_base = common_uloc_base;
                             $(
-                                let _ = composer.add_uniform(
-                                    if $u_len > 1 {
-                                        $crate::shader_glsl_uniform!(
-                                            $u_len, $u_gl_name: $u_gl_type
-                                        )
-                                    } else {
-                                        $crate::shader_glsl_uniform!(
-                                            $u_gl_name: $u_gl_type
-                                        )
-                                    }
+                                let u = $crate::shader_glsl_internal_uniform!(
+                                    on $u_idx $(, for $u_len)? => $u_gl_name : $u_gl_type ; uloc_base
                                 );
+                                let _ = composer.add_uniform(u);
                             )+
                         )?
                         $(
@@ -746,7 +746,7 @@ macro_rules! shader_glsl {
                         };
                         composer.set_source(source);
 
-                        sources.push(composer.build());
+                        sources.push(($kind, composer.build()));
                     )+
 
                     sources
@@ -755,7 +755,7 @@ macro_rules! shader_glsl {
                 $(
                     $(
                         $crate::shader_glsl_build_uniform_interface! {
-                            array $c_u_len, $c_u_gl_name: $c_u_gl_type => $c_u_r_type
+                            $c_u_gl_name: $(for $c_u_len,)? $c_u_gl_type => $c_u_r_type
                         }
                     )+
                 )?
@@ -763,7 +763,7 @@ macro_rules! shader_glsl {
                     $(
                         $(
                             $crate::shader_glsl_build_uniform_interface! {
-                                array $u_len, $u_gl_name: $u_gl_type => $u_r_type
+                                $u_gl_name: $(for $u_len,)? $u_gl_type => $u_r_type
                             }
                         )+
                     )?
@@ -774,26 +774,23 @@ macro_rules! shader_glsl {
                 }
 
                 pub fn new_compiled_variant(variant: [< Shader $name Variants >]) -> Self {
+                    tracing::info!("Building & compiling shader: {} (variant={variant})", stringify!($name));
+
                     let mut units = Vec::new();
 
                     {
                         let version = $crate::shader::ShadingVersion::core($ver);
 
+                        let mut common_uloc_base = 0;
+
                         let common = {
                             let mut composer = $crate::shader::ShaderComposer::new(version);
                             $(
                                 $(
-                                    let _ = composer.add_uniform(
-                                        if $c_u_len > 1 {
-                                            $crate::shader_glsl_uniform!(
-                                                $c_u_len, $c_u_gl_name: $c_u_gl_type
-                                            )
-                                        } else {
-                                            $crate::shader_glsl_uniform!(
-                                                $c_u_gl_name: $c_u_gl_type
-                                            )
-                                        }
+                                    let u = $crate::shader_glsl_internal_uniform!(
+                                        on $c_u_idx $(, for $c_u_len)? => $c_u_gl_name : $c_u_gl_type ; common_uloc_base
                                     );
+                                    let _ = composer.add_uniform(u);
                                 )+
                             )?
                             $(
@@ -843,18 +840,12 @@ macro_rules! shader_glsl {
                                     )+
                                 )?
                                 $(
+                                    let mut loc_base = common_uloc_base;
                                     $(
-                                        let _ = composer.add_uniform(
-                                            if $u_len > 1 {
-                                                $crate::shader_glsl_uniform!(
-                                                    $u_len, $u_gl_name: $u_gl_type
-                                                )
-                                            } else {
-                                                $crate::shader_glsl_uniform!(
-                                                    $u_gl_name: $u_gl_type
-                                                )
-                                            }
+                                        let u = $crate::shader_glsl_internal_uniform!(
+                                            on $u_idx $(, for $u_len)? => $u_gl_name : $u_gl_type ; loc_base
                                         );
+                                        let _ = composer.add_uniform(u);
                                     )+
                                 )?
                                 $(
@@ -920,19 +911,13 @@ macro_rules! shader_glsl {
 
                     $(
                         $(
-                            let [< location_ $c_u_gl_name _ $c_u_gl_type >] =
-                                $crate::shader::ShaderProgram::find_uniform_location(
-                                    &handle, stringify!($c_u_gl_name)
-                                );
+                            let [< location_ $c_u_gl_name _ $c_u_gl_type >] = $crate::shader::UniformLocation($c_u_idx);
                         )+
                     )?
                     $(
                         $(
                             $(
-                                let [< location_ $u_gl_name _ $u_gl_type >] =
-                                    $crate::shader::ShaderProgram::find_uniform_location(
-                                        &handle, stringify!($u_gl_name)
-                                    );
+                                let [< location_ $u_gl_name _ $u_gl_type >] = $crate::shader::UniformLocation($u_idx);
                             )+
                         )?
                     )+
@@ -977,9 +962,7 @@ macro_rules! shader_glsl_compute {
             workgroup [$wg_x:expr, $wg_y:expr, $wg_z:expr];
 
             $(uniform {
-                $(
-                    length $u_len:literal, $u_gl_name:ident: $u_gl_type:ident => $u_r_type:ty;
-                )+
+                $(on $u_idx:expr $(, for $u_len:expr)? => $u_gl_name:ident: $u_gl_type:ident from $u_r_type:ty;)+
             };)?
             $(sampler {
                 $(on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; )+
@@ -1028,6 +1011,17 @@ macro_rules! shader_glsl_compute {
                 #[default]
                 Default,
                 $($($var_name,)+)?
+            }
+            impl std::fmt::Display for [< ComputeShader $name Variants >] {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    use [< ComputeShader $name Variants >]::*;
+                    match self {
+                        Default => write!(f, "default"),
+                        $($(
+                            $var_name => write!(f, "{}", stringify!([< $var_name:lower >])),
+                        )+)?
+                    }
+                }
             }
             impl $crate::shader::source::VarShader for [< ComputeShader $name Variants >] {}
             $crate::impl_variant_count!([< ComputeShader $name Variants >] {
@@ -1104,18 +1098,12 @@ macro_rules! shader_glsl_compute {
                     }
 
                     $(
+                        let mut uloc_base = 0;
                         $(
-                            let _ = composer.add_uniform(
-                                if $u_len > 1 {
-                                    $crate::shader_glsl_uniform!(
-                                        $u_len, $u_gl_name: $u_gl_type
-                                    )
-                                } else {
-                                    $crate::shader_glsl_uniform!(
-                                        $u_gl_name: $u_gl_type
-                                    )
-                                }
+                            let u = $crate::shader_glsl_internal_uniform!(
+                                on $u_idx $(, for $u_len)? => $u_gl_name : $u_gl_type ; uloc_base
                             );
+                            let _ = composer.add_uniform(u);
                         )+
                     )?
                     $(
@@ -1187,7 +1175,7 @@ macro_rules! shader_glsl_compute {
                 $(
                     $(
                         $crate::shader_glsl_build_uniform_interface! {
-                            array $u_len, $u_gl_name: $u_gl_type => $u_r_type
+                            $u_gl_name: $(for $u_len,)? $u_gl_type => $u_r_type
                         }
                     )+
                 )?
@@ -1197,6 +1185,8 @@ macro_rules! shader_glsl_compute {
                 }
 
                 pub fn new_compiled_variant(variant: [< ComputeShader $name Variants >]) -> Self {
+                    tracing::info!("Building & compiling compute shader: {} (variant={variant})", stringify!($name));
+
                     let version = $crate::shader::ShadingVersion::core($ver);
 
                     let mut composer = $crate::shader::ShaderComposer::new(version);
@@ -1211,24 +1201,10 @@ macro_rules! shader_glsl_compute {
                     }
 
                     $(
+                        let mut uloc_base = 0;
                         $(
-                            let _ = composer.add_uniform(
-                                if $u_len > 1 {
-                                    $crate::shader_glsl_uniform!(
-                                        $u_len, $u_gl_name: $u_gl_type
-                                    )
-                                } else {
-                                    $crate::shader_glsl_uniform!(
-                                        $u_gl_name: $u_gl_type
-                                    )
-                                }
-                            );
-                        )+
-                    )?
-                    $(
-                        $(
-                            let u = $crate::shader_glsl_internal_image!(
-                                on $idx $(, for $len)? => $ui_name : $image_type as $format $($m)*
+                            let u = $crate::shader_glsl_internal_uniform!(
+                                on $u_idx $(, for $u_len)? => $u_gl_name : $u_gl_type ; uloc_base
                             );
                             let _ = composer.add_uniform(u);
                         )+
@@ -1238,6 +1214,14 @@ macro_rules! shader_glsl_compute {
                         $(
                             let u = $crate::shader_glsl_internal_sampler!(
                                 on $s_idx $(, for $s_len)? => $us_name : $sampler_type ; unit_offset
+                            );
+                            let _ = composer.add_uniform(u);
+                        )+
+                    )?
+                    $(
+                        $(
+                            let u = $crate::shader_glsl_internal_image!(
+                                on $idx $(, for $len)? => $ui_name : $image_type as $format $($m)*
                             );
                             let _ = composer.add_uniform(u);
                         )+
@@ -1294,11 +1278,7 @@ macro_rules! shader_glsl_compute {
 
                     $(
                         $(
-                            let [< location_ $u_gl_name _ $u_gl_type >] =
-                                $crate::shader::ShaderProgram::find_uniform_location(
-                                    &handle, stringify!($u_gl_name)
-                                );
-
+                            let [< location_ $u_gl_name _ $u_gl_type >] = $crate::shader::UniformLocation($u_idx);
                         )+
                     )?
 
@@ -1343,7 +1323,7 @@ mod tests {
             workgroup [1, 1, 1];
 
             uniform {
-                length 1, projection: mat4 => glam::Mat4;
+                on 0 => projection : mat4 from glam::Mat4;
             };
 
             type {
@@ -1409,7 +1389,7 @@ mod tests {
         struct Debug > [460] {
             common {
                 uniform {
-                    length 1, projection: mat4 => glam::Mat4;
+                    on 0 => projection : mat4 from glam::Mat4;
                 };
 
                 type {
@@ -1456,7 +1436,7 @@ mod tests {
                 };
 
                 uniform {
-                    length 1, view: mat4 => glam::Mat4;
+                    on 0 => view : mat4 from glam::Mat4;
                 };
 
                 lib {
@@ -1502,7 +1482,7 @@ mod tests {
         sources
             .iter()
             .enumerate()
-            .for_each(|(i, src)| println!("N={i}\n{src}\n\n\n\n\n"));
+            .for_each(|(i, (_kind, src))| println!("N={i}\n{src}\n\n\n\n\n"));
 
         const S0: &str = indoc::indoc! { "# version 460 core
 
@@ -1530,7 +1510,7 @@ mod tests {
             gl_Position = vec4(FIXED_POS);
             }" };
 
-        assert_eq!(sources[0].trim_end(), S0);
+        assert_eq!(sources[0].1.trim_end(), S0);
 
         const S1: &str = indoc::indoc! { "# version 460 core
 
@@ -1565,6 +1545,6 @@ mod tests {
             //default
             }" };
 
-        assert_eq!(sources[1].trim_end(), S1);
+        assert_eq!(sources[1].1.trim_end(), S1);
     }
 }

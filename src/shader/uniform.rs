@@ -456,20 +456,6 @@ impl super::Inject for GlslUniform {
 }
 
 #[macro_export]
-macro_rules! shader_glsl_uniform {
-    ($($arr_n:literal,)? $gl_name:ident: $gl_type:ident) => {
-        $crate::shader::uniform::GlslUniform::new(concat!(
-            "uniform ",
-            stringify!($gl_type),
-            " ",
-            stringify!($gl_name),
-            $("[", $arr_n, "]",)?
-            ";\n"
-        ).to_string())
-    };
-}
-
-#[macro_export]
 macro_rules! shader_glsl_build_uniform_interface {
     ($gl_name:ident: $gl_type:ident => $r_type:ty) => {
         paste::paste! {
@@ -479,7 +465,7 @@ macro_rules! shader_glsl_build_uniform_interface {
             }
         }
     };
-    (array $ac:literal, $gl_name:ident: $gl_type:ident => $r_type:ty) => {
+    ($gl_name:ident: for $ac:literal, $gl_type:ident => $r_type:ty) => {
         paste::paste! {
             pub fn [< uniform_ $gl_name _ $gl_type v >] (&self, $gl_name: [$r_type; $ac]) {
                 let location = self.[< location_ $gl_name _ $gl_type >];
@@ -493,12 +479,45 @@ macro_rules! shader_glsl_build_uniform_interface {
 }
 
 #[macro_export]
+macro_rules! shader_glsl_internal_uniform {
+    (on $u_idx:expr $(, for $u_len:expr)? => $u_name:ident : $u_type:ident; $loc_offset:ident) => {
+        {
+            assert!(
+                $u_idx >= $loc_offset,
+                "conflicting uniform location(s): current offset is {} but specified location is {}",
+                $loc_offset,
+                $u_idx
+            );
+
+            #[allow(unused)]
+            {
+                $loc_offset += 1;
+                $(
+                    $loc_offset += $u_len - 1;
+                )?
+            }
+
+            let name = concat!(
+                stringify!($u_name),
+                $("[", $u_len, "]",)?
+            );
+            $crate::shader::uniform::GlslUniform::new(
+                format!(
+                    "layout(location = {}) uniform {} {name};",
+                    $u_idx, stringify!($u_type)
+                )
+            )
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! shader_glsl_internal_sampler {
     (on $s_idx:expr $(, for $s_len:expr)? => $us_name:ident : $sampler_type:ident ; $unit_offset:ident) => {
         {
             assert!(
                 $s_idx >= $unit_offset,
-                "conflicting sampler binding index: current offset is {} but specified binding {}",
+                "conflicting sampler binding index: current offset is {} but specified binding is {}",
                 $unit_offset, $s_idx
             );
 
@@ -561,8 +580,9 @@ macro_rules! shader_glsl_internal_image {
 mod tests {
     #[test]
     fn shader_compose_glsl_uniform() {
-        const TEST: &str = "uniform mat4 projection;\n";
-        let uniform = shader_glsl_uniform!(projection: mat4);
+        let mut uo = 0;
+        const TEST: &str = "layout(location = 4) uniform mat4 projection;\n";
+        let uniform = shader_glsl_internal_uniform!(on 4 => projection : mat4; uo);
         assert_eq!(TEST, uniform.as_str());
     }
 
