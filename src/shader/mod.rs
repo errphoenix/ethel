@@ -703,10 +703,22 @@ macro_rules! shader_glsl {
                     self.handle
                 }
 
+
                 /// Writes the shader's full composed GLSL source to a file.
                 ///
                 /// The output path is:
                 /// `target/shaders/glsl/[hashed-name]-default.[shader-type]`
+                ///
+                /// The `hashed_name` is hashed using the `fnv1a` algorithm
+                /// with `janus::hash_string`.
+                ///
+                /// Also writes the hashed glsl contents at:
+                /// `target/shaders/glsl/hash.[hashed-name]-default.[shader-type]`
+                ///
+                /// The glsl contents are hashed using Rust's `DefaultHasher`,
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
                 pub fn save_sources() {
                     Self::save_sources_variant(std::default::Default::default())
                 }
@@ -715,6 +727,17 @@ macro_rules! shader_glsl {
                 ///
                 /// The output path is:
                 /// `target/shaders/glsl/[hashed-name]-[variant].[shader-type]`
+                ///
+                /// The `hashed_name` is hashed using the `fnv1a` algorithm
+                /// with `janus::hash_string`.
+                ///
+                /// Also writes the hashed glsl contents at:
+                /// `target/shaders/glsl/hash.[hashed-name]-[variant].[shader-type]`
+                ///
+                /// The glsl contents are hashed using Rust's [`DefaultHasher`],
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
                 pub fn save_sources_variant(variant: [< Shader $name Variants >]) {
                     const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
                     let _ = std::fs::create_dir_all(OUT_PATH);
@@ -722,8 +745,21 @@ macro_rules! shader_glsl {
                     let name_hashed = janus::hash_string(stringify!($name));
                     let sources = Self::build_sources_variant(variant);
 
+                    use std::hash::{Hash, Hasher};
+
                     for (kind, src) in sources {
                         let ext = kind.as_str();
+
+                        let mut hasher = std::hash::DefaultHasher::new();
+                        src.hash(&mut hasher);
+                        let _ = std::fs::write(
+                            format!(
+                                "{OUT_PATH}/hash.{:#x}-{variant}.{ext}",
+                                name_hashed.as_u64()
+                            ),
+                            format!("{}", hasher.finish())
+                        );
+
                         let _ = std::fs::write(
                             format!(
                                 "{OUT_PATH}/{:#x}-{variant}.{ext}",
@@ -732,6 +768,37 @@ macro_rules! shader_glsl {
                             src
                         );
                     }
+                }
+
+                /// Hash the shader's glsl source contents.
+                ///
+                /// The glsl contents are hashed using Rust's [`DefaultHasher`],
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn hash_sources() -> Vec<($crate::shader::ShaderKind, u64)> {
+                    Self::hash_sources_variant(std::default::Default::default())
+                }
+
+                /// Hash the shader's glsl source contents.
+                ///
+                /// The glsl contents are hashed using Rust's [`DefaultHasher`],
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn hash_sources_variant(variant: [< Shader $name Variants >]) -> Vec<($crate::shader::ShaderKind, u64)> {
+                    let mut units = Vec::new();
+
+                    let sources = Self::build_sources_variant(variant);
+                    use std::hash::{Hash, Hasher};
+
+                    for (kind, src) in sources {
+                        let mut hasher = std::hash::DefaultHasher::new();
+                        src.hash(&mut hasher);
+                        units.push((kind, hasher.finish()));
+                    }
+
+                    units
                 }
 
                 pub unsafe fn from_spirv(spirv_sources: &[($crate::shader::ShaderKind, String)]) -> Self {
@@ -1233,24 +1300,84 @@ macro_rules! shader_glsl_compute {
                     self.handle
                 }
 
-                /// Writes the shader's full composed GLSL source to a file.
+                /// Hash the shader's glsl source contents.
                 ///
-                /// The output path is:
-                /// `target/shaders/glsl/[hashed-name]-default.comp`
-                pub fn save_sources() {
-                    Self::save_sources_variant(std::default::Default::default())
+                /// The glsl contents are hashed using Rust's [`DefaultHasher`],
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn hash_sources() -> u64 {
+                    Self::hash_sources_variant(std::default::Default::default())
+                }
+
+                /// Hash the shader's glsl source contents.
+                ///
+                /// The glsl contents are hashed using Rust's [`DefaultHasher`],
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn hash_sources_variant(variant: [< ComputeShader $name Variants >]) -> u64 {
+                    let source = Self::build_sources_variant(variant);
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = std::hash::DefaultHasher::new();
+                    source.hash(&mut hasher);
+                    hasher.finish()
                 }
 
                 /// Writes the shader's full composed GLSL source to a file.
                 ///
                 /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-default.comp`
+                ///
+                /// The `hashed_name` is hashed using the `fnv1a` algorithm
+                /// with `janus::hash_string`.
+                ///
+                /// Also writes the hashed glsl contents at:
+                /// `target/shaders/glsl/hash.[hashed-name]-default.comp`
+                ///
+                /// The glsl contents are hashed using Rust's `DefaultHasher`,
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn save_sources() {
+                    Self::save_sources_variant(std::default::Default::default())
+                }
+
+
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
                 /// `target/shaders/glsl/[hashed-name]-[variant].comp`
+                ///
+                /// The `hashed_name` is hashed using the `fnv1a` algorithm
+                /// with `janus::hash_string`.
+                ///
+                /// Also writes the hashed glsl contents at:
+                /// `target/shaders/glsl/hash.[hashed-name]-[variant].comp`
+                ///
+                /// The glsl contents are hashed using Rust's `DefaultHasher`,
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
                 pub fn save_sources_variant(variant: [< ComputeShader $name Variants >]) {
                     const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
                     let _ = std::fs::create_dir_all(OUT_PATH);
 
                     let name_hashed = janus::hash_string(stringify!($name));
                     let source = Self::build_sources_variant(variant);
+
+                    use std::hash::{Hash, Hasher};
+
+                    let mut hasher = std::hash::DefaultHasher::new();
+                    source.hash(&mut hasher);
+                    let _ = std::fs::write(
+                        format!(
+                            "{OUT_PATH}/hash.{:#x}-{variant}.comp",
+                            name_hashed.as_u64()
+                        ),
+                        format!("{}", hasher.finish())
+                    );
+
                     let _ = std::fs::write(
                         format!(
                             "{OUT_PATH}/{:#x}-{variant}.comp",
