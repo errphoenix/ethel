@@ -54,6 +54,8 @@ impl janus::GlProperty for ShaderKind {
     }
 }
 
+pub const SHADER_SOURCE_OUTPUT: &str = "target/shaders/glsl";
+
 pub fn generate_blank() -> ShaderHandle {
     let program = unsafe { janus::gl::CreateProgram() };
     ShaderHandle { program }
@@ -68,6 +70,83 @@ pub struct ShaderUnit {
 const SHADER_INFOLOG_LEN: usize = 1024;
 
 static mut SHADER_INFOLOG_BYTES: [i8; SHADER_INFOLOG_LEN] = [0i8; SHADER_INFOLOG_LEN];
+
+/// Compile shader unit from SPIR-V source using the default `main` entrypoint.
+pub fn compile_shader_unit_spirv<'r>(
+    spirv_source: &str,
+    shader_kind: ShaderKind,
+) -> Result<ShaderUnit, std::borrow::Cow<'r, str>> {
+    compile_shader_unit_spirv_with_entrypoint(spirv_source, "main", shader_kind)
+}
+
+/// Compile shader unit from SPIR-V source using a custom `entrypoint`.
+pub fn compile_shader_unit_spirv_with_entrypoint<'r>(
+    spirv_source: &str,
+    entrypoint: &str,
+    shader_kind: ShaderKind,
+) -> Result<ShaderUnit, std::borrow::Cow<'r, str>> {
+    let shader_obj = unsafe { janus::gl::CreateShader(shader_kind.property_enum()) };
+
+    #[allow(static_mut_refs)]
+    {
+        let mut compile_status = 0;
+
+        unsafe {
+            let c_src = std::ffi::CString::from_str(spirv_source).unwrap();
+            let c_ep = std::ffi::CString::from_str(entrypoint).unwrap();
+
+            janus::gl::ShaderBinary(
+                1,
+                &shader_obj,
+                janus::gl::SHADER_BINARY_FORMAT_SPIR_V,
+                c_src.as_ptr() as *const _,
+                spirv_source.as_bytes().len() as i32,
+            );
+            janus::gl::SpecializeShader(
+                shader_obj,
+                c_ep.as_ptr(),
+                0,
+                std::ptr::null(),
+                std::ptr::null(),
+            );
+            janus::gl::GetShaderiv(shader_obj, janus::gl::COMPILE_STATUS, &mut compile_status);
+        }
+
+        if compile_status as u8 != janus::gl::TRUE {
+            let mut log_string_len = 0;
+
+            unsafe {
+                janus::gl::GetShaderInfoLog(
+                    shader_obj,
+                    SHADER_INFOLOG_LEN as i32,
+                    &mut log_string_len,
+                    SHADER_INFOLOG_BYTES.as_mut_ptr(),
+                );
+            }
+
+            let log_contents = unsafe { std::ffi::CStr::from_ptr(SHADER_INFOLOG_BYTES.as_ptr()) }
+                .to_string_lossy();
+
+            event!(
+                name: "shader.unit.compile",
+                Level::ERROR,
+                r#"Failed to compile {shader_kind} shader (handle={}) from SPIR-V source:
+            {}"#, shader_obj, log_contents
+            );
+
+            unsafe {
+                janus::gl::DeleteShader(shader_obj);
+            }
+
+            return Err(log_contents);
+        }
+    }
+
+    Ok(ShaderUnit {
+        kind: shader_kind,
+        shader_obj,
+    })
+}
 
 pub fn compile_shader_unit(
     source: &str,
@@ -624,6 +703,80 @@ macro_rules! shader_glsl {
                     self.handle
                 }
 
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-default.[shader-type]`
+                pub fn save_sources() {
+                    Self::save_sources_variant(std::default::Default::default())
+                }
+
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-[variant].[shader-type]`
+                pub fn save_sources_variant(variant: [< Shader $name Variants >]) {
+                    const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
+                    let _ = std::fs::create_dir_all(OUT_PATH);
+
+                    let name_hashed = janus::hash_string(stringify!($name));
+                    let sources = Self::build_sources_variant(variant);
+
+                    for (kind, src) in sources {
+                        let ext = kind.as_str();
+                        let _ = std::fs::write(
+                            format!(
+                                "{OUT_PATH}/{:#x}-{variant}.{ext}",
+                                name_hashed.as_u64()
+                            ),
+                            src
+                        );
+                    }
+                }
+
+                pub unsafe fn from_spirv(spirv_sources: &[($crate::shader::ShaderKind, String)]) -> Self {
+                    let mut units = Vec::new();
+                    for (kind, src) in spirv_sources {
+                        let shader_unit = $crate::shader::compile_shader_unit_spirv(src, *kind)
+                            .expect("failed to compile shader from spir-v source: see logs for details.");
+                        units.push(shader_unit);
+                    }
+                    let handle = $crate::shader::generate_blank();
+                    $crate::shader::attach_shader_units(&handle, &units);
+                    $crate::shader::link_shader_program(&handle);
+                    $crate::shader::delete_shader_units(&mut units);
+
+                    $(
+                        $(
+                            let [< location_ $c_u_gl_name _ $c_u_gl_type >] = $crate::shader::UniformLocation($c_u_idx);
+                        )+
+                    )?
+                    $(
+                        $(
+                            $(
+                                let [< location_ $u_gl_name _ $u_gl_type >] = $crate::shader::UniformLocation($u_idx);
+                            )+
+                        )?
+                    )+
+
+                    Self {
+                        handle,
+
+                        $(
+                            $(
+                                [< location_ $c_u_gl_name _ $c_u_gl_type >],
+                            )+
+                        )?
+                        $(
+                            $(
+                                $(
+                                    [< location_ $u_gl_name _ $u_gl_type >],
+                                )+
+                            )?
+                        )+
+                    }
+                }
+
                 pub fn build_sources() -> Vec<($crate::shader::ShaderKind, String)> {
                     Self::build_sources_variant(std::default::Default::default())
                 }
@@ -1080,6 +1233,33 @@ macro_rules! shader_glsl_compute {
                     self.handle
                 }
 
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-default.comp`
+                pub fn save_sources() {
+                    Self::save_sources_variant(std::default::Default::default())
+                }
+
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-[variant].comp`
+                pub fn save_sources_variant(variant: [< ComputeShader $name Variants >]) {
+                    const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
+                    let _ = std::fs::create_dir_all(OUT_PATH);
+
+                    let name_hashed = janus::hash_string(stringify!($name));
+                    let source = Self::build_sources_variant(variant);
+                    let _ = std::fs::write(
+                        format!(
+                            "{OUT_PATH}/{:#x}-{variant}.comp",
+                            name_hashed.as_u64()
+                        ),
+                        source
+                    );
+                }
+
                 pub fn build_sources() -> String {
                     Self::build_sources_variant(std::default::Default::default())
                 }
@@ -1285,6 +1465,31 @@ macro_rules! shader_glsl_compute {
                     Self {
                         handle,
 
+                        $(
+                            $(
+                                [< location_ $u_gl_name _ $u_gl_type >],
+                            )+
+                        )?
+                    }
+                }
+
+                pub unsafe fn from_spirv(spirv_source: &str) -> Self {
+                    let shader_unit = $crate::shader::compile_shader_unit_spirv(spirv_source, $crate::shader::ShaderKind::Compute)
+                        .expect("failed to compile Compute shader from spir-v source: see logs for details.");
+
+                    let handle = $crate::shader::ComputeShaderHandle::new($crate::shader::generate_blank());
+                    $crate::shader::attach_shader_units(&handle, &[shader_unit]);
+                    $crate::shader::link_shader_program(&handle);
+                    $crate::shader::delete_shader_units(&mut [shader_unit]);
+
+                    $(
+                        $(
+                            let [< location_ $u_gl_name _ $u_gl_type >] = $crate::shader::UniformLocation($u_idx);
+                        )+
+                    )?
+
+                    Self {
+                        handle,
                         $(
                             $(
                                 [< location_ $u_gl_name _ $u_gl_type >],
