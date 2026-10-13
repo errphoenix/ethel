@@ -73,7 +73,7 @@ static mut SHADER_INFOLOG_BYTES: [i8; SHADER_INFOLOG_LEN] = [0i8; SHADER_INFOLOG
 
 /// Compile shader unit from SPIR-V source using the default `main` entrypoint.
 pub fn compile_shader_unit_spirv<'r>(
-    spirv_source: &str,
+    spirv_source: &[u8],
     shader_kind: ShaderKind,
 ) -> Result<ShaderUnit, std::borrow::Cow<'r, str>> {
     compile_shader_unit_spirv_with_entrypoint(spirv_source, "main", shader_kind)
@@ -81,7 +81,7 @@ pub fn compile_shader_unit_spirv<'r>(
 
 /// Compile shader unit from SPIR-V source using a custom `entrypoint`.
 pub fn compile_shader_unit_spirv_with_entrypoint<'r>(
-    spirv_source: &str,
+    spirv_source: &[u8],
     entrypoint: &str,
     shader_kind: ShaderKind,
 ) -> Result<ShaderUnit, std::borrow::Cow<'r, str>> {
@@ -92,15 +92,14 @@ pub fn compile_shader_unit_spirv_with_entrypoint<'r>(
         let mut compile_status = 0;
 
         unsafe {
-            let c_src = std::ffi::CString::from_str(spirv_source).unwrap();
             let c_ep = std::ffi::CString::from_str(entrypoint).unwrap();
 
             janus::gl::ShaderBinary(
                 1,
                 &shader_obj,
                 janus::gl::SHADER_BINARY_FORMAT_SPIR_V,
-                c_src.as_ptr() as *const _,
-                spirv_source.as_bytes().len() as i32,
+                spirv_source.as_ptr() as *const _,
+                spirv_source.len() as i32,
             );
             janus::gl::SpecializeShader(
                 shader_obj,
@@ -687,6 +686,8 @@ macro_rules! shader_glsl {
                 }
             }
             impl [< Shader $name >] {
+                pub const HASHED_NAME: u64 = janus::hash_string(stringify!($name)).as_u64();
+
                 pub fn bind(&self) {
                     $crate::shader::ShaderProgram::bind(&self.handle);
                 }
@@ -742,11 +743,9 @@ macro_rules! shader_glsl {
                     const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
                     let _ = std::fs::create_dir_all(OUT_PATH);
 
-                    let name_hashed = janus::hash_string(stringify!($name));
                     let sources = Self::build_sources_variant(variant);
 
                     use std::hash::{Hash, Hasher};
-
                     for (kind, src) in sources {
                         let ext = kind.as_str();
 
@@ -755,7 +754,7 @@ macro_rules! shader_glsl {
                         let _ = std::fs::write(
                             format!(
                                 "{OUT_PATH}/hash.{:#x}-{variant}.{ext}",
-                                name_hashed.as_u64()
+                                Self::HASHED_NAME
                             ),
                             format!("{}", hasher.finish())
                         );
@@ -763,7 +762,7 @@ macro_rules! shader_glsl {
                         let _ = std::fs::write(
                             format!(
                                 "{OUT_PATH}/{:#x}-{variant}.{ext}",
-                                name_hashed.as_u64()
+                                Self::HASHED_NAME
                             ),
                             src
                         );
@@ -801,7 +800,8 @@ macro_rules! shader_glsl {
                     units
                 }
 
-                pub unsafe fn from_spirv(spirv_sources: &[($crate::shader::ShaderKind, String)]) -> Self {
+                pub unsafe fn from_spirv(spirv_sources: &[($crate::shader::ShaderKind, &[u8])]) -> Self {
+                    tracing::info!("Compiling {} shader from SPIR-V source...", stringify!($name));
                     let mut units = Vec::new();
                     for (kind, src) in spirv_sources {
                         let shader_unit = $crate::shader::compile_shader_unit_spirv(src, *kind)
@@ -1276,6 +1276,8 @@ macro_rules! shader_glsl_compute {
                 }
             }
             impl [< ComputeShader $name >] {
+                pub const HASHED_NAME: u64 = janus::hash_string(stringify!($name)).as_u64();
+
                 pub fn bind(&self) {
                     $crate::shader::ShaderProgram::bind(&self.handle);
                 }
@@ -1317,8 +1319,8 @@ macro_rules! shader_glsl_compute {
                 ///
                 /// [`DefaultHasher`]: std::hash::DefaultHasher
                 pub fn hash_sources_variant(variant: [< ComputeShader $name Variants >]) -> u64 {
-                    let source = Self::build_sources_variant(variant);
                     use std::hash::{Hash, Hasher};
+                    let source = Self::build_sources_variant(variant);
                     let mut hasher = std::hash::DefaultHasher::new();
                     source.hash(&mut hasher);
                     hasher.finish()
@@ -1343,7 +1345,6 @@ macro_rules! shader_glsl_compute {
                     Self::save_sources_variant(std::default::Default::default())
                 }
 
-
                 /// Writes the shader's full composed GLSL source to a file.
                 ///
                 /// The output path is:
@@ -1363,17 +1364,15 @@ macro_rules! shader_glsl_compute {
                     const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
                     let _ = std::fs::create_dir_all(OUT_PATH);
 
-                    let name_hashed = janus::hash_string(stringify!($name));
                     let source = Self::build_sources_variant(variant);
 
                     use std::hash::{Hash, Hasher};
-
                     let mut hasher = std::hash::DefaultHasher::new();
                     source.hash(&mut hasher);
                     let _ = std::fs::write(
                         format!(
                             "{OUT_PATH}/hash.{:#x}-{variant}.comp",
-                            name_hashed.as_u64()
+                            Self::HASHED_NAME
                         ),
                         format!("{}", hasher.finish())
                     );
@@ -1381,7 +1380,7 @@ macro_rules! shader_glsl_compute {
                     let _ = std::fs::write(
                         format!(
                             "{OUT_PATH}/{:#x}-{variant}.comp",
-                            name_hashed.as_u64()
+                            Self::HASHED_NAME
                         ),
                         source
                     );
@@ -1600,7 +1599,8 @@ macro_rules! shader_glsl_compute {
                     }
                 }
 
-                pub unsafe fn from_spirv(spirv_source: &str) -> Self {
+                pub unsafe fn from_spirv(spirv_source: &[u8]) -> Self {
+                    tracing::info!("Compiling {} compute shader from SPIR-V source...", stringify!($name));
                     let shader_unit = $crate::shader::compile_shader_unit_spirv(spirv_source, $crate::shader::ShaderKind::Compute)
                         .expect("failed to compile Compute shader from spir-v source: see logs for details.");
 
