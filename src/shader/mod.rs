@@ -1348,6 +1348,25 @@ macro_rules! shader_glsl_compute {
                 /// Writes the shader's full composed GLSL source to a file.
                 ///
                 /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-default.comp`
+                ///
+                /// The `hashed_name` is hashed using the `fnv1a` algorithm
+                /// with `janus::hash_string`.
+                ///
+                /// Also writes the hashed glsl contents at:
+                /// `target/shaders/glsl/hash.[hashed-name]-default.comp`
+                ///
+                /// The glsl contents are hashed using Rust's `DefaultHasher`,
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn save_sources_with<F: FnOnce(&mut String)>(op: F) {
+                    Self::save_sources_variant_with(std::default::Default::default(), op)
+                }
+
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
                 /// `target/shaders/glsl/[hashed-name]-[variant].comp`
                 ///
                 /// The `hashed_name` is hashed using the `fnv1a` algorithm
@@ -1361,10 +1380,30 @@ macro_rules! shader_glsl_compute {
                 ///
                 /// [`DefaultHasher`]: std::hash::DefaultHasher
                 pub fn save_sources_variant(variant: [< ComputeShader $name Variants >]) {
+                    Self::save_sources_variant_with(variant, |_| {});
+                }
+
+                /// Writes the shader's full composed GLSL source to a file.
+                ///
+                /// The output path is:
+                /// `target/shaders/glsl/[hashed-name]-[variant].comp`
+                ///
+                /// The `hashed_name` is hashed using the `fnv1a` algorithm
+                /// with `janus::hash_string`.
+                ///
+                /// Also writes the hashed glsl contents at:
+                /// `target/shaders/glsl/hash.[hashed-name]-[variant].comp`
+                ///
+                /// The glsl contents are hashed using Rust's `DefaultHasher`,
+                /// which does not specify its internal algorithm.
+                ///
+                /// [`DefaultHasher`]: std::hash::DefaultHasher
+                pub fn save_sources_variant_with<F: FnOnce(&mut String)>(variant: [< ComputeShader $name Variants >], op: F) {
                     const OUT_PATH: &str = $crate::shader::SHADER_SOURCE_OUTPUT;
                     let _ = std::fs::create_dir_all(OUT_PATH);
 
-                    let source = Self::build_sources_variant(variant);
+                    let mut source = Self::build_sources_variant(variant);
+                    op(&mut source);
 
                     use std::hash::{Hash, Hasher};
                     let mut hasher = std::hash::DefaultHasher::new();
@@ -1490,7 +1529,15 @@ macro_rules! shader_glsl_compute {
                     Self::new_compiled_variant(std::default::Default::default())
                 }
 
+                pub fn new_compiled_with<F: FnOnce(&mut String)>(op: F) -> Self {
+                    Self::new_compiled_variant_with(std::default::Default::default(), op)
+                }
+
                 pub fn new_compiled_variant(variant: [< ComputeShader $name Variants >]) -> Self {
+                    Self::new_compiled_variant_with(std::default::Default::default(), |_| {})
+                }
+
+                pub fn new_compiled_variant_with<F: FnOnce(&mut String)>(variant: [< ComputeShader $name Variants >], op: F) -> Self {
                     tracing::info!("Building & compiling compute shader: {} (variant={variant})", stringify!($name));
 
                     let version = $crate::shader::ShadingVersion::core($ver);
@@ -1573,7 +1620,8 @@ macro_rules! shader_glsl_compute {
                     };
                     composer.set_source(source);
 
-                    let full_source = composer.build();
+                    let mut full_source = composer.build();
+                    op(&mut full_source);
                     let shader_unit = $crate::shader::compile_shader_unit(&full_source, $crate::shader::ShaderKind::Compute)
                         .expect(concat!("failed to compile Compute shader: see logs for details."));
 
