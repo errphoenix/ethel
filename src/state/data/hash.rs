@@ -11,7 +11,6 @@ pub struct Cell {
     pub y: i32,
     pub z: i32,
 }
-
 impl Cell {
     pub const X: Cell = Cell::new(1, 0, 0);
     pub const Y: Cell = Cell::new(0, 1, 0);
@@ -38,7 +37,6 @@ impl Cell {
         }
     }
 }
-
 impl std::ops::Neg for Cell {
     type Output = Cell;
 
@@ -50,7 +48,6 @@ impl std::ops::Neg for Cell {
         }
     }
 }
-
 impl std::ops::Add for Cell {
     type Output = Cell;
 
@@ -62,7 +59,6 @@ impl std::ops::Add for Cell {
         }
     }
 }
-
 impl std::ops::Sub for Cell {
     type Output = Cell;
 
@@ -74,7 +70,6 @@ impl std::ops::Sub for Cell {
         }
     }
 }
-
 impl std::ops::Mul<i32> for Cell {
     type Output = Cell;
 
@@ -90,13 +85,11 @@ impl std::ops::Mul<i32> for Cell {
 /// The size of each cell of a spatial hash structure.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct SpatialResolution(f32);
-
 impl Default for SpatialResolution {
     fn default() -> Self {
         Self(Self::DEFAULT_RESOLUTION)
     }
 }
-
 impl SpatialResolution {
     pub const DEFAULT_RESOLUTION: f32 = 1.0;
 
@@ -159,152 +152,75 @@ impl SpatialResolution {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FxSpatialHash<T: Clone + Copy> {
-    map: HashMap<Cell, T>,
+pub trait SpatialHash<T: Clone> {
+    fn inner_map(&self) -> &HashMap<Cell, T>;
+    fn inner_map_mut(&mut self) -> &mut HashMap<Cell, T>;
+    fn resolution(&self) -> SpatialResolution;
+    fn min(&self) -> Cell;
+    fn max(&self) -> Cell;
+    fn min_mut(&mut self) -> &mut Cell;
+    fn max_mut(&mut self) -> &mut Cell;
 
-    /// The amount of cells in a 'unit' of space for each axis
-    pub resolution: SpatialResolution,
-
-    min: Cell,
-    max: Cell,
-}
-
-#[cfg(feature = "rayon")]
-impl<T: Clone + Copy + Sync> FxSpatialHash<T> {
-    pub fn par_iter(&self) -> Iter<'_, Cell, T> {
-        use rayon::iter::IntoParallelRefIterator;
-
-        self.map.par_iter()
+    fn len(&self) -> usize {
+        self.inner_map().len()
     }
-}
-
-impl<T: Default + Clone + Copy> Default for FxSpatialHash<T> {
-    fn default() -> Self {
-        Self {
-            resolution: Default::default(),
-            map: Default::default(),
-            min: Cell::MAX,
-            max: Cell::MIN,
-        }
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
-}
-
-impl<T: Clone + Copy> FxSpatialHash<T> {
-    pub fn new(resolution: SpatialResolution) -> Self {
-        Self {
-            resolution,
-            map: HashMap::default(),
-            min: Cell::MAX,
-            max: Cell::MIN,
-        }
+    fn cells(&self) -> Keys<'_, Cell, T> {
+        self.inner_map().keys()
+    }
+    fn elements(&self) -> Values<'_, Cell, T> {
+        self.inner_map().values()
+    }
+    fn axis_extents(&self) -> Cell {
+        self.max() - self.min()
     }
 
-    pub fn with_capacity(resolution: SpatialResolution, capacity: usize) -> Self {
-        Self {
-            resolution,
-            map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
-            min: Cell::MAX,
-            max: Cell::MIN,
-        }
+    /// Returns the `min, max` world positions of `cell`.
+    fn cell_extents(&self, cell: Cell) -> (glam::Vec3, glam::Vec3) {
+        let p = self.approx_point_at(cell);
+        let hs = self.resolution().0 * 0.5;
+        (p - hs, p + hs)
     }
-
-    pub fn cells(&self) -> Keys<'_, Cell, T> {
-        self.map.keys()
+    fn cell_at(&self, point: glam::Vec3) -> Cell {
+        self.resolution().encode_point(point)
     }
-
-    pub fn elements(&self) -> Values<'_, Cell, T> {
-        self.map.values()
+    fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
+        self.resolution().approx_point(cell)
     }
-
-    pub fn axis_extents(&self) -> Cell {
-        self.max - self.min
-    }
-
-    pub fn min(&self) -> Cell {
-        self.min
-    }
-
-    pub fn max(&self) -> Cell {
-        self.max
+    fn aligned_adjacent_cells(&self, point: glam::Vec3) -> [Cell; 8] {
+        self.resolution().aligned_adjacent_cells(point)
     }
 
     /// Add an `element` to the spatial hash to a specific `cell`.
     ///
     /// # Returns
     /// The previous element present in `cell`, if any.
-    pub fn put(&mut self, cell: Cell, element: T) -> Option<T> {
-        self.min = self.min.min(cell);
-        self.max = self.max.max(cell);
-        self.map.insert(cell, element)
+    fn put(&mut self, cell: Cell, element: T) -> Option<T> {
+        *self.min_mut() = self.min().min(cell);
+        *self.max_mut() = self.max().max(cell);
+        self.inner_map_mut().insert(cell, element)
     }
-
     /// Removes the element placed in `cell`.
     ///
     /// # Returns
     /// The removed elemenet in `cell`, if any.
-    pub fn remove(&mut self, cell: Cell) -> Option<T> {
-        self.map.remove(&cell)
+    fn remove(&mut self, cell: Cell) -> Option<T> {
+        self.inner_map_mut().remove(&cell)
     }
-
     /// Get a reference to the element placed in `cell` if existing.
-    pub fn get(&self, cell: Cell) -> Option<&T> {
-        self.map.get(&cell)
+    fn get(&self, cell: Cell) -> Option<&T> {
+        self.inner_map().get(&cell)
     }
-
     /// Get an exlusive reference to the element placed in `cell` if existing.
-    pub fn get_mut(&mut self, cell: Cell) -> Option<&mut T> {
-        self.map.get_mut(&cell)
+    fn get_mut(&mut self, cell: Cell) -> Option<&mut T> {
+        self.inner_map_mut().get_mut(&cell)
     }
-
-    pub fn clear(&mut self) {
-        self.min = Cell::MAX;
-        self.max = Cell::MIN;
-        self.map.clear();
-    }
-
-    pub fn resolution(&self) -> SpatialResolution {
-        self.resolution
-    }
-
-    /// Returns the `min, max` world positions of `cell`.
-    pub fn cell_extents(&self, cell: Cell) -> (glam::Vec3, glam::Vec3) {
-        let p = self.approx_point_at(cell);
-        let hs = self.resolution.0 * 0.5;
-        (p - hs, p + hs)
-    }
-
-    #[inline]
-    pub fn cell_at(&self, point: glam::Vec3) -> Cell {
-        self.resolution.encode_point(point)
-    }
-
-    #[inline]
-    pub fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
-        self.resolution.approx_point(cell)
-    }
-
-    #[inline]
-    pub fn aligned_adjacent_cells(&self, point: glam::Vec3) -> [Cell; 8] {
-        self.resolution.aligned_adjacent_cells(point)
-    }
-
-    pub fn dump_soa(&mut self, positions: &[glam::Vec3], elements: &[T]) {
-        let resolution = self.resolution;
-        positions
-            .iter()
-            .map(|&point| resolution.encode_point(point))
-            .zip(elements)
-            .for_each(|(cell, &element)| {
-                self.put(cell, element);
-            });
-    }
-
-    pub fn dump_aos(&mut self, data: &[(glam::Vec3, T)]) {
-        data.iter().for_each(|&(point, element)| {
-            let cell = self.cell_at(point);
-            self.put(cell, element);
-        });
+    fn clear(&mut self) {
+        *self.min_mut() = Cell::MAX;
+        *self.max_mut() = Cell::MIN;
+        self.inner_map_mut().clear();
     }
 
     fn cell_query_check(
@@ -317,13 +233,12 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     ) -> bool {
         let o_cell = src_cell + offset_cell;
 
-        if self.map.get(&o_cell).is_some() && (!ignore_self || o_cell != src_cell) {
+        if self.inner_map().get(&o_cell).is_some() && (!ignore_self || o_cell != src_cell) {
             out.push(o_cell);
             *count = count.saturating_sub(1);
         }
         *count < 1
     }
-
     /// Get a specific amount `count` of populated cells nearest to `cell`
     /// within `max_range`.
     ///
@@ -336,7 +251,7 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
     /// * [`Ok`] if all `count` cells were found and written to `out`.
     /// * Otherwise, [`Err`] containing the remaining amount of cells that
     ///   could not be found.
-    pub fn nearest_cells(
+    fn nearest_cells(
         &self,
         cell: Cell,
         count: u32,
@@ -357,7 +272,6 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                     self.cell_query_check(&mut rem, cell, neg_offset, out, ignore_self);
                 }
             }
-
             // y axis
             // skip first and last X cells to avoid duplicates
             for x in (-i + 1)..i {
@@ -368,7 +282,6 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                     self.cell_query_check(&mut rem, cell, neg_offset, out, ignore_self);
                 }
             }
-
             // z axis
             // skip first and last XY cells to avoid duplicates
             for x in (-i + 1)..i {
@@ -383,58 +296,78 @@ impl<T: Clone + Copy> FxSpatialHash<T> {
                 return Ok(());
             }
         }
-
         Err(rem)
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.map.len()
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct FxLsSpatialHash<T: Clone + Copy> {
-    map: HashMap<Cell, Vec<T>>,
+#[cfg(feature = "rayon")]
+pub trait ParIterSpatialHash<T: Clone + Sync> {
+    fn par_iter(&self) -> rayon::collections::hash_map::Iter<'_, Cell, T>;
+}
+#[cfg(feature = "rayon")]
+impl<T: Clone + Sync, S: SpatialHash<T>> ParIterSpatialHash<T> for S {
+    fn par_iter(&self) -> Iter<'_, Cell, T> {
+        use rayon::iter::IntoParallelRefIterator;
+        self.inner_map().par_iter()
+    }
+}
 
+#[derive(Debug, Clone)]
+pub struct FxSpatialHash<T: Clone + Copy> {
+    map: HashMap<Cell, T>,
+
+    /// The amount of cells in a 'unit' of space for each axis
     pub resolution: SpatialResolution,
 
     min: Cell,
     max: Cell,
 }
-
-#[cfg(feature = "rayon")]
-impl<T: Clone + Copy + Sync> FxLsSpatialHash<T> {
-    pub fn par_iter(&self) -> Iter<'_, Cell, Vec<T>> {
-        use rayon::iter::IntoParallelRefIterator;
-
-        self.map.par_iter()
-    }
-}
-
-impl<T: Default + Clone + Copy> Default for FxLsSpatialHash<T> {
+impl<T: Default + Clone + Copy> Default for FxSpatialHash<T> {
     fn default() -> Self {
         Self {
             resolution: Default::default(),
             map: Default::default(),
             min: Cell::MAX,
-            max: Cell::MAX,
+            max: Cell::MIN,
         }
     }
 }
+impl<T: Clone + Copy> SpatialHash<T> for FxSpatialHash<T> {
+    fn inner_map(&self) -> &HashMap<Cell, T> {
+        &self.map
+    }
 
-impl<T: Clone + Copy> FxLsSpatialHash<T> {
+    fn inner_map_mut(&mut self) -> &mut HashMap<Cell, T> {
+        &mut self.map
+    }
+
+    fn resolution(&self) -> SpatialResolution {
+        self.resolution
+    }
+
+    fn min(&self) -> Cell {
+        self.min
+    }
+
+    fn max(&self) -> Cell {
+        self.max
+    }
+
+    fn min_mut(&mut self) -> &mut Cell {
+        &mut self.min
+    }
+
+    fn max_mut(&mut self) -> &mut Cell {
+        &mut self.max
+    }
+}
+impl<T: Clone + Copy> FxSpatialHash<T> {
     pub fn new(resolution: SpatialResolution) -> Self {
         Self {
             resolution,
             map: HashMap::default(),
             min: Cell::MAX,
-            max: Cell::MAX,
+            max: Cell::MIN,
         }
     }
 
@@ -443,96 +376,8 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
             resolution,
             map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
             min: Cell::MAX,
-            max: Cell::MAX,
+            max: Cell::MIN,
         }
-    }
-
-    pub fn cells(&self) -> Keys<'_, Cell, Vec<T>> {
-        self.map.keys()
-    }
-
-    pub fn elements(&self) -> Values<'_, Cell, Vec<T>> {
-        self.map.values()
-    }
-
-    pub fn axis_extents(&self) -> Cell {
-        self.max - self.min
-    }
-
-    pub fn min(&self) -> Cell {
-        self.min
-    }
-
-    pub fn max(&self) -> Cell {
-        self.max
-    }
-
-    /// Add an `element` to the spatial hash to a specific `cell`.
-    pub fn put(&mut self, cell: Cell, element: T) {
-        self.min = self.min.min(cell);
-        self.max = self.max.max(cell);
-        let vec = self.map.entry(cell).or_insert_with(|| Vec::new());
-        vec.push(element);
-    }
-
-    /// Removes the element placed in `cell`.
-    ///
-    /// # Returns
-    /// The removed elemenet in `cell`, if any.
-    pub fn clear_bucket(&mut self, cell: Cell) -> Option<Vec<T>> {
-        self.map.remove(&cell)
-    }
-
-    /// Get a reference to the element placed in `cell` if existing.
-    pub fn get(&self, cell: Cell) -> Option<&Vec<T>> {
-        self.map.get(&cell)
-    }
-
-    /// Get an exlusive reference to the element placed in `cell` if existing.
-    pub fn get_mut(&mut self, cell: Cell) -> Option<&mut Vec<T>> {
-        self.map.get_mut(&cell)
-    }
-
-    /// Clears the contents of all buckets, but keeps their allocations.
-    ///
-    /// Useful when updating the spatial hash every frame.
-    pub fn clear(&mut self) {
-        self.min = Cell::MAX;
-        self.max = Cell::MIN;
-        self.map.values_mut().for_each(Vec::clear);
-    }
-
-    /// Completely trashes all data, deallocating all buckets.
-    pub fn empty(&mut self) {
-        self.min = Cell::MAX;
-        self.max = Cell::MIN;
-        self.map.clear();
-    }
-
-    pub fn resolution(&self) -> SpatialResolution {
-        self.resolution
-    }
-
-    /// Returns the `min, max` world positions of `cell`.
-    pub fn cell_extents(&self, cell: Cell) -> (glam::Vec3, glam::Vec3) {
-        let p = self.approx_point_at(cell);
-        let hs = self.resolution.0 * 0.5;
-        (p - hs, p + hs)
-    }
-
-    #[inline]
-    pub fn cell_at(&self, point: glam::Vec3) -> Cell {
-        self.resolution.encode_point(point)
-    }
-
-    #[inline]
-    pub fn aligned_adjacent_cells(&self, point: glam::Vec3) -> [Cell; 8] {
-        self.resolution.aligned_adjacent_cells(point)
-    }
-
-    #[inline]
-    pub fn approx_point_at(&self, cell: Cell) -> glam::Vec3 {
-        self.resolution.approx_point(cell)
     }
 
     pub fn dump_soa(&mut self, positions: &[glam::Vec3], elements: &[T]) {
@@ -550,6 +395,109 @@ impl<T: Clone + Copy> FxLsSpatialHash<T> {
         data.iter().for_each(|&(point, element)| {
             let cell = self.cell_at(point);
             self.put(cell, element);
+        });
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FxLsSpatialHash<T: Clone + Copy> {
+    map: HashMap<Cell, Vec<T>>,
+
+    pub resolution: SpatialResolution,
+
+    min: Cell,
+    max: Cell,
+}
+impl<T: Default + Clone + Copy> Default for FxLsSpatialHash<T> {
+    fn default() -> Self {
+        Self {
+            resolution: Default::default(),
+            map: Default::default(),
+            min: Cell::MAX,
+            max: Cell::MIN,
+        }
+    }
+}
+impl<T: Clone + Copy> SpatialHash<Vec<T>> for FxLsSpatialHash<T> {
+    fn inner_map(&self) -> &HashMap<Cell, Vec<T>> {
+        &self.map
+    }
+
+    fn inner_map_mut(&mut self) -> &mut HashMap<Cell, Vec<T>> {
+        &mut self.map
+    }
+
+    fn resolution(&self) -> SpatialResolution {
+        self.resolution
+    }
+
+    fn min(&self) -> Cell {
+        self.min
+    }
+
+    fn max(&self) -> Cell {
+        self.max
+    }
+
+    fn min_mut(&mut self) -> &mut Cell {
+        &mut self.min
+    }
+
+    fn max_mut(&mut self) -> &mut Cell {
+        &mut self.max
+    }
+}
+impl<T: Clone + Copy> FxLsSpatialHash<T> {
+    pub fn new(resolution: SpatialResolution) -> Self {
+        Self {
+            resolution,
+            map: HashMap::default(),
+            min: Cell::MAX,
+            max: Cell::MIN,
+        }
+    }
+
+    pub fn with_capacity(resolution: SpatialResolution, capacity: usize) -> Self {
+        Self {
+            resolution,
+            map: HashMap::with_capacity_and_hasher(capacity, Default::default()),
+            min: Cell::MAX,
+            max: Cell::MIN,
+        }
+    }
+
+    /// Add an `element` to the spatial hash to a specific `cell`.
+    pub fn put_element(&mut self, cell: Cell, element: T) {
+        self.min = self.min.min(cell);
+        self.max = self.max.max(cell);
+        let vec = self.map.entry(cell).or_insert_with(|| Vec::new());
+        vec.push(element);
+    }
+
+    /// Clears the contents of all buckets, but keeps their allocations.
+    ///
+    /// Useful when updating the spatial hash every frame.
+    pub fn clear_buckets(&mut self) {
+        self.min = Cell::MAX;
+        self.max = Cell::MIN;
+        self.map.values_mut().for_each(Vec::clear);
+    }
+
+    pub fn dump_soa(&mut self, positions: &[glam::Vec3], elements: &[T]) {
+        let resolution = self.resolution;
+        positions
+            .iter()
+            .map(|&point| resolution.encode_point(point))
+            .zip(elements)
+            .for_each(|(cell, &element)| {
+                self.put_element(cell, element);
+            });
+    }
+
+    pub fn dump_aos(&mut self, data: &[(glam::Vec3, T)]) {
+        data.iter().for_each(|&(point, element)| {
+            let cell = self.cell_at(point);
+            self.put_element(cell, element);
         });
     }
 }

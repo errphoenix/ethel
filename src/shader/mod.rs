@@ -1534,7 +1534,7 @@ macro_rules! shader_glsl_compute {
                 }
 
                 pub fn new_compiled_variant(variant: [< ComputeShader $name Variants >]) -> Self {
-                    Self::new_compiled_variant_with(std::default::Default::default(), |_| {})
+                    Self::new_compiled_variant_with(variant, |_| {})
                 }
 
                 pub fn new_compiled_variant_with<F: FnOnce(&mut String)>(variant: [< ComputeShader $name Variants >], op: F) -> Self {
