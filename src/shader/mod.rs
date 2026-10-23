@@ -1816,7 +1816,7 @@ mod tests {
                 };
 
                 uniform {
-                    on 0 => view : mat4 from glam::Mat4;
+                    on 1 => view : mat4 from glam::Mat4;
                 };
 
                 lib {
@@ -1883,8 +1883,7 @@ mod tests {
 
             const float FIXED_POS = 1.000;
 
-            uniform mat4 projection;
-
+            layout(location = 0) uniform mat4 projection;
             void main() {
             //do cool stuff
             gl_Position = vec4(FIXED_POS);
@@ -1911,10 +1910,8 @@ mod tests {
 
             out vec4 outColor;
 
-            uniform mat4 projection;
-
-            uniform mat4 view;
-
+            layout(location = 0) uniform mat4 projection;
+            layout(location = 1) uniform mat4 view;
             float halve(float num) {
             return num * 0.5;
             }

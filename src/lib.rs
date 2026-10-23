@@ -1,16 +1,16 @@
 pub mod mesh;
+pub mod prelude;
 pub mod render;
 pub mod shader;
 pub mod state;
+
+pub use prelude::*;
 
 #[cfg(feature = "profile")]
 pub mod profile;
 
 #[cfg(feature = "assets")]
 pub mod assets;
-
-#[allow(unused_imports)]
-pub use state::data;
 
 use janus::{
     input::InputState,

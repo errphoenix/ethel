@@ -581,7 +581,7 @@ mod tests {
     #[test]
     fn shader_compose_glsl_uniform() {
         let mut uo = 0;
-        const TEST: &str = "layout(location = 4) uniform mat4 projection;\n";
+        const TEST: &str = "layout(location = 4) uniform mat4 projection;";
         let uniform = shader_glsl_internal_uniform!(on 4 => projection : mat4; uo);
         assert_eq!(TEST, uniform.as_str());
     }
