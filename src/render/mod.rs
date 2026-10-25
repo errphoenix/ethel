@@ -36,13 +36,21 @@ pub fn projection_perspective(width: f32, height: f32, fov_degrees: f32) -> glam
     )
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct Resolution {
     dirty: bool,
     pub width: f32,
     pub height: f32,
 }
-
+impl Default for Resolution {
+    fn default() -> Self {
+        Self {
+            dirty: true,
+            width: 1280f32,
+            height: 720f32,
+        }
+    }
+}
 impl Resolution {
     pub fn is_changed(&self) -> bool {
         self.dirty
@@ -88,13 +96,11 @@ pub struct ScreenSpace {
     ortho_proj: glam::Mat4,
     fov: f32,
 }
-
 impl Default for ScreenSpace {
     fn default() -> Self {
         Self::new(Resolution::default(), Self::DEFAULT_FOV_DEG)
     }
 }
-
 impl ScreenSpace {
     pub const DEFAULT_FOV_DEG: f32 = 90.0;
 

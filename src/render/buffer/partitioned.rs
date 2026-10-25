@@ -81,17 +81,12 @@ macro_rules! assert_partition {
 pub struct PartitionedBuffer<const PARTS: usize> {
     gl_obj: u32,
     layout: Layout<PARTS>,
-    ptr: *mut u8,
-    lengths: [UnsafeCell<u32>; PARTS],
 }
 impl<const PARTS: usize> Default for PartitionedBuffer<PARTS> {
     fn default() -> Self {
-        let lengths = std::array::from_fn(|_| UnsafeCell::new(0));
         Self {
             gl_obj: Default::default(),
             layout: Default::default(),
-            ptr: Default::default(),
-            lengths,
         }
     }
 }
@@ -107,30 +102,19 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         let mut gl_obj = 0;
         let buffer_size = layout.len() as isize;
 
-        let ptr = unsafe {
+        unsafe {
             janus::gl::GenBuffers(1, &mut gl_obj);
             janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, gl_obj);
-
-            let flags = janus::gl::MAP_WRITE_BIT
-                | janus::gl::MAP_COHERENT_BIT
-                | janus::gl::MAP_PERSISTENT_BIT;
+            let flags = janus::gl::DYNAMIC_STORAGE_BIT;
             janus::gl::BufferStorage(
                 janus::gl::COPY_WRITE_BUFFER,
                 buffer_size,
                 std::ptr::null(),
-                flags | janus::gl::DYNAMIC_STORAGE_BIT,
+                flags,
             );
-
-            janus::gl::MapBufferRange(janus::gl::COPY_WRITE_BUFFER, 0, buffer_size, flags)
-        } as *mut u8;
-
-        let lengths = std::array::from_fn(|_| UnsafeCell::new(0));
-        Self {
-            gl_obj,
-            layout,
-            ptr,
-            lengths,
         }
+
+        Self { gl_obj, layout }
     }
 
     pub fn initialise_partition<T: Sized + Clone, F: Fn() -> T>(
@@ -155,14 +139,16 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
                     std::ptr::null(),
                 );
             },
-            InitStrategy::FillWith(func) => {
-                let len = len / size_of::<T>();
-                unsafe {
-                    let ptr = self.ptr.add(offset) as *mut T;
-                    for i in 0..len {
-                        std::ptr::write(ptr.add(i), func());
-                    }
-                }
+            InitStrategy::FillWith(_func) => {
+                todo!()
+                //todo
+                // let len = len / size_of::<T>();
+                // unsafe {
+                //     let ptr = self.ptr.add(offset) as *mut T;
+                //     for i in 0..len {
+                //         std::ptr::write(ptr.add(i), func());
+                //     }
+                // }
             }
         }
     }
@@ -266,167 +252,6 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         }
     }
 
-    pub unsafe fn set_length(&self, part: usize, length: u32) {
-        let p = self.lengths[part].get() as *mut u32;
-        unsafe {
-            *p = length;
-        }
-    }
-
-    pub fn length(&self, part: usize) -> usize {
-        (unsafe { *self.lengths[part].get() }) as usize
-    }
-
-    /// Copy the given `data` in the storage buffer at a given `offset`.
-    ///
-    /// This is the equivalent of a `memcpy` operation.
-    ///
-    /// The given `offset` must be in bytes.
-    ///
-    /// Also see [PartitionedBuffer::blit_part].
-    ///
-    /// # Panics
-    /// * If `offset` is greater than the length of the buffer.
-    pub unsafe fn blit_whole(&self, data: &[u8], offset: usize) {
-        let src = data.as_ptr();
-        let total_size = self.layout.len();
-
-        assert!(
-            total_size > offset,
-            "attempted to blit at offset {offset} but buffer size is only {total_size}"
-        );
-
-        let avail = total_size - offset;
-        let data_len = avail.min(data.len());
-        unsafe {
-            std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), data_len);
-        }
-    }
-
-    /// Get an immutable view to the contents of the buffer.
-    ///
-    /// Also see [PartitionedBuffer::view_part].
-    ///
-    /// # Return
-    /// Returns a slice of bytes of the contents of the buffer.
-    /// The returned slice is in bytes, a it may contain other sub-sections of
-    /// varying types.
-    pub unsafe fn view_whole(&self) -> View<'_, u8> {
-        let length = self.layout.len();
-        unsafe {
-            let slice = std::slice::from_raw_parts(self.ptr, length);
-            View {
-                slice,
-                offset: 0,
-                length: length as u32,
-                source: self.gl_obj,
-            }
-        }
-    }
-
-    pub unsafe fn view_whole_raw(&self) -> (*mut u8, usize) {
-        (self.ptr, self.layout.len())
-    }
-
-    /// Get a mutable view to the contents of the buffer.
-    ///
-    /// Also see [PartitionedBuffer::view_part_mut].
-    ///
-    /// # Return
-    /// Returns a slice of bytes of the contents of the buffer.
-    /// The returned slice is in bytes, a it may contain other sub-sections of
-    /// varying types.
-    pub unsafe fn view_whole_mut(&self) -> ViewMut<'_, u8> {
-        let length = self.layout.len();
-        unsafe {
-            let slice = std::slice::from_raw_parts_mut(self.ptr, length);
-            ViewMut {
-                slice,
-                offset: 0,
-                length: length as u32,
-                source: self.gl_obj,
-            }
-        }
-    }
-
-    /// Get an immutable view to the contents of a `partition` of the buffer.
-    ///
-    /// A `partition` represents a contiguous stream of data of the same type.
-    ///
-    /// # Return
-    /// An immutable slice of the partition of a section of the buffer, casted
-    /// to the `T` type parameter of the function.
-    ///
-    /// # Safety
-    /// The type parameter `T` cannot be verified to be the actual type of the
-    /// data in this partition, the caller must ensure this is always the case.
-    ///
-    ///  # Panic
-    /// * If `partition` is invalid, i.e. it is greater than the `PARTS`
-    ///   constant type parameter.
-    pub unsafe fn view_part<T: Sized>(&self, partition: usize) -> View<'_, T> {
-        assert_partition!(PARTS, partition);
-
-        let offset = self.layout.offset_at(partition);
-        let cap = self.layout.length_at(partition) / size_of::<T>();
-        let len = self.length(partition);
-
-        unsafe {
-            let ptr = self.ptr.add(offset) as *const T;
-            let slice = std::slice::from_raw_parts(ptr, cap);
-            View {
-                slice,
-                offset: offset as u32,
-                length: len as u32,
-                source: self.gl_obj,
-            }
-        }
-    }
-
-    pub unsafe fn view_part_raw<T: Sized>(&self, partition: usize) -> (*mut T, usize) {
-        assert_partition!(PARTS, partition);
-
-        let offset = self.layout.offset_at(partition);
-        let length = self.layout.length_at(partition) / size_of::<T>();
-
-        let ptr = unsafe { self.ptr.add(offset) as *mut T };
-        (ptr, length)
-    }
-
-    /// Get a mutable view to the contents of a `partition` of the buffer.
-    ///
-    /// A `partition` represents a contiguous stream of data of the same type.
-    ///
-    /// # Return
-    /// A mutable slice of the partition of a section of the buffer, casted to
-    /// the `T` type parameter of the function.
-    ///
-    /// # Safety
-    /// The type parameter `T` cannot be verified to be the actual type of the
-    /// data in this partition, the caller must ensure this is always the case.
-    ///
-    /// # Panic
-    /// * If `partition` is invalid, i.e. it is greater than the `PARTS`
-    ///   constant type parameter.
-    pub unsafe fn view_part_mut<T: Sized>(&self, partition: usize) -> ViewMut<'_, T> {
-        assert_partition!(PARTS, partition);
-
-        let offset = self.layout.offset_at(partition);
-        let cap = self.layout.length_at(partition) / size_of::<T>();
-        let len = self.length(partition);
-
-        unsafe {
-            let ptr = self.ptr.add(offset) as *mut T;
-            let slice = std::slice::from_raw_parts_mut(ptr, cap);
-            ViewMut {
-                slice,
-                offset: offset as u32,
-                length: len as u32,
-                source: self.gl_obj,
-            }
-        }
-    }
-
     /// Returns the capacity (in bytes) of the specified `partition`.
     pub fn capacity(&self, partition: usize) -> usize {
         self.layout.length_at(partition)
@@ -452,11 +277,9 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         &self,
         partition: usize,
         data: &[T],
-        offset: usize,
+        offset: usize, // already in bytes
     ) {
         assert_partition!(PARTS, partition);
-
-        let src = data.as_ptr();
 
         let partition_len = self.layout.length_at(partition);
         assert!(
@@ -470,128 +293,17 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
         // safe length of data, in bytes
         let data_len = avail.min(data_bytes);
+        let src = data.as_ptr();
 
-        let total_len = (offset + data_len) / size_of::<T>();
+        // all lengths and offsets are in bytes
         unsafe {
-            self.set_length(partition, total_len as u32);
-        }
-
-        // SAFETY: we assert the partition is valid within this
-        // buffer's layout. The buffer's layout, in turn, guarantees valid
-        // offsets and base lengths.
-        // The caller guarantees the pointer to `data` must always be valid.
-        // Additionally, the caller must also ensure that the size of `T`
-        // corresponds to the same size of the type present on the GPU buffers.
-        unsafe {
-            let dst = self.ptr.add(global_offset) as *mut T;
-            std::ptr::copy_nonoverlapping(src, dst, data_len / size_of::<T>());
-        }
-    }
-
-    /// Copy the given `data` in a `partition` of the buffer at the given byte
-    /// `offset` with a padding of `pad_lan` at the end of each element.
-    ///
-    /// A `partition` represents a contiguous stream of data of the same time.
-    ///
-    /// Note that this will update the internal length of the `partition`,
-    /// which includes `offset`: (`offset + size_of(T) * data.length`)
-    ///
-    /// This function is intended for operations where the CPU and GPU data
-    /// representations differ due to memory alignment requirements.
-    ///
-    /// Note that this operation is likely slower than the standard
-    /// [`blit_part`].
-    ///
-    /// It is, in most cases, not recommended and [`blit_part`] should be
-    /// preferred if possible.
-    ///
-    /// **Note**: to ensure correct memory offsets and lengths, the type
-    /// described in the [`Layout`] of this buffer must correspond to the type
-    /// present on the GPU.
-    ///
-    /// # Motivation
-    /// Imagine you want to pass a position vector to the GPU: this is a
-    /// 3-dimensional vector on the CPU, but it must be a vec4 on the GPU due
-    /// to OpenGL's SSBO alignment requirements.
-    ///
-    /// In most cases, to avoid this issue, you would likely settle for an
-    /// intermediary buffer on the CPU where this conversion happens or you
-    /// could simply just store all positions as a 4-dimensional vector on the
-    /// CPU (maybe intelligently packing relevant data on the W component) if
-    /// it is not performance critical.
-    ///
-    /// In some cases, though, like visualising physics data, using a
-    /// 4-dimensional is not an option as it would pollute the CPU cache with
-    /// an unused float in a very performance critical scenario.
-    ///
-    /// This is the reason this function exists: it will pad out each element
-    /// of `data` with the given `pad_len` in bytes to satisfy SSBO alignment
-    /// requirements, without the need of intermediary buffers on the CPU.
-    ///
-    /// # Safety
-    /// The type parameter `T` cannot be verified to be the actual type of the
-    /// data in this partition, the caller must ensure this is always the case.
-    ///
-    /// Additionally, the caller must always ensure that the size of
-    /// `T + pad_len` corresponds to the required alignment for this partition
-    /// on the GPU: an incorrect value will produce undefined behaviour,
-    /// crashes, or VRAM corruption.
-    ///
-    /// # Panic
-    /// * If `partition` is not a valid partition, i.e. it is greater than the
-    ///   `PARTS`constant type parameter.
-    /// * If `offset` is greater than the length of the partition.
-    ///
-    /// [`blit_part`]: PartitionedBuffer::blit_part
-    pub unsafe fn blit_part_padded<T: Sized + Clone + Copy>(
-        &self,
-        partition: usize,
-        data: &[T],
-        offset: usize,
-        pad_len: usize,
-    ) {
-        if pad_len == 0 {
-            // SAFETY: invariants correspond to those of this function.
-            unsafe { self.blit_part(partition, data, offset) };
-            return;
-        }
-
-        assert_partition!(PARTS, partition);
-
-        let partition_len = self.layout.length_at(partition);
-        assert!(
-            partition_len > offset,
-            "attempted to blit at offset {offset} with partition length {partition_len}"
-        );
-
-        let avail = partition_len - offset;
-        let global_offset = self.layout.offset_at(partition) + offset;
-
-        let data_bytes_padded = size_of::<T>() + pad_len;
-        let avail_count = avail / data_bytes_padded;
-        let data_count = data.len();
-
-        // safe total length of data, element count
-        let data_len = avail_count.min(data_count);
-        let total_len = (offset + data_len) / size_of::<T>();
-        unsafe {
-            self.set_length(partition, total_len as u32);
-        }
-
-        // SAFETY: we assert the partition is valid within this buffer's
-        // layout. The buffer's layout, in turn, guarantees valid offsets
-        // and base lengths.
-        // The caller guarantees the pointer to `data` must always be valid.
-        // Additionally, the caller must also ensure that that the length of
-        // T + `pad_len` correspond to the size of the type on the GPU.
-        unsafe {
-            let mut dst = self.ptr.add(global_offset);
-            for i in 0..data_len {
-                std::ptr::write_unaligned(dst as *mut T, data[i]);
-                dst = dst.add(size_of::<T>());
-                dst.write_bytes(0, pad_len);
-                dst = dst.add(pad_len);
-            }
+            janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, self.gl_obj);
+            janus::gl::BufferSubData(
+                janus::gl::COPY_WRITE_BUFFER,
+                global_offset as isize,
+                data_len as isize,
+                src.cast(),
+            );
         }
     }
 }
@@ -599,10 +311,8 @@ impl<const PARTS: usize> Drop for PartitionedBuffer<PARTS> {
     fn drop(&mut self) {
         unsafe {
             janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, self.gl_obj);
-            janus::gl::UnmapBuffer(janus::gl::COPY_WRITE_BUFFER);
             janus::gl::DeleteBuffers(1, &self.gl_obj);
         }
-        self.ptr = std::ptr::null_mut();
     }
 }
 
@@ -1313,7 +1023,7 @@ macro_rules! typed_part_tribuffer {
                         self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>()
                     }
 
-                    /// Blit `data` to its partitioned on the buffer starting
+                    /// Blit `data` to its partition on the buffer starting
                     /// from the specified `offset`.
                     ///
                     /// The `offset` must be in number of elements.
@@ -1329,7 +1039,7 @@ macro_rules! typed_part_tribuffer {
                         }
                     }
 
-                    /// Blit `data` to its partitioned on the buffer starting
+                    /// Blit `data` to its partition on the buffer starting
                     /// from the specified `offset` with a `padding`.
                     ///
                     /// The `offset` must be in number of elements.
@@ -1423,32 +1133,7 @@ macro_rules! typed_part_buffer {
                 }
 
                 $(
-                    pub fn [< view_ $part:lower >](&self) -> $crate::render::buffer::View<'_, $part_ty> {
-                        unsafe {
-                            self.0.view_part(
-                                $part_idx as usize,
-                            )
-                        }
-                    }
-
-                    pub fn [< view_ $part:lower _mut >](&self) -> $crate::render::buffer::ViewMut<'_, $part_ty> {
-                        unsafe {
-                            self.0.view_part_mut(
-                                $part_idx as usize,
-                            )
-                        }
-                    }
-
-                    pub fn [< length_ $part:lower >](&self) -> usize {
-                        self.0.length($part_idx as usize)
-                    }
-
-                    /// Returns capacity of a partition, as number of elements.
-                    pub fn [< capacity_ $part:lower >](&self) -> usize {
-                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>()
-                    }
-
-                    /// Blit `data` to its partitioned on the buffer starting
+                    /// Blit `data` to its partition on the buffer starting
                     /// from the specified `offset`.
                     ///
                     /// The `offset` must be in number of elements.
@@ -1463,25 +1148,9 @@ macro_rules! typed_part_buffer {
                         }
                     }
 
-                    /// Blit `data` to its partitioned on the buffer starting
-                    /// from the specified `offset` with a `padding`.
-                    ///
-                    /// The `offset` must be in number of elements.
-                    pub unsafe fn [< blit_ $part:lower _padded >]<T: Sized + Clone + Copy>(
-                        &self,
-                        data: &[T],
-                        offset: usize,
-                        padding: usize
-                    ) {
-                        let offset = std::mem::size_of::<T>() * offset;
-                        unsafe {
-                            self.0.blit_part_padded(
-                                $part_idx as usize,
-                                data,
-                                offset,
-                                padding,
-                            );
-                        }
+                    /// Returns capacity of a partition, as number of elements.
+                    pub fn [< capacity_ $part:lower >](&self) -> usize {
+                        self.0.capacity($part_idx as usize) / std::mem::size_of::<$part_ty>()
                     }
 
                     pub fn [< bind_ssbo_ $part:lower >](&self, ssbo_index: Option<u32>) {

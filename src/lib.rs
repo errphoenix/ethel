@@ -18,17 +18,12 @@ use janus::{
 };
 
 use crate::{
-    mesh::MeshStaging,
     render::{
-        MeshBuffers, Renderer, Resolution, ScreenSpace,
-        buffer::{self, Layout, StorageSection},
-        command::{DrawGroups, GpuCommandQueue},
+        MeshBuffers,
+        buffer::{self, Layout},
+        command::DrawGroups,
     },
-    state::{
-        InputEvent, State,
-        camera::ViewPoint,
-        cross::{self, Cross, Producer},
-    },
+    state::cross::{self, Cross, Producer},
 };
 
 pub type InputSystem = InputState<{ janus::input::SLOT_COUNT }, { janus::input::SECTION_COUNT }>;

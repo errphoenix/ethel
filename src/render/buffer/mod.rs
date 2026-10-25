@@ -370,10 +370,9 @@ where
 #[derive(Default, Debug)]
 pub struct SingleBuffer<T: Sized + Clone + Copy> {
     gl_obj: u32,
-    ptr: *mut T,
-    length: UnsafeCell<u32>,
     /// This is number of elements.
     capacity: usize,
+    _marker: std::marker::PhantomData<T>,
 }
 unsafe impl<T> Sync for SingleBuffer<T> where T: Sized + Clone + Copy {}
 unsafe impl<T> Send for SingleBuffer<T> where T: Sized + Clone + Copy {}
@@ -397,17 +396,11 @@ where
         let mut gl_obj = 0;
         let total_size = (capacity * size_of::<T>()) as isize;
 
-        let ptr = unsafe {
+        unsafe {
             janus::gl::CreateBuffers(1, &mut gl_obj);
-
-            let flags = janus::gl::MAP_WRITE_BIT
-                | janus::gl::MAP_READ_BIT
-                | janus::gl::MAP_COHERENT_BIT
-                | janus::gl::MAP_PERSISTENT_BIT;
-
+            let flags = janus::gl::DYNAMIC_STORAGE_BIT;
             janus::gl::NamedBufferStorage(gl_obj, total_size, std::ptr::null(), flags);
-            janus::gl::MapNamedBufferRange(gl_obj, 0, total_size, flags) as *mut T
-        };
+        }
 
         match init {
             InitStrategy::Zero => unsafe {
@@ -420,21 +413,33 @@ where
                 );
             },
             InitStrategy::FillWith(func) => {
-                for j in 0..capacity {
-                    unsafe {
-                        std::ptr::write(ptr.add(j), func());
-                    }
+                let contents = vec![func(); capacity];
+                unsafe {
+                    janus::gl::NamedBufferSubData(gl_obj, 0, total_size, contents.as_ptr().cast());
                 }
             }
         }
 
-        let length = UnsafeCell::new(0);
-
         Self {
             gl_obj,
-            ptr,
-            length,
             capacity,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn write(&self, data: &[T], offset: usize) {
+        let offset = offset.min(self.capacity);
+        let length = data.len();
+        let end = offset + length;
+        let checked_end = end.min(self.capacity);
+        let length = length - (end - checked_end);
+        unsafe {
+            janus::gl::NamedBufferSubData(
+                self.gl_obj,
+                (offset * size_of::<T>()) as isize,
+                (length * size_of::<T>()) as isize,
+                data.as_ptr().cast(),
+            );
         }
     }
 
@@ -471,191 +476,8 @@ where
         }
     }
 
-    pub const unsafe fn view(&self) -> View<'_, T> {
-        let slice = unsafe { std::slice::from_raw_parts(self.ptr, self.capacity) };
-        let length = unsafe { *self.length.get() };
-
-        View {
-            slice,
-            length,
-            offset: 0,
-            source: self.gl_obj,
-        }
-    }
-
-    pub const unsafe fn view_mut(&self) -> ViewMut<'_, T> {
-        let slice = unsafe { std::slice::from_raw_parts_mut(self.ptr, self.capacity) };
-        let length = unsafe { *self.length.get() };
-
-        ViewMut {
-            slice,
-            length,
-            offset: 0,
-            source: self.gl_obj,
-        }
-    }
-
-    /// View the whole allocated memory block.
-    pub const unsafe fn view_all(&self) -> View<'_, T> {
-        let slice = unsafe { std::slice::from_raw_parts(self.ptr, self.capacity) };
-        let length = self.capacity as u32;
-        View {
-            slice,
-            length,
-            offset: 0,
-            source: self.gl_obj,
-        }
-    }
-
-    /// View the whole allocated memory block.
-    pub const unsafe fn view_all_mut(&self) -> ViewMut<'_, T> {
-        let slice = unsafe { std::slice::from_raw_parts_mut(self.ptr, self.capacity) };
-        let length = self.capacity as u32;
-        ViewMut {
-            slice,
-            length,
-            offset: 0,
-            source: self.gl_obj,
-        }
-    }
-
-    pub const unsafe fn set_length(&self, length: u32) {
-        let p = self.length.get() as *mut u32;
-        unsafe {
-            *p = length;
-        }
-    }
-
-    pub const fn length(&self) -> usize {
-        (unsafe { *self.length.get() }) as usize
-    }
-
     pub const fn capacity(&self) -> usize {
         self.capacity
-    }
-
-    pub const unsafe fn raw(&self) -> *mut T {
-        self.ptr
-    }
-
-    /// Copy the given `data` into buffer at a given `offset`.
-    ///
-    /// This is the equivalent of a `memcpy` operation.
-    ///
-    /// The given `offset` must be the amount of elements `T` to skip inside
-    /// of the buffer, not bytes.
-    ///
-    /// If the length of `data` exceeds the capacity of the buffer, it will be
-    /// automatically clamped and any exceeding elements will be ignored.
-    ///
-    /// # Panics
-    /// * If `offset` is greater than the length of the buffer.
-    pub unsafe fn blit(&self, data: &[T], offset: usize) {
-        assert!(
-            self.capacity > offset,
-            "attempted to blit at offset {offset} with buffer capacity {}",
-            self.capacity
-        );
-
-        let src = data.as_ptr();
-        let avail = self.capacity - offset;
-        let len = avail.min(data.len());
-        unsafe { *(self.length.get()) = len as u32 };
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(src, self.ptr.add(offset), len);
-        }
-    }
-
-    /// Copy the given `data` into the buffer at a given `offset` with a
-    /// padding of `pad_lan` at the end of each element.
-    ///
-    /// If the length of `data` exceeds the capacity of the buffer, it will be
-    /// automatically clamped and any exceeding elements will be ignored.
-    ///
-    /// This function is intended for operations where the CPU and GPU data
-    /// representations differ due to memory alignment requirements.
-    ///
-    /// Note that this operation is likely slower than the standard [`blit`].
-    ///
-    /// It is, in most cases, not recommended and [`blit`] should be
-    /// preferred if possible.
-    ///
-    /// # Motivation
-    /// Imagine you want to pass a position vector to the GPU: this is a
-    /// 3-dimensional vector on the CPU, but it must be a vec4 on the GPU due
-    /// to OpenGL's SSBO alignment requirements.
-    ///
-    /// In most cases, to avoid this issue, you would likely settle for an
-    /// intermediary buffer on the CPU where this conversion happens or you
-    /// could simply just store all positions as a 4-dimensional vector on the
-    /// CPU (maybe intelligently packing relevant data on the W component) if
-    /// it is not performance critical.
-    ///
-    /// In some cases, though, like visualising physics data, using a
-    /// 4-dimensional is not an option as it would pollute the CPU cache with
-    /// an unused float in a very performance critical scenario.
-    ///
-    /// This is the reason this function exists: it will pad out each element
-    /// of `data` with the given `pad_len` in bytes to satisfy SSBO alignment
-    /// requirements, without the need of intermediary buffers on the CPU.
-    ///
-    /// # Panics
-    /// * If `offset` is greater than the length of the section.
-    /// * If the size of the given type `S` + `pad_len` does not match the size
-    ///   of the buffer type `T`.
-    /// * If `pad_len` is 0.
-    ///
-    /// [`blit`]: SingleBuffer::blit
-    pub unsafe fn blit_padded<S: Clone + Copy + Default>(
-        &self,
-        data: &[S],
-        offset: usize,
-        pad_len: usize,
-    ) {
-        assert_ne!(
-            pad_len, 0,
-            "cannot blit with padding: invalid padding value of 0"
-        );
-
-        assert!(
-            self.capacity > offset,
-            "attempted to blit at offset {offset} with section length {}",
-            self.capacity
-        );
-
-        let avail = self.capacity * size_of::<T>() - offset;
-        let data_bytes_padded = size_of::<S>() + pad_len;
-        assert_eq!(
-            data_bytes_padded,
-            size_of::<T>(),
-            "cannot blit with padding: expected type size of {} bytes (T), but got: {} bytes (S) + {pad_len} bytes (padding) = {data_bytes_padded} bytes",
-            size_of::<T>(),
-            size_of::<S>(),
-        );
-
-        let avail_count = avail / data_bytes_padded;
-        let data_count = data.len();
-
-        // safe total length of data, element count
-        let data_len = avail_count.min(data_count);
-        unsafe { *(self.length.get()) = data_len as u32 };
-
-        // SAFETY: we assert the section and partition are valid within this
-        // buffer's layout. The buffer's layout, in turn, guarantees valid
-        // base offsets and base lengths.
-        // The caller guarantees the pointer to `data` must always be valid.
-        // Additionally, the caller must also ensure that that the length of
-        // T + `pad_len` correspond to the size of the type on the GPU.
-        unsafe {
-            let mut dst = (self.ptr as *mut u8).add(offset);
-            for i in 0..data_len {
-                std::ptr::write_unaligned(dst as *mut S, data[i]);
-                dst = dst.add(size_of::<S>());
-                dst.write_bytes(0, pad_len);
-                dst = dst.add(pad_len);
-            }
-        }
     }
 }
 impl<T> Drop for SingleBuffer<T>
@@ -664,10 +486,8 @@ where
 {
     fn drop(&mut self) {
         unsafe {
-            janus::gl::UnmapNamedBuffer(self.gl_obj);
             janus::gl::DeleteBuffers(1, &self.gl_obj);
         }
-        self.ptr = std::ptr::null_mut();
     }
 }
 
@@ -852,6 +672,70 @@ impl StorageSection {
             Self::Front => 0,
             Self::Back => 1,
             Self::Spare => 2,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BufferName {
+    Named(u32),
+    Target { id: u32, target: u32 },
+}
+
+#[derive(Debug)]
+pub struct BufferMapping<'buffer, T: Sized + Clone + Copy> {
+    name: BufferName,
+    pointer: *mut T,
+    capacity: usize,
+    _marker: std::marker::PhantomData<&'buffer ()>,
+}
+impl<'buffer, T: Sized + Clone + Copy> janus::GpuResource for BufferMapping<'buffer, T> {
+    fn resource_id(&self) -> u32 {
+        match self.name {
+            BufferName::Named(name) => name,
+            BufferName::Target { id, .. } => id,
+        }
+    }
+}
+impl<'buffer, T: Sized + Clone + Copy> Drop for BufferMapping<'buffer, T> {
+    fn drop(&mut self) {
+        unsafe {
+            match self.name {
+                BufferName::Named(name) => {
+                    janus::gl::UnmapNamedBuffer(name);
+                }
+                BufferName::Target { id, target } => {
+                    janus::gl::BindBuffer(target, id);
+                    janus::gl::UnmapBuffer(target);
+                }
+            }
+        }
+    }
+}
+impl<'buffer, T: Sized + Clone + Copy> BufferMapping<'buffer, T> {
+    pub fn write(&self, data: &[T], offset: usize) {
+        let length = data.len();
+        let offset = self.capacity.min(offset);
+        let unchecked_end = offset + length;
+        let checked_end = unchecked_end.min(self.capacity);
+        let safe_length = length - (unchecked_end - checked_end);
+        unsafe {
+            let dst = self.pointer.add(offset);
+            std::ptr::copy_nonoverlapping(data.as_ptr(), dst, safe_length);
+        }
+    }
+
+    pub fn fill(&self, data: T, offset: usize, length: usize) {
+        let offset = self.capacity.min(offset);
+        let unchecked_end = offset + length;
+        let checked_end = unchecked_end.min(self.capacity);
+        let safe_length = length - (unchecked_end - checked_end);
+        unsafe {
+            let mut dst = self.pointer.add(offset);
+            for i in 0..safe_length {
+                std::ptr::write(dst, data);
+                dst = dst.add(i);
+            }
         }
     }
 }
