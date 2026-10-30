@@ -16,6 +16,24 @@ impl Id {
         self.0 == 0
     }
 }
+impl crate::shader::Glsl for Id {
+    fn to_glsl() -> &'static str {
+        <u32 as crate::shader::Glsl>::to_glsl()
+    }
+}
+impl crate::shader::uniform::UploadUniform for Id {
+    fn upload(&self, location: crate::shader::UniformLocation) {
+        <u32 as crate::shader::uniform::UploadUniform>::upload(&self.0, location);
+    }
+
+    fn upload_direct(
+        &self,
+        program: &impl crate::prelude::ShaderProgram,
+        location: crate::shader::UniformLocation,
+    ) {
+        <u32 as crate::shader::uniform::UploadUniform>::upload_direct(&self.0, program, location);
+    }
+}
 
 /// The position and length of a Mesh on GPU memory, in terms of triangles.
 ///
@@ -26,10 +44,10 @@ impl Id {
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 pub struct Metadata {
-    pub(crate) tris_offset: u32,
-    pub(crate) tris_length: u32,
-    pub(crate) vert_offset: u32,
-    pub(crate) vert_length: u32,
+    pub tris_offset: u32,
+    pub tris_length: u32,
+    pub vert_offset: u32,
+    pub vert_length: u32,
 }
 impl Metadata {
     pub const fn from_values(
