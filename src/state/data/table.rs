@@ -993,18 +993,18 @@ macro_rules! table_spec {
                         return;
                     }
 
-                    let last_owner = *self
-                        .handles
-                        .last()
-                        .expect("contiguous vectors are never empty");
+                    let contiguous_index = contiguous_slot.as_index();
+                    let last_index = self.handles.len() - 1;
+
+                    let last_owner = *self.handles.last().unwrap();
 
                     self.indices[slot.as_index()] = contiguous_slot.next_generation();
+
                     // do not reassign slot if we are freeing last
-                    if last_owner.as_index() != slot.as_index() {
+                    if contiguous_index != last_index {
                         self.indices[last_owner.as_index()] = contiguous_slot;
                     }
 
-                    let contiguous_index = contiguous_slot.as_index();
                     self.handles.swap_remove(contiguous_index);
                     self.$row_0.swap_remove(contiguous_index);
                     $(

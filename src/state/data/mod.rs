@@ -34,7 +34,7 @@ impl IndirectIndex {
 
     pub const fn next_generation(self) -> Self {
         Self {
-            index: 0,
+            index: self.index,
             generation: self.generation + 1,
         }
     }
@@ -99,7 +99,7 @@ impl DirectIndex {
 
     pub const fn next_generation(self) -> Self {
         Self {
-            index: 0,
+            index: self.index,
             generation: self.generation + 1,
         }
     }

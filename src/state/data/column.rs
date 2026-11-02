@@ -376,13 +376,13 @@ pub struct ParallelIndexArrayColumn<T: Default> {
 
     /// The owner indices of each `T` element. This is parallel to the
     /// `contiguous` vec.
-    owners: Vec<IndirectIndex>,
+    handles: Vec<IndirectIndex>,
 }
 
 impl<T: Default> ParallelIndexArrayColumn<T> {
     pub fn clear(&mut self) {
         self.indices.resize(1, DirectIndex::default());
-        self.owners.resize(1, IndirectIndex::default());
+        self.handles.resize(1, IndirectIndex::default());
         self.contiguous.resize_with(1, || T::default());
         self.free.clear();
     }
@@ -402,7 +402,7 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
         Self {
             indices: vec![DirectIndex::default()],
             contiguous: vec![T::default()],
-            owners: vec![IndirectIndex::default()],
+            handles: vec![IndirectIndex::default()],
             free: Vec::new(),
         }
     }
@@ -414,26 +414,26 @@ impl<T: Default> ParallelIndexArrayColumn<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         let mut stable_indices = Vec::with_capacity(capacity);
         let mut contiguous = Vec::with_capacity(capacity);
-        let mut owners = Vec::with_capacity(capacity);
+        let mut handles = Vec::with_capacity(capacity);
 
         stable_indices.push(DirectIndex::default());
         contiguous.push(T::default());
-        owners.push(IndirectIndex::default());
+        handles.push(IndirectIndex::default());
 
         Self {
             indices: stable_indices,
             contiguous,
-            owners,
+            handles,
             free: Vec::new(),
         }
     }
 
     pub fn handles(&self) -> &[IndirectIndex] {
-        &self.owners
+        &self.handles
     }
 
     pub fn handles_mut(&mut self) -> &mut [IndirectIndex] {
-        &mut self.owners
+        &mut self.handles
     }
 }
 
@@ -474,14 +474,19 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
             return;
         }
 
-        self.indices[slot.as_index()] = contiguous_slot.next_generation();
-        let last_owner = *self
-            .owners
-            .last()
-            .expect("contiguous vectors are never empty");
-        self.indices[last_owner.as_index()] = contiguous_slot;
+        let contiguous_index = contiguous_slot.as_index();
+        let last_index = self.handles().len() - 1;
 
-        self.owners.swap_remove(contiguous_slot.as_index());
+        let last_owner = *self.handles().last().unwrap();
+
+        self.indices[slot.as_index()] = contiguous_slot.next_generation();
+
+        // do not reassign if we are freeing last
+        if contiguous_index != last_index {
+            self.indices[last_owner.as_index()] = contiguous_slot;
+        }
+
+        self.handles.swap_remove(contiguous_slot.as_index());
         self.contiguous.swap_remove(contiguous_slot.as_index());
         self.free.push(slot.next_generation());
     }
@@ -491,7 +496,7 @@ impl<T: Default> Column<T> for ParallelIndexArrayColumn<T> {
         let head = self.contiguous.len();
         self.indices[index.as_index()] = DirectIndex::from_index(head, index.generation);
         self.contiguous.push(value.into());
-        self.owners.push(index);
+        self.handles.push(index);
         index
     }
 }
