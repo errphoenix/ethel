@@ -8,6 +8,8 @@
 
 - Raycasting & AABB spatial look-up functions for `SpatialHash` types
 
+- Pause/start toggle functionality for profiler
+
 ### Fixed
 
 - Correct `Column` indices de-sync over `free()` calls

@@ -110,6 +110,8 @@ impl SystemInformation {
 
 #[derive(Debug, Clone)]
 pub struct Profiler {
+    running: bool,
+
     sys_info: SystemInformation,
 
     stack: janus::StringMap<Frame>,
@@ -136,6 +138,7 @@ impl Default for Profiler {
 impl Profiler {
     pub fn new() -> Self {
         Self {
+            running: false,
             sys_info: SystemInformation::new(),
             stack: janus::StringMap::default(),
             init_time: Instant::now(),
@@ -151,11 +154,39 @@ impl Profiler {
         }
     }
 
+    pub const fn is_running(&self) -> bool {
+        self.running
+    }
+
+    pub const fn pause(&mut self) {
+        self.running = false;
+    }
+
+    pub fn start(&mut self) {
+        self.clear_state();
+        self.running = true;
+    }
+
+    pub fn clear_state(&mut self) {
+        self.frame_trace_current = TraceId::default();
+        self.full_trace.clear();
+        self.frame_traces.clear();
+        self.trace_index = 0;
+        self.last_dump_page = 0;
+        self.page = 1;
+        self.init_time = Instant::now();
+        self.stack.clear();
+    }
+
     pub fn clear_cache(&mut self) {
         self.cached.clear();
     }
 
     pub fn push_trace(&mut self, name: &'static str) {
+        if !self.running {
+            return;
+        }
+
         #[cfg(debug_assertions)]
         if self.trace_index == TRACE_STACK_LENGTH {
             panic!("cannot add trace group {name} to stack: limit of {TRACE_STACK_LENGTH} reached.")
@@ -168,6 +199,10 @@ impl Profiler {
     }
 
     pub fn pop_trace(&mut self) {
+        if !self.running {
+            return;
+        }
+
         #[cfg(debug_assertions)]
         if self.trace_index == 0 {
             panic!("cannot pop trace group to below index 0")
@@ -198,6 +233,10 @@ impl Profiler {
 
     #[inline]
     pub fn capture_duration<R, F: FnMut() -> R>(&mut self, name: &'static str, mut func: F) -> R {
+        if !self.running {
+            return func();
+        }
+
         let page = self.page;
 
         let t0 = Instant::now();
@@ -217,6 +256,10 @@ impl Profiler {
     }
 
     pub fn log_explicit(&mut self, name: &'static str, duration: Duration) {
+        if !self.running {
+            return;
+        }
+
         let page = self.page;
 
         let name_key = janus::hash_string(name);
@@ -230,6 +273,9 @@ impl Profiler {
     }
 
     pub fn page(&mut self) {
+        if !self.running {
+            return;
+        }
         self.page += 1;
         self.page_time = Instant::now();
         self.stack.drain().for_each(|(_, frame)| {
@@ -337,6 +383,7 @@ mod tests {
     #[test]
     fn profiler_dump() {
         let mut profiler = Profiler::new();
+        profiler.start();
 
         profiler.capture_duration("initialise", || thread::sleep(Duration::from_micros(50)));
 
