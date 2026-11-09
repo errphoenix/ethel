@@ -6,6 +6,8 @@
 
 - `UploadUniform` implementation for `MeshId` for `uint` GLSL type
 
+- Raycasting & AABB spatial look-up functions for `SpatialHash` types
+
 ### Fixed
 
 - Correct `Column` indices de-sync over `free()` calls

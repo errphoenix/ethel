@@ -161,6 +161,10 @@ pub trait SpatialHash<T: Clone> {
     fn min_mut(&mut self) -> &mut Cell;
     fn max_mut(&mut self) -> &mut Cell;
 
+    fn has_cell(&self, cell: Cell) -> bool {
+        self.get(cell).is_some()
+    }
+
     fn len(&self) -> usize {
         self.inner_map().len()
     }
@@ -221,6 +225,35 @@ pub trait SpatialHash<T: Clone> {
         *self.min_mut() = Cell::MAX;
         *self.max_mut() = Cell::MIN;
         self.inner_map_mut().clear();
+    }
+
+    /// Returns the first populated cell along the ray within the specified
+    /// `length` by raycasting.
+    ///
+    /// `origin` and `length` is in global world units, not cells.
+    fn raycast(&self, origin: glam::Vec3, direction: glam::Vec3, length: f32) -> Option<Cell> {
+        let step = self.resolution().get();
+        let mut x = 0f32;
+        while x <= length {
+            let point = origin + direction * x;
+            let cell = self.cell_at(point);
+            if self.has_cell(cell) {
+                return Some(cell);
+            }
+            x += step;
+        }
+        None
+    }
+
+    fn get_aabb_area(min: Cell, max: Cell, out: &mut Vec<Cell>) {
+        for x in min.x..max.x {
+            for y in min.y..max.y {
+                for z in min.z..max.z {
+                    let cell = Cell { x, y, z };
+                    out.push(cell);
+                }
+            }
+        }
     }
 
     fn cell_query_check(
@@ -445,6 +478,10 @@ impl<T: Clone + Copy> SpatialHash<Vec<T>> for FxLsSpatialHash<T> {
 
     fn max_mut(&mut self) -> &mut Cell {
         &mut self.max
+    }
+
+    fn has_cell(&self, cell: Cell) -> bool {
+        self.get(cell).is_some_and(|bucket| !bucket.is_empty())
     }
 }
 impl<T: Clone + Copy> FxLsSpatialHash<T> {
