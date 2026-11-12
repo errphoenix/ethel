@@ -10,6 +10,8 @@
 
 - Pause/start toggle functionality for profiler
 
+- Transient lifetime-bound mapping (non persistent/coherent) for `PartitionedBuffer`s abstractions
+
 ### Changed
 
 - Update partitioned buffer abstractions to use named buffers according to DSA

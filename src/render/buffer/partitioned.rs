@@ -70,6 +70,111 @@ macro_rules! assert_partition {
     };
 }
 
+#[derive(Debug)]
+pub struct MappedBuffer<'map, const PARTS: usize> {
+    coherent: bool,
+    mapped: *mut u8,
+    buffer: &'map PartitionedBuffer<PARTS>,
+}
+impl<'map, const PARTS: usize> janus::GpuResource for MappedBuffer<'map, PARTS> {
+    fn resource_id(&self) -> u32 {
+        self.buffer.gl_obj
+    }
+}
+impl<'map, const PARTS: usize> MappedBuffer<'map, PARTS> {
+    /// Offset in bytes.
+    ///
+    /// todo: docs
+    pub unsafe fn partition_raw(&self, partition: usize, offset: usize) -> (*const u8, usize) {
+        assert_partition!(PARTS, partition);
+
+        let partition_len = self.layout().length_at(partition);
+        assert!(
+            partition_len > offset,
+            "attempted to blit at offset {offset} with partition length {partition_len}"
+        );
+
+        let length_to_end = partition_len - offset;
+        let global_offset = self.layout().offset_at(partition) + offset;
+
+        // all lengths and offsets are in bytes
+        unsafe {
+            let ptr = self.mapped.add(global_offset);
+            (ptr, length_to_end)
+        }
+    }
+
+    /// Offset in bytes.
+    ///
+    /// todo: docs
+    pub fn partition(&self, partition: usize, offset: usize) -> &[u8] {
+        unsafe {
+            let (ptr, len) = self.partition_raw(partition, offset);
+            std::slice::from_raw_parts(ptr, len)
+        }
+    }
+
+    /// Offset in bytes.
+    ///
+    /// todo: docs
+    pub fn partition_mut_raw(&self, partition: usize, offset: usize) -> (*mut u8, usize) {
+        assert_partition!(PARTS, partition);
+
+        let partition_len = self.layout().length_at(partition);
+        assert!(
+            partition_len > offset,
+            "attempted to blit at offset {offset} with partition length {partition_len}"
+        );
+
+        let length_to_end = partition_len - offset;
+        let global_offset = self.layout().offset_at(partition) + offset;
+
+        // all lengths and offsets are in bytes
+        unsafe {
+            let ptr = self.mapped.add(global_offset);
+            (ptr, length_to_end)
+        }
+    }
+
+    /// Offset in bytes.
+    ///
+    /// todo: docs
+    pub fn partition_mut(&self, partition: usize, offset: usize) -> &mut [u8] {
+        unsafe {
+            let (ptr, len) = self.partition_mut_raw(partition, offset);
+            std::slice::from_raw_parts_mut(ptr, len)
+        }
+    }
+
+    pub const fn is_coherent(&self) -> bool {
+        self.coherent
+    }
+
+    pub const fn layout(&self) -> &Layout<PARTS> {
+        &self.buffer.layout
+    }
+
+    pub const unsafe fn raw_ptr(&self) -> *mut u8 {
+        self.mapped
+    }
+
+    pub const fn buffer(&self) -> &'map PartitionedBuffer<PARTS> {
+        self.buffer
+    }
+}
+impl<'map, const PARTS: usize> Drop for MappedBuffer<'map, PARTS> {
+    fn drop(&mut self) {
+        let gl_obj = self.buffer.gl_obj;
+        let size = self.layout().len();
+        unsafe {
+            if !self.coherent {
+                janus::gl::FlushMappedBufferRange(gl_obj, 0, size as isize);
+            }
+            janus::gl::UnmapNamedBuffer(gl_obj);
+        }
+    }
+}
+
 /// The Partitioned-Buffer struct, owns the pointer to the mapped memory
 /// and layout abstractions.
 ///
@@ -111,6 +216,19 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         Self { gl_obj, layout }
     }
 
+    pub fn map(&self) -> MappedBuffer<'_, PARTS> {
+        let mapped = unsafe {
+            let access = janus::gl::MAP_READ_BIT | janus::gl::MAP_WRITE_BIT;
+            janus::gl::MapNamedBuffer(self.gl_obj, access)
+        } as *mut u8;
+
+        MappedBuffer {
+            coherent: false,
+            mapped,
+            buffer: self,
+        }
+    }
+
     pub fn initialise_partition<T: Sized + Clone, F: Fn() -> T>(
         &self,
         partition: usize,
@@ -147,7 +265,7 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         }
     }
 
-    pub fn layout(&self) -> &Layout<PARTS> {
+    pub const fn layout(&self) -> &Layout<PARTS> {
         &self.layout
     }
 
@@ -411,7 +529,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         }
     }
 
-    pub fn layout(&self) -> &Layout<PARTS> {
+    pub const fn layout(&self) -> &Layout<PARTS> {
         &self.layout
     }
 
@@ -1149,6 +1267,71 @@ macro_rules! typed_part_buffer {
                             );
                     }
                 )+
+
+                pub fn map(&self) -> [< $name MappedBuffer >] {
+                    [< $name MappedBuffer >](
+                        self.0.map()
+                    )
+                }
+            }
+
+            #[derive(Debug)]
+            pub struct [< $name MappedBuffer >]<'map>(
+                $crate::render::buffer::partitioned::MappedBuffer<'map, $len>
+            );
+            impl<'map> janus::GpuResource for [< $name MappedBuffer >]<'map> {
+                fn resource_id(&self) -> u32 {
+                    self.0.resource_id()
+                }
+            }
+            impl<'map> [< $name MappedBuffer >]<'map> {
+                $(
+                    /// Get an immutable view over a mapped partition of the
+                    /// buffer.
+                    ///
+                    /// `offset` is in number of elements.
+                    pub fn [< $part:lower >](&self, offset: usize) -> &[$part_ty] {
+                        let offset = offset * std::mem::size_of::<$part_ty>();
+                        unsafe {
+                            let (ptr, len) = self.0.partition_raw($part_idx as usize, offset);
+                            let ptr = ptr as *const $part_ty;
+                            std::slice::from_raw_parts(ptr, len)
+                        }
+                    }
+
+                    /// Get a mutable view over a mapped partition of the
+                    /// buffer.
+                    ///
+                    /// `offset` is in number of elements.
+                    pub fn [< $part:lower _mut >](&self, offset: usize) -> &mut [$part_ty] {
+                        let offset = offset * std::mem::size_of::<$part_ty>();
+                        unsafe {
+                            let (ptr, len) = self.0.partition_mut_raw($part_idx as usize, offset);
+                            let ptr = ptr as *mut $part_ty;
+                            std::slice::from_raw_parts_mut(ptr, len)
+                        }
+                    }
+                )+
+
+                pub fn inner(&self) -> &$crate::render::buffer::partitioned::MappedBuffer<'map, $len> {
+                    &self.0
+                }
+
+                pub const fn is_coherent(&self) -> bool {
+                    self.0.is_coherent()
+                }
+
+                pub const fn layout(&self) -> &$crate::render::buffer::layout::Layout<$len> {
+                    &self.0.buffer().layout()
+                }
+
+                pub const unsafe fn raw_ptr(&self) -> *mut u8 {
+                    unsafe { self.0.raw_ptr() }
+                }
+
+                pub const fn untyped_buffer(&self) -> &'map $crate::render::buffer::partitioned::PartitionedBuffer<$len> {
+                    self.0.buffer()
+                }
             }
         }
     };
