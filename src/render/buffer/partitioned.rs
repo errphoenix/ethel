@@ -209,7 +209,8 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
         unsafe {
             janus::gl::CreateBuffers(1, &mut gl_obj);
-            let flags = janus::gl::DYNAMIC_STORAGE_BIT;
+            let flags =
+                janus::gl::DYNAMIC_STORAGE_BIT | janus::gl::MAP_WRITE_BIT | janus::gl::MAP_READ_BIT;
             janus::gl::NamedBufferStorage(gl_obj, buffer_size, std::ptr::null(), flags);
         }
 
@@ -218,10 +219,9 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
     pub fn map(&self) -> MappedBuffer<'_, PARTS> {
         let mapped = unsafe {
-            let access = janus::gl::MAP_READ_BIT | janus::gl::MAP_WRITE_BIT;
+            let access = janus::gl::READ_WRITE;
             janus::gl::MapNamedBuffer(self.gl_obj, access)
         } as *mut u8;
-
         MappedBuffer {
             coherent: false,
             mapped,
