@@ -10,6 +10,10 @@
 
 - Pause/start toggle functionality for profiler
 
+### Changed
+
+- Update partitioned buffer abstractions to use named buffers according to DSA
+
 ### Fixed
 
 - Correct `Column` indices de-sync over `free()` calls

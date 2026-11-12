@@ -103,15 +103,9 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
         let buffer_size = layout.len() as isize;
 
         unsafe {
-            janus::gl::GenBuffers(1, &mut gl_obj);
-            janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, gl_obj);
+            janus::gl::CreateBuffers(1, &mut gl_obj);
             let flags = janus::gl::DYNAMIC_STORAGE_BIT;
-            janus::gl::BufferStorage(
-                janus::gl::COPY_WRITE_BUFFER,
-                buffer_size,
-                std::ptr::null(),
-                flags,
-            );
+            janus::gl::NamedBufferStorage(gl_obj, buffer_size, std::ptr::null(), flags);
         }
 
         Self { gl_obj, layout }
@@ -297,9 +291,8 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 
         // all lengths and offsets are in bytes
         unsafe {
-            janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, self.gl_obj);
-            janus::gl::BufferSubData(
-                janus::gl::COPY_WRITE_BUFFER,
+            janus::gl::NamedBufferSubData(
+                self.gl_obj,
                 global_offset as isize,
                 data_len as isize,
                 src.cast(),
@@ -310,7 +303,6 @@ impl<const PARTS: usize> PartitionedBuffer<PARTS> {
 impl<const PARTS: usize> Drop for PartitionedBuffer<PARTS> {
     fn drop(&mut self) {
         unsafe {
-            janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, self.gl_obj);
             janus::gl::DeleteBuffers(1, &self.gl_obj);
         }
     }
@@ -354,20 +346,17 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
         let total_length = (section_length * 3) as isize;
 
         let ptr = unsafe {
-            janus::gl::GenBuffers(1, &mut gl_obj);
-            janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, gl_obj);
-
+            janus::gl::CreateBuffers(1, &mut gl_obj);
             let flags = janus::gl::MAP_WRITE_BIT
                 | janus::gl::MAP_COHERENT_BIT
                 | janus::gl::MAP_PERSISTENT_BIT;
-            janus::gl::BufferStorage(
-                janus::gl::COPY_WRITE_BUFFER,
+            janus::gl::NamedBufferStorage(
+                gl_obj,
                 total_length,
                 std::ptr::null(),
                 flags | janus::gl::DYNAMIC_STORAGE_BIT,
             );
-
-            janus::gl::MapBufferRange(janus::gl::COPY_WRITE_BUFFER, 0, total_length, flags)
+            janus::gl::MapNamedBufferRange(gl_obj, 0, total_length, flags)
         } as *mut u8;
 
         let lengths = std::array::from_fn(|_| std::array::from_fn(|_| UnsafeCell::new(0)));
@@ -928,8 +917,7 @@ impl<const PARTS: usize> PartitionedTriBuffer<PARTS> {
 impl<const PARTS: usize> Drop for PartitionedTriBuffer<PARTS> {
     fn drop(&mut self) {
         unsafe {
-            janus::gl::BindBuffer(janus::gl::COPY_WRITE_BUFFER, self.gl_obj);
-            janus::gl::UnmapBuffer(janus::gl::COPY_WRITE_BUFFER);
+            janus::gl::UnmapNamedBuffer(self.gl_obj);
             janus::gl::DeleteBuffers(1, &self.gl_obj);
         }
         self.ptr = std::ptr::null_mut();
